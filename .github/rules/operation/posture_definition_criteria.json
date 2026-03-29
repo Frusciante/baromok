@@ -1,0 +1,148 @@
+{
+  "version": "1.0.0",
+  "domain": "posture_detection",
+  "description": "Bad posture decision criteria and thresholds",
+  "baseline": {
+    "capture": {
+      "method": "initial_frame_or_short_average",
+      "duration_seconds": 5
+    },
+    "metrics": [
+      "cheek_distance",
+      "eye_distance",
+      "face_shoulder_ratio"
+    ]
+  },
+  "global_rules": {
+    "state_machine": {
+      "states": [
+        "NORMAL",
+        "WARNING",
+        "BAD_POSTURE"
+      ],
+      "transitions": [
+        "NORMAL->WARNING",
+        "WARNING->BAD_POSTURE",
+        "BAD_POSTURE->WARNING",
+        "WARNING->NORMAL"
+      ]
+    }
+  },
+  "posture_types": {
+    "recline": {
+      "display_label": "기댄 자세 의심",
+      "primary_conditions": {
+        "cheek_distance_baseline_change_percent": {
+          "operator": "<=",
+          "threshold_percent": 10,
+          "tuning_range_percent": {
+            "min": 10,
+            "max": 15
+          }
+        }
+      },
+      "secondary_signals": [
+        "face_shoulder_ratio_change",
+        "shoulder_tilt_deg_change"
+      ],
+      "sustain_seconds": 2
+    },
+    "forward_head": {
+      "display_label": "거북목 경향",
+      "primary_conditions": {
+        "cheek_distance_baseline_change_percent": {
+          "operator": ">=",
+          "threshold_percent": 8,
+          "tuning_range_percent": {
+            "min": 8,
+            "max": 12
+          }
+        },
+        "face_shoulder_ratio_baseline_change_percent": {
+          "operator": ">=",
+          "threshold_percent": 15
+        }
+      },
+      "sustain_seconds": 2
+    },
+    "crossed_leg_estimated": {
+      "display_label": "다리 꼰 자세 추정",
+      "primary_conditions": {
+        "abs_shoulder_tilt_deg": {
+          "operator": ">",
+          "threshold": 6
+        }
+      },
+      "secondary_signals": [
+        "neck_offset_baseline_increase"
+      ],
+      "sustain_seconds": 3,
+      "repeat_window_seconds": 10
+    },
+    "chin_rest_estimated": {
+      "display_label": "턱 괸 자세 의심",
+      "primary_conditions": {
+        "eye_line_tilt_deg": {
+          "operator": ">=",
+          "threshold": 8
+        },
+        "shoulder_tilt_deg": {
+          "operator": ">=",
+          "threshold": 6
+        },
+        "neck_offset_baseline_change_percent": {
+          "operator": ">=",
+          "threshold_percent": 10
+        }
+      },
+      "auxiliary_signals": {
+        "hand_near_face": {
+          "distance_metric": "distance(hand_point, face_center)",
+          "threshold": 0.12,
+          "stability": {
+            "window_seconds": 2,
+            "frame_ratio_threshold": 0.6
+          }
+        },
+        "chin_occlusion": {
+          "occlusion_ratio_formula": "hand_pixels_in_lower_face / lower_face_pixels",
+          "threshold": 0.25,
+          "fallback": {
+            "landmark_count_near_chin": {
+              "operator": ">=",
+              "threshold": 2
+            }
+          }
+        },
+        "hand_face_score": {
+          "formula": "0.5 * near_score + 0.5 * occlusion_score"
+        }
+      },
+      "sustain_seconds": 2
+    }
+  },
+  "frame_scoring": {
+    "score_range": [
+      0.0,
+      1.0
+    ],
+    "likelihood_formulas": {
+      "forward_head_likelihood": "0.6 * face_near_score + 0.4 * face_shoulder_ratio_score",
+      "recline_likelihood": "0.7 * face_far_score + 0.3 * face_shoulder_ratio_score",
+      "crossed_leg_likelihood": "0.7 * shoulder_tilt_score + 0.3 * neck_offset_score",
+      "chin_rest_likelihood": "0.35 * eye_line_tilt_score + 0.2 * shoulder_tilt_score + 0.15 * neck_offset_score + 0.3 * hand_face_score"
+    }
+  },
+  "event_judgment": {
+    "immediate": "frame_threshold_exceeded",
+    "confirmed": "sustained_for_n_seconds"
+  },
+  "message_policy": {
+    "style": "use_estimation_phrasing",
+    "examples": [
+      "다리 꼰 자세 추정",
+      "턱 괸 자세 의심",
+      "거북목 경향"
+    ]
+  }
+}
