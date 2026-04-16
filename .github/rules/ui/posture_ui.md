@@ -1,6 +1,6 @@
 # 자세 측정 UI 규칙
 
-<p><a href="../../copilot-instructions.md">메인 지침</a> | <a href="../posture_definition.md">자세 정의서</a> | <a href="../operation/posture_operation.md">운영 규칙</a></p>
+<p><a href="../../copilot-instructions.md">메인 지침</a> | <a href="./common.md">UI 공통 규칙</a> | <a href="../posture_definition.md">자세 정의서</a> | <a href="../operation/posture_operation.md">운영 규칙</a> | <a href="./prototype_ui_description.md">UI 설명 문서</a></p>
 
 ## 목차
 <p>
@@ -14,6 +14,9 @@
 - 기준 문서: `../posture_definition.md`
 - 운영 로직 문서: `../operation/posture_operation.md`
 - 실행 환경: 로컬 Windows 데스크톱 전용(PyQt)
+- 상위 공통 규칙: <a href="./common.md">./common.md</a>
+- 화면 구성 참고: <a href="./prototype_ui_description.md">./prototype_ui_description.md</a>
+- 충돌 시 우선순위: 자세 측정 도메인 표현/경고 문구는 본 문서를 우선한다.
 
 ## 1. 표현 원칙
 

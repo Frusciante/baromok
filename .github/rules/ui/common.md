@@ -1,6 +1,6 @@
 # UI 규칙
 
-<p><a href="../../copilot-instructions.md">메인 지침</a> | <a href="../posture_definition.md">자세 정의서</a> | <a href="../operation/common.md">로직 규칙</a></p>
+<p><a href="../../copilot-instructions.md">메인 지침</a> | <a href="../posture_definition.md">자세 정의서</a> | <a href="../operation/common.md">로직 규칙</a> | <a href="./posture_ui.md">자세 측정 UI 규칙</a> | <a href="./prototype_ui_description.md">UI 설명 문서</a></p>
 
 ## 목차
 <p>
@@ -15,11 +15,12 @@
 ## 적용 범위
 - 사용자 인터페이스, 화면 구성, 스타일, 애니메이션, 창 크기/DPI 대응, 접근성 관련 요청
 - PyQt 위젯, 레이아웃, 스타일, 상태 표시, 데스크톱 UX 변경
-- 자세 측정 도메인 UI 요청은 `./posture_ui.md`를 우선 적용한다.
+- 자세 측정 도메인 UI 요청은 <a href="./posture_ui.md">./posture_ui.md</a>를 우선 적용한다.
 
 ## 참고 디자인
 - Figma 초안: https://www.figma.com/design/Lx8ZdBHoCHSnui4PdKpA3l/%E2%80%8D%EA%B9%80%EC%9D%B4%EB%B9%88-%EC%9E%AC%ED%95%99---%EC%A4%91%EA%B5%AD%EC%99%B8%EA%B5%90%ED%86%B5%EC%83%81%EC%A0%84%EA%B3%B5-%EC%9D%98-%ED%8C%80-team-library?node-id=0-1&p=f
-- UI 설명 문서: `./prototype_ui_description.md`
+- UI 설명 문서: <a href="./prototype_ui_description.md">./prototype_ui_description.md</a>
+- 적용 우선순위: 공통 원칙은 본 문서, 자세 측정 표현/상태 문구는 <a href="./posture_ui.md">./posture_ui.md</a>, 화면 구성 참고는 <a href="./prototype_ui_description.md">./prototype_ui_description.md</a>
 
 ## 환경 전제
 - 본 프로그램은 로컬 환경에서만 실행한다.

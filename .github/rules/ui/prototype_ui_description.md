@@ -1,6 +1,6 @@
 # 자세 측정 UI 디자인 설명서(스크린샷 기반 초안)
 
-<p><a href="../../copilot-instructions.md">메인 지침</a> | <a href="./common.md">UI 규칙</a> | <a href="../posture_definition.md">자세 정의서</a></p>
+<p><a href="../../copilot-instructions.md">메인 지침</a> | <a href="./common.md">UI 규칙</a> | <a href="./posture_ui.md">자세 측정 UI 규칙</a> | <a href="../posture_definition.md">자세 정의서</a></p>
 
 ## 목차
 <p>
@@ -19,6 +19,7 @@
 ## 1. 문서 목적
 - 제공된 UI 스크린샷을 기준으로 화면 구조, 시각 스타일, 컴포넌트 역할, 상태별 동작을 정리한다.
 - 구현 단계에서 레이아웃/스타일 해석 차이를 줄이기 위한 기준 문서로 사용한다.
+- 도메인 문구/상태 표현 정책은 <a href="./posture_ui.md">./posture_ui.md</a>를 우선 적용하고, 본 문서는 화면 구성 참고 문서로 사용한다.
 
 ## 2. 전체 디자인 방향
 - 톤 앤 무드: 친근하고 부드러운 인상의 건강 습관 보조 도구.
