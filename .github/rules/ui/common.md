@@ -5,6 +5,10 @@
 - PyQt 위젯, 레이아웃, 스타일, 상태 표시, 데스크톱 UX 변경
 - 자세 측정 도메인 UI 요청은 `./posture_ui.md`를 우선 적용한다.
 
+## 참고 디자인
+- Figma 초안: https://www.figma.com/design/Lx8ZdBHoCHSnui4PdKpA3l/%E2%80%8D%EA%B9%80%EC%9D%B4%EB%B9%88-%EC%9E%AC%ED%95%99---%EC%A4%91%EA%B5%AD%EC%99%B8%EA%B5%90%ED%86%B5%EC%83%81%EC%A0%84%EA%B3%B5-%EC%9D%98-%ED%8C%80-team-library?node-id=0-1&p=f
+- UI 설명 문서: `./prototype_ui_description.md`
+
 ## 환경 전제
 - 본 프로그램은 로컬 환경에서만 실행한다.
 - 웹 환경은 지원하지 않는다.
