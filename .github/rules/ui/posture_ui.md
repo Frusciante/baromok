@@ -11,8 +11,8 @@
 <a href="#5-검증-체크리스트">5. 검증 체크리스트</a>
 </p>
 
-- 기준 문서: `../posture_definition.md`
-- 운영 로직 문서: `../operation/posture_operation.md`
+- 기준 문서: <a href="../posture_definition.md">../posture_definition.md</a>
+- 운영 로직 문서: <a href="../operation/posture_operation.md">../operation/posture_operation.md</a>
 - 실행 환경: 로컬 Windows 데스크톱 전용(PyQt)
 - 상위 공통 규칙: <a href="./common.md">./common.md</a>
 - 화면 구성 참고: <a href="./prototype_ui_description.md">./prototype_ui_description.md</a>

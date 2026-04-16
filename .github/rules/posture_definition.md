@@ -20,8 +20,8 @@
 나쁜 자세를 규칙 기반으로 정의하고, 프레임 단위 및 시간 누적으로 판정하기 위한 기준을 정리한다.
 
 판정 기준의 실제 수치/가중치/임계값은 md가 아니라 JSON에서만 관리한다.
-참조: `./operation/posture_definition_criteria.json`
-문서: `./operation/posture_definition_criteria_documentation.md`
+참조: <a href="./operation/posture_definition_criteria.json">./operation/posture_definition_criteria.json</a>
+문서: <a href="./operation/posture_definition_criteria_documentation.md">./operation/posture_definition_criteria_documentation.md</a>
 
 ## 2. 공통 전제
 
@@ -126,9 +126,9 @@
 ## 4. 운영 규칙 문서 분리
 
 - 점수화/판정 운영 규칙은 별도 문서에서 관리한다.
-- 참조: `./operation/posture_operation.md`
+- 참조: <a href="./operation/posture_operation.md">./operation/posture_operation.md</a>
 - 판정 기준(임계값/가중치/지속 시간)은 JSON의 `baseline`, `posture_types`, `frame_scoring`, `event_judgment`, `global_rules`에서만 관리한다.
-- 참조: `./operation/posture_definition_criteria.json`
+- 참조: <a href="./operation/posture_definition_criteria.json">./operation/posture_definition_criteria.json</a>
 
 ## 5. 후속 구현 메모
 

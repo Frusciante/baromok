@@ -17,7 +17,7 @@
 <a href="#11-참조-표기-규칙">11. 참조 표기 규칙</a>
 </p>
 
-- 기준 파일: `./posture_definition_criteria.json`
+- 기준 파일: <a href="./posture_definition_criteria.json">./posture_definition_criteria.json</a>
 - 목적: 자세 판정 기준을 문서가 아닌 JSON 단일 소스로 관리하고, 팀이 같은 방식으로 수정하도록 한다.
 
 ## 1. 관리 원칙
@@ -113,9 +113,9 @@
 
 ## 8. 관련 문서
 
-- `../posture_definition.md`
-- `./posture_operation.md`
-- `./common.md`
+- <a href="../posture_definition.md">../posture_definition.md</a>
+- <a href="./posture_operation.md">./posture_operation.md</a>
+- <a href="./common.md">./common.md</a>
 
 ## 9. JSON 스키마 검증 체크리스트(운영용)
 
@@ -149,8 +149,16 @@
 
 ## 11. 참조 표기 규칙
 
+- 경로 표기는 상대 경로를 기본으로 사용한다.
+  - 같은 디렉토리: `./file.md`
+  - 상위 디렉토리: `../folder/file.md`
+- 경로 구분자는 항상 `/`를 사용하고, `\`는 사용하지 않는다.
+- 드라이브 문자(`C:\`, `D:\`)나 절대 경로 표기는 문서에 사용하지 않는다.
+- 파일을 가리키는 경로는 가능한 한 `<a href="...">...</a>` 형태의 링크로 표기한다.
+- 디렉토리만 언급할 때도 상대 경로 표기를 유지한다.
+  - 예: `.github/rules/ui/`
 - JSON 참조 링크의 `href`는 파일 경로만 사용한다.
-  - 예: `./posture_definition_criteria.json`
+  - 예: <a href="./posture_definition_criteria.json">./posture_definition_criteria.json</a>
 - 라인 번호 앵커(`#L10`)는 유지보수 시 깨지기 쉬우므로 사용하지 않는다.
 - 링크 텍스트는 항상 키 경로를 사용한다.
   - 예: `posture_types.recline.primary_conditions.cheek_distance_baseline_change_percent.threshold_percent`

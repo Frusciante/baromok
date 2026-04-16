@@ -10,11 +10,11 @@
 <a href="#4-구현-체크포인트">4. 구현 체크포인트</a>
 </p>
 
-- 기준 문서: `../posture_definition.md`
+- 기준 문서: <a href="../posture_definition.md">../posture_definition.md</a>
 - 목적: 프레임 점수화, 이벤트 확정, 상태 전이를 일관된 방식으로 운영한다.
 - 판정 기준의 실제 수치/가중치/임계값은 md나 코드가 아니라 JSON에서만 관리한다.
-- 기준 파일: `./posture_definition_criteria.json`
-- 기준 문서: `./posture_definition_criteria_documentation.md`
+- 기준 파일: <a href="./posture_definition_criteria.json">./posture_definition_criteria.json</a>
+- 기준 문서: <a href="./posture_definition_criteria_documentation.md">./posture_definition_criteria_documentation.md</a>
 
 ## 1. 프레임 점수
 
