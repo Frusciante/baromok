@@ -13,7 +13,8 @@
 <a href="#7-운영-규칙-키-범위">7. 운영 규칙 키 범위</a> |
 <a href="#8-관련-문서">8. 관련 문서</a> |
 <a href="#9-json-스키마-검증-체크리스트운영용">9. JSON 스키마 검증 체크리스트</a> |
-<a href="#10-json-로더-적용-규칙구현-기준">10. JSON 로더 적용 규칙</a>
+<a href="#10-json-로더-적용-규칙구현-기준">10. JSON 로더 적용 규칙</a> |
+<a href="#11-참조-표기-규칙">11. 참조 표기 규칙</a>
 </p>
 
 - 기준 파일: `./posture_definition_criteria.json`
@@ -145,3 +146,16 @@
   - 2순위: `tuning_range_percent`는 운영자 조정 UI/로그 참고용
 - 로더는 JSON 원본을 수정하지 않고, 검증 완료된 읽기 전용 설정 객체를 반환한다.
 - 환경별 튜닝이 필요하면 JSON 파일을 분리하고 런타임 병합 규칙을 문서화한다.
+
+## 11. 참조 표기 규칙
+
+- JSON 참조 링크의 `href`는 파일 경로만 사용한다.
+  - 예: `./posture_definition_criteria.json`
+- 라인 번호 앵커(`#L10`)는 유지보수 시 깨지기 쉬우므로 사용하지 않는다.
+- 링크 텍스트는 항상 키 경로를 사용한다.
+  - 예: `posture_types.recline.primary_conditions.cheek_distance_baseline_change_percent.threshold_percent`
+- 수치 기준을 설명할 때는 상위 묶음 키가 아니라 실제 수치 키를 우선 참조한다.
+  - 권장: `...threshold`, `...threshold_percent`, `...sustain_seconds`, `...duration_seconds`
+  - 비권장: `...primary_conditions`, `...posture_types`만 단독 표기
+- 값이 배열/객체인 경우에도 텍스트에는 최소 1단계 이상 하위 키를 포함해 의미를 명확히 한다.
+- 문서 내에서 동일 대상을 여러 번 참조해도 표기 형식(`파일 링크 + 키 경로 텍스트`)은 동일하게 유지한다.
