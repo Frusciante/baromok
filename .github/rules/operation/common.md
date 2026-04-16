@@ -1,9 +1,19 @@
 # 로직 규칙
 
+<p><a href="../../copilot-instructions.md">메인 지침</a> | <a href="../posture_definition.md">자세 정의서</a> | <a href="../ui/common.md">UI 규칙</a></p>
+
+## 목차
+<p>
+<a href="#적용-범위">적용 범위</a> |
+<a href="#핵심-원칙">핵심 원칙</a> |
+<a href="#구현-원칙">구현 원칙</a> |
+<a href="#검증-체크리스트">검증 체크리스트</a>
+</p>
+
 ## 적용 범위
 - 비즈니스 로직, 데이터 처리, 상태 관리, API 연동, 성능/안정성 관련 요청
 - 함수/클래스 동작 변경, 검증 로직, 예외 처리, 테스트 보강
-- 자세 측정 도메인 로직 요청은 `../posture_definition.md`와 `./posture_operation.md`를 함께 따른다.
+- 자세 측정 도메인 로직 요청은 <a href="../posture_definition.md">../posture_definition.md</a>와 <a href="./posture_operation.md">./posture_operation.md</a>를 함께 따른다.
 
 ## 핵심 원칙
 - 동작 변경은 최소 범위로 적용하고 의도를 명확히 유지한다.

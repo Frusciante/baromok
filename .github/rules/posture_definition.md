@@ -1,5 +1,17 @@
 # 나쁜 자세 정의서 v0.1
 
+<p><a href="../copilot-instructions.md">메인 지침</a> | <a href="./operation/common.md">로직 규칙</a> | <a href="./ui/common.md">UI 규칙</a></p>
+
+## 목차
+<p>
+<a href="#1-목적">1. 목적</a> |
+<a href="#2-공통-전제">2. 공통 전제</a> |
+<a href="#3-나쁜-자세-정의">3. 나쁜 자세 정의</a> |
+<a href="#4-운영-규칙-문서-분리">4. 운영 규칙 문서 분리</a> |
+<a href="#5-후속-구현-메모">5. 후속 구현 메모</a> |
+<a href="#6-빠른-기준표">6. 빠른 기준표</a>
+</p>
+
 - 프로젝트: MediaPipe 기반 상체 자세 측정(웹캠)
 - 작성일: 2026-03-26
 
@@ -23,7 +35,7 @@
 
 - 공통 baseline
   - 시작 시 기준 자세를 촬영하고 `cheek_distance`, `eye_distance`, `face_shoulder_ratio`를 baseline으로 저장
-  - baseline 촬영 시간은 `./operation/posture_definition_criteria.json`의 `baseline.capture.duration_seconds`를 따른다.
+  - baseline 촬영 시간은 <a href="./operation/posture_definition_criteria.json">baseline.capture.duration_seconds</a>를 따른다.
 - 거북목/누운 자세
   - 얼굴-어깨 비율 및 얼굴 거리 변화만 사용
   - 사용 지표: `cheek_distance`, `eye_distance`, `face_shoulder_ratio`
@@ -45,7 +57,7 @@
 - 어깨 기울기(`shoulder_tilt_deg`)는 보조 신호
 
 **판정 예시**
-- 자세 판정 임계값/보조 신호/지속 시간은 `posture_types.recline.primary_conditions`, `posture_types.recline.secondary_signals`, `posture_types.recline.sustain_seconds`를 따른다.
+- 자세 판정 임계값/보조 신호/지속 시간은 <a href="./operation/posture_definition_criteria.json">posture_types.recline.primary_conditions</a>, <a href="./operation/posture_definition_criteria.json">posture_types.recline.secondary_signals</a>, <a href="./operation/posture_definition_criteria.json">posture_types.recline.sustain_seconds</a>를 따른다.
 
 **한계/비고**
 - 정면 단일 카메라에서는 뒤로 기대는 동작을 완벽히 분리하기 어려움
@@ -64,7 +76,7 @@
 - `face_shoulder_ratio` 상승(머리가 카메라 쪽으로 전진하면 증가 경향)
 
 **판정 예시**
-- 자세 판정 임계값/지속 시간은 `posture_types.forward_head.primary_conditions`, `posture_types.forward_head.sustain_seconds`를 따른다.
+- 자세 판정 임계값/지속 시간은 <a href="./operation/posture_definition_criteria.json">posture_types.forward_head.primary_conditions</a>, <a href="./operation/posture_definition_criteria.json">posture_types.forward_head.sustain_seconds</a>를 따른다.
 
 **한계/비고**
 - 정면 카메라 전용 환경에서는 전방/좌우 편위를 통합 지표로 운영
@@ -82,7 +94,7 @@
 - `neck_offset` 증가가 함께 나타나면 비대칭 가능성 강화
 
 **판정 예시**
-- 자세 판정 임계값/반복 창/지속 시간은 `posture_types.crossed_leg_estimated.primary_conditions`, `posture_types.crossed_leg_estimated.secondary_signals`, `posture_types.crossed_leg_estimated.repeat_window_seconds`, `posture_types.crossed_leg_estimated.sustain_seconds`를 따른다.
+- 자세 판정 임계값/반복 창/지속 시간은 <a href="./operation/posture_definition_criteria.json">posture_types.crossed_leg_estimated.primary_conditions</a>, <a href="./operation/posture_definition_criteria.json">posture_types.crossed_leg_estimated.secondary_signals</a>, <a href="./operation/posture_definition_criteria.json">posture_types.crossed_leg_estimated.repeat_window_seconds</a>, <a href="./operation/posture_definition_criteria.json">posture_types.crossed_leg_estimated.sustain_seconds</a>를 따른다.
 
 **한계/비고**
 - 원인은 다리 꼰 자세 외에도 팔 사용, 책상 높이, 카메라 각도 등이 가능
@@ -102,14 +114,14 @@
 - 손목/손가락 랜드마크가 얼굴 영역 근처에서 지속 검출(`hand_near_face`)
 
 **판정 예시(제한적 휴리스틱)**
-- 자세 판정 임계값/보조 신호/지속 시간은 `posture_types.chin_rest_estimated.primary_conditions`, `posture_types.chin_rest_estimated.auxiliary_signals`, `posture_types.chin_rest_estimated.sustain_seconds`를 따른다.
+- 자세 판정 임계값/보조 신호/지속 시간은 <a href="./operation/posture_definition_criteria.json">posture_types.chin_rest_estimated.primary_conditions</a>, <a href="./operation/posture_definition_criteria.json">posture_types.chin_rest_estimated.auxiliary_signals</a>, <a href="./operation/posture_definition_criteria.json">posture_types.chin_rest_estimated.sustain_seconds</a>를 따른다.
 
 **한계/비고(중요)**
 - 정확도 향상을 위해 손/팔 랜드마크(손목, 팔꿈치)와 얼굴 가림률 계산 필요
 - 권장 확장: MediaPipe Pose의 `wrist`, `elbow` 사용
 
 **구현용 계산 정의(추가)**
-- 손-얼굴 근접, 턱 가림, 점수화 계산식의 실제 수식과 임계값은 `posture_types.chin_rest_estimated.auxiliary_signals`를 따른다.
+- 손-얼굴 근접, 턱 가림, 점수화 계산식의 실제 수식과 임계값은 <a href="./operation/posture_definition_criteria.json">posture_types.chin_rest_estimated.auxiliary_signals</a>를 따른다.
 
 ## 4. 운영 규칙 문서 분리
 

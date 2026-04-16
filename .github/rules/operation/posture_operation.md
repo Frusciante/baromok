@@ -1,5 +1,15 @@
 # 자세 측정 운영 규칙
 
+<p><a href="../../copilot-instructions.md">메인 지침</a> | <a href="../posture_definition.md">자세 정의서</a> | <a href="../ui/posture_ui.md">UI 세부 규칙</a></p>
+
+## 목차
+<p>
+<a href="#1-프레임-점수">1. 프레임 점수</a> |
+<a href="#2-이벤트-판정">2. 이벤트 판정</a> |
+<a href="#3-상태-머신">3. 상태 머신</a> |
+<a href="#4-구현-체크포인트">4. 구현 체크포인트</a>
+</p>
+
 - 기준 문서: `../posture_definition.md`
 - 목적: 프레임 점수화, 이벤트 확정, 상태 전이를 일관된 방식으로 운영한다.
 - 판정 기준의 실제 수치/가중치/임계값은 md나 코드가 아니라 JSON에서만 관리한다.
@@ -8,18 +18,18 @@
 
 ## 1. 프레임 점수
 
-- 프레임 점수 범위는 `frame_scoring.score_range`를 따른다.
-- 자세별 가능도 계산식은 `frame_scoring.likelihood_formulas`를 따른다.
+- 프레임 점수 범위는 <a href="./posture_definition_criteria.json">frame_scoring.score_range</a>를 따른다.
+- 자세별 가능도 계산식은 <a href="./posture_definition_criteria.json">frame_scoring.likelihood_formulas</a>를 따른다.
 
 ## 2. 이벤트 판정
 
-- 즉시 판정 기준은 `event_judgment.immediate`를 따른다.
-- 확정 판정 기준은 `event_judgment.confirmed`와 `posture_types.*.sustain_seconds`를 따른다.
+- 즉시 판정 기준은 <a href="./posture_definition_criteria.json">event_judgment.immediate</a>를 따른다.
+- 확정 판정 기준은 <a href="./posture_definition_criteria.json">event_judgment.confirmed</a>와 <a href="./posture_definition_criteria.json">posture_types.*.sustain_seconds</a>를 따른다.
 
 ## 3. 상태 머신
 
-- 상태 머신 정의는 `global_rules.state_machine.states`를 따른다.
-- 상태 전이 규칙은 `global_rules.state_machine.transitions`를 따른다.
+- 상태 머신 정의는 <a href="./posture_definition_criteria.json">global_rules.state_machine.states</a>를 따른다.
+- 상태 전이 규칙은 <a href="./posture_definition_criteria.json">global_rules.state_machine.transitions</a>를 따른다.
 
 ## 4. 구현 체크포인트
 

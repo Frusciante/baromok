@@ -1,5 +1,16 @@
 # 자세 측정 UI 규칙
 
+<p><a href="../../copilot-instructions.md">메인 지침</a> | <a href="../posture_definition.md">자세 정의서</a> | <a href="../operation/posture_operation.md">운영 규칙</a></p>
+
+## 목차
+<p>
+<a href="#1-표현-원칙">1. 표현 원칙</a> |
+<a href="#2-화면-구성-원칙">2. 화면 구성 원칙</a> |
+<a href="#3-사용자-메시지-정책">3. 사용자 메시지 정책</a> |
+<a href="#4-메시지-예시">4. 메시지 예시</a> |
+<a href="#5-검증-체크리스트">5. 검증 체크리스트</a>
+</p>
+
 - 기준 문서: `../posture_definition.md`
 - 운영 로직 문서: `../operation/posture_operation.md`
 - 실행 환경: 로컬 Windows 데스크톱 전용(PyQt)

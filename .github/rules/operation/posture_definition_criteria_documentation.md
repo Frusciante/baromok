@@ -1,5 +1,21 @@
 # 자세 판정 기준 JSON 문서
 
+<p><a href="../../copilot-instructions.md">메인 지침</a> | <a href="../posture_definition.md">자세 정의서</a> | <a href="./posture_operation.md">운영 규칙</a></p>
+
+## 목차
+<p>
+<a href="#1-관리-원칙">1. 관리 원칙</a> |
+<a href="#2-json-최상위-키-설명">2. JSON 최상위 키 설명</a> |
+<a href="#3-posture_types-키-설명">3. posture_types 키 설명</a> |
+<a href="#4-수정-절차">4. 수정 절차</a> |
+<a href="#5-검증-체크리스트">5. 검증 체크리스트</a> |
+<a href="#6-예시-변경-시나리오">6. 예시 변경 시나리오</a> |
+<a href="#7-운영-규칙-키-범위">7. 운영 규칙 키 범위</a> |
+<a href="#8-관련-문서">8. 관련 문서</a> |
+<a href="#9-json-스키마-검증-체크리스트운영용">9. JSON 스키마 검증 체크리스트</a> |
+<a href="#10-json-로더-적용-규칙구현-기준">10. JSON 로더 적용 규칙</a>
+</p>
+
 - 기준 파일: `./posture_definition_criteria.json`
 - 목적: 자세 판정 기준을 문서가 아닌 JSON 단일 소스로 관리하고, 팀이 같은 방식으로 수정하도록 한다.
 

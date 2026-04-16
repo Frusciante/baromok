@@ -1,12 +1,26 @@
 # Copilot 워크스페이스 지침
 
+<p><a href="./rules/ui/common.md">UI 규칙</a> | <a href="./rules/operation/common.md">로직 규칙</a> | <a href="./rules/posture_definition.md">자세 정의서</a></p>
+
+## 목차
+<p>
+<a href="#목적">목적</a> |
+<a href="#요청-분기-규칙">요청 분기 규칙</a> |
+<a href="#기술-스택">기술 스택</a> |
+<a href="#실행-환경">실행 환경</a> |
+<a href="#공통-규칙">공통 규칙</a> |
+<a href="#순차-진행-프로세스">순차 진행 프로세스</a> |
+<a href="#불확실성-처리">불확실성 처리</a> |
+<a href="#검증-및-보고">검증 및 보고</a>
+</p>
+
 ## 목적
 - 이 파일은 기본 공통 규칙 + 요청 분기 라우터 역할을 한다.
 - 세부 규칙은 `.github/rules` 아래 문서를 우선 참조한다.
 
 ## 요청 분기 규칙
-- UI/화면/스타일/컴포넌트/접근성 요청이면 `.github/rules/ui/common.md`를 따른다.
-- 비즈니스 로직/데이터 처리/API/상태 관리/성능/예외 처리 요청이면 `.github/rules/operation/common.md`를 따른다.
+- UI/화면/스타일/컴포넌트/접근성 요청이면 <a href="./rules/ui/common.md">.github/rules/ui/common.md</a>를 따른다.
+- 비즈니스 로직/데이터 처리/API/상태 관리/성능/예외 처리 요청이면 <a href="./rules/operation/common.md">.github/rules/operation/common.md</a>를 따른다.
 - 혼합 요청이면 두 파일을 함께 확인하고, 변경 비중이 큰 쪽 규칙을 우선 적용한다.
 
 ## 기술 스택
