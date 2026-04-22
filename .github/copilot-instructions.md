@@ -1,6 +1,6 @@
 # Copilot 워크스페이스 지침
 
-<p><a href="./rules/ui/common.md">UI 규칙</a> | <a href="./rules/operation/common.md">로직 규칙</a> | <a href="./rules/posture_definition.md">자세 정의서</a></p>
+<p><a href="./rules/ui/common.md">UI 규칙</a> | <a href="./rules/operation/common.md">로직 규칙</a> | <a href="./rules/posture_definition.md">자세 정의서</a> | <a href="./ui-implementation-checklist.md">UI 체크리스트</a> | <a href="./operation-implementation-checklist.md">동작 체크리스트</a></p>
 
 ## 목차
 <p>
@@ -9,6 +9,7 @@
 <a href="#기술-스택">기술 스택</a> |
 <a href="#실행-환경">실행 환경</a> |
 <a href="#공통-규칙">공통 규칙</a> |
+<a href="#구현-상황-체크리스트">구현 상황 체크리스트</a> |
 <a href="#순차-진행-프로세스">순차 진행 프로세스</a> |
 <a href="#불확실성-처리">불확실성 처리</a> |
 <a href="#검증-및-보고">검증 및 보고</a>
@@ -47,6 +48,11 @@
 - 코드/로그에 비밀값, 토큰, 자격 증명을 추가하지 않는다.
 - 명시적 요청이 없으면 파괴적 작업을 하지 않는다.
 - 코드 변경이 발생하면 관련 md 문서도 함께 갱신한다.
+
+## 구현 상황 체크리스트
+- UI 구현 체크리스트: <a href="./ui-implementation-checklist.md">.github/ui-implementation-checklist.md</a>
+- 동작 구현 체크리스트: <a href="./operation-implementation-checklist.md">.github/operation-implementation-checklist.md</a>
+- 구현/검증 작업 시작 전 해당 체크리스트를 먼저 확인하고, 결과 문서에 체크 상태를 반영한다.
 
 ## 순차 진행 프로세스
 - 단, 간단한 기능은 아래 순차 프로세스를 생략할 수 있다.
