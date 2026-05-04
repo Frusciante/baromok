@@ -322,6 +322,7 @@ class DetectionScreen(QWidget):
         self.session_manager = session_manager
         self.start_time = None
         self.elapsed_time = 0
+        self.is_detection_paused = False
         self.setup_ui()
 
         if self.camera_worker:
@@ -380,10 +381,10 @@ class DetectionScreen(QWidget):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
 
-        pause_btn = QPushButton("일시정지")
-        pause_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
-        pause_btn.clicked.connect(self._pause_detection)
-        button_layout.addWidget(pause_btn)
+        self.pause_btn = QPushButton("일시정지")
+        self.pause_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
+        self.pause_btn.clicked.connect(self._pause_detection)
+        button_layout.addWidget(self.pause_btn)
 
         stop_btn = QPushButton("종료")
         stop_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
@@ -430,6 +431,13 @@ class DetectionScreen(QWidget):
         posture_text = posture_map.get(posture_type, "알 수 없음")
         self.posture_label.setText(f"{posture_text} ({probability:.1%})")
 
+        state_text = {
+            "NORMAL": "바른 자세",
+            "WARNING": "경고",
+            "BAD_POSTURE": "나쁜 자세",
+        }
+        self.status_label.setText(state_text.get(state, "상태 알 수 없음"))
+
         state_colors = {
             "NORMAL": "status_normal",
             "WARNING": "status_warning",
@@ -450,8 +458,17 @@ class DetectionScreen(QWidget):
     def _pause_detection(self):
         """일시정지"""
         if self.camera_worker:
-            self.camera_worker.pause()
-            self.time_timer.stop()
+            if self.is_detection_paused:
+                self.camera_worker.resume()
+                self.time_timer.start(1000)
+                self.pause_btn.setText("일시정지")
+                self.is_detection_paused = False
+            else:
+                self.camera_worker.pause()
+                self.time_timer.stop()
+                self.pause_btn.setText("재개")
+                self.is_detection_paused = True
+
             self.detection_paused_signal.emit()
 
     def _stop_detection(self):
@@ -459,12 +476,18 @@ class DetectionScreen(QWidget):
         if self.camera_worker:
             self.camera_worker.stop_capture()
             self.time_timer.stop()
+            self.pause_btn.setText("일시정지")
+            self.is_detection_paused = False
             self.detection_stopped_signal.emit()
 
     def showEvent(self, event):
         """화면 표시 시"""
         super().showEvent(event)
-        if self.camera_worker and self.camera_worker.is_running:
+        if (
+            self.camera_worker
+            and self.camera_worker.is_running
+            and not self.is_detection_paused
+        ):
             self.time_timer.start(1000)
 
     def hideEvent(self, event):
@@ -476,7 +499,10 @@ class DetectionScreen(QWidget):
         """카메라 오류"""
         logger.error(f"카메라 오류: {error_msg}")
         self.preview_label.setText(f"오류: {error_msg}")
+        self.status_label.setText("카메라 오류")
         self.time_timer.stop()
+        self.pause_btn.setText("일시정지")
+        self.is_detection_paused = False
 
 
 class AlertPopup(QWidget):
@@ -484,10 +510,21 @@ class AlertPopup(QWidget):
 
     close_signal = pyqtSignal()
 
-    def __init__(self, theme_manager: ThemeManager, alert_type: str = "warning"):
+    def __init__(
+        self,
+        theme_manager: ThemeManager,
+        alert_type: str = "warning",
+        message_text: str = "알림 메시지",
+    ):
         super().__init__()
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Tool
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
         self.theme_manager = theme_manager
         self.alert_type = alert_type
+        self.message_text = message_text
         self.setup_ui()
 
     def setup_ui(self):
@@ -513,12 +550,12 @@ class AlertPopup(QWidget):
             border-radius: 5px;
         """)
 
-        message = QLabel("알림 메시지")
-        message.setFont(
+        self.message_label = QLabel(self.message_text)
+        self.message_label.setFont(
             QFont("Segoe UI", self.theme_manager.scale_pixel(12), QFont.Weight.Bold)
         )
-        message.setStyleSheet(f"color: {Colors.WHITE.value};")
-        layout.addWidget(message, 1)
+        self.message_label.setStyleSheet(f"color: {Colors.WHITE.value};")
+        layout.addWidget(self.message_label, 1)
 
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(
@@ -535,3 +572,20 @@ class AlertPopup(QWidget):
 
         self.setLayout(layout)
         self.setFixedHeight(self.theme_manager.scale_pixel(40))
+
+    def set_alert_content(self, alert_type: str, message_text: str):
+        """팝업 종류와 메시지 갱신"""
+        self.alert_type = alert_type
+        self.message_text = message_text
+
+        color_map = {
+            "warning": Colors.YELLOW_WARNING.value,
+            "danger": Colors.RED_DANGER.value,
+            "info": Colors.PURPLE_PRIMARY.value,
+        }
+        bg_color = color_map.get(self.alert_type, Colors.YELLOW_WARNING.value)
+        self.setStyleSheet(f"""
+            background-color: {bg_color};
+            border-radius: 5px;
+        """)
+        self.message_label.setText(self.message_text)
