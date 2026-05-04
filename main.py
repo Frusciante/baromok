@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-바로록 - 자세 측정 시스템
+바로목 - 자세 측정 시스템
 
 메인 진입점
 """
@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 def main():
     """메인 진입점"""
     try:
-        logger.info("=== 바로록 애플리케이션 시작 ===")
+        logger.info("=== 바로목 애플리케이션 시작 ===")
         
         # 설정 로드 (검증)
         config = ConfigManager()

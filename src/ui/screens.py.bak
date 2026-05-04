@@ -137,7 +137,7 @@ class HubScreen(QWidget):
         layout.addLayout(button_layout)
         
         # 메인 버튼
-        start_btn = QPushButton("바로록 감지 시작")
+        start_btn = QPushButton("바로목 감지 시작")
         start_btn.setFixedHeight(self.theme_manager.scale_pixel(50))
         start_btn.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(16), QFont.Weight.Bold))
         start_btn.clicked.connect(self.start_detection_signal.emit)

@@ -142,7 +142,7 @@ def switch_to_screen()       # 화면 전환 (신호 방출)
 ├─ 버튼 영역
 │  ├─ "환경 설정" → SettingsScreen
 │  └─ "나의 통계" → StatisticsScreen
-└─ 메인 버튼: "바로록 감지 시작" → DetectionScreen
+└─ 메인 버튼: "바로목 감지 시작" → DetectionScreen
 ```
 
 **신호**: 
