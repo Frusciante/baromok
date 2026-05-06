@@ -1,4 +1,4 @@
-# 바로록 (Barorok) - 나쁜 자세 측정 시스템
+# 바로목 (Barorok) - 나쁜 자세 측정 시스템
 
 MediaPipe 기반 실시간 상체 자세 분석 및 PyQt UI를 활용한 데스크톱 애플리케이션
 
@@ -15,7 +15,7 @@ MediaPipe 기반 실시간 상체 자세 분석 및 PyQt UI를 활용한 데스�
   - 거북목 자세
   - 다리 꼰 자세(어깨 비대칭)
   - 턱 괸 자세(추정)
-- **사용자 친화적 UI**: 초기 촬영, 메인 허브, 설정, 통계, 감지 진행, 경고 등 6개 화면
+- **사용자 친화적 UI**: 초기 촬영, 메인 허브, 설정, 통계, 감지 진행과 경고 팝업으로 구성된 화면 흐름
 - **상태 머신**: NORMAL → WARNING → BAD_POSTURE 상태 전이
 - **경고 및 알림**: 소리, 팝업 알림 (사용자 커스터마이징 가능)
 
@@ -53,7 +53,7 @@ pip install -r requirements.txt
 필요한 모델 파일(`.task`)을 `assets/models/` 디렉토리에 다운로드하세요.
 - `pose_landmarker.task` - 포즈 감지
 - `face_landmarker.task` - 얼굴 랜드마크
-- (기타 필요한 모델)
+- `hand_landmarker.task` - 손 랜드마크
 
 ## 사용 방법
 
@@ -68,7 +68,7 @@ python main.py
 - 기준 자세가 저장되면 메인 허브 화면으로 전환됩니다.
 
 ### 3. 감지 시작
-- "바로록 감지 시작" 버튼을 누르면 실시간 자세 분석이 시작됩니다.
+- "바로목 감지 시작" 버튼을 누르면 실시간 자세 분석이 시작됩니다.
 - 사용 시간, 현재 자세 상태, 웹캠 프리뷰가 화면에 표시됩니다.
 
 ### 4. 설정 조정
@@ -83,20 +83,22 @@ python main.py
 baromok/
 ├── src/
 │   ├── core/                    # 자세 분석 엔진
-│   │   ├── posture_engine.py
-│   │   ├── landmark_extractor.py
-│   │   ├── indicator_calculator.py
 │   │   ├── baseline_manager.py
+│   │   ├── camera_worker.py
+│   │   ├── indicator_calculator.py
 │   │   ├── judgment_engine.py
+│   │   ├── landmark_extractor.py
+│   │   ├── session_manager.py
 │   │   └── state_machine.py
 │   ├── ui/                      # PyQt UI
+│   │   ├── app.py
 │   │   ├── main_window.py
-│   │   ├── screens/             # 화면 모듈
-│   │   ├── widgets/             # 커스텀 위젯
-│   │   └── styles/              # 테마 및 스타일
+│   │   ├── screens/
+│   │   ├── styles/
+│   │   └── widgets/
 │   ├── utils/                   # 유틸리티
-│   │   ├── logger.py
-│   │   └── helpers.py
+│   │   ├── helpers.py
+│   │   └── logger.py
 │   └── config.py                # 설정 관리
 ├── assets/
 │   ├── models/                  # MediaPipe .task 파일
@@ -104,6 +106,7 @@ baromok/
 │   └── sounds/                  # 경고음 (선택)
 ├── .github/
 │   └── rules/                   # 자세 정의 및 규칙
+├── features_log/                # 구현 계획 및 결과 기록
 ├── requirements.txt             # 의존성
 ├── main.py                      # 진입점
 └── README.md
@@ -130,7 +133,7 @@ ALERT_SOUND_VOLUME=70
 - [자세 정의서](.github/rules/posture_definition.md)
 - [자세 측정 운영 규칙](.github/rules/operation/posture_operation.md)
 - [UI 규칙](.github/rules/ui/posture_ui.md)
-- [구현 계획서](.github/rules/features_log/posture_measurement_system/01_implementation_plan.md)
+- [구현 계획서](features_log/posture_measurement_system/07_phase4_plan.md)
 
 ### 개발 지침
 - Python 버전: 3.9 이상
@@ -162,4 +165,4 @@ ALERT_SOUND_VOLUME=70
 ---
 
 **버전**: 0.1.0  
-**최종 업데이트**: 2026-04-29
+**최종 업데이트**: 2026-05-04
