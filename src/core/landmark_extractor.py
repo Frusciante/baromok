@@ -7,6 +7,7 @@ MediaPipe를 사용하여 웹캠 프레임에서 얼굴, 어깨, 손 랜드마�
 import mediapipe as mp
 import numpy as np
 import cv2
+import time
 from typing import Dict, Tuple, Optional, List
 from dataclasses import dataclass
 from pathlib import Path
@@ -136,7 +137,11 @@ class LandmarkExtractor:
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
-        timestamp_ms = int(mp_image.timestamp_ms)
+        # mp.Image may not provide timestamp_ms in some MediaPipe builds; fall back to current time
+        try:
+            timestamp_ms = int(mp_image.timestamp_ms)
+        except Exception:
+            timestamp_ms = int(time.time() * 1000)
         pose_data = None
         face_data = None
         hands_data = None
@@ -145,12 +150,69 @@ class LandmarkExtractor:
         if self.pose_landmarker is not None:
             try:
                 pose_result = self.pose_landmarker.detect(mp_image)
-                if pose_result.landmarks:
-                    landmarks = pose_result.landmarks[0]
+                try:
+                    logger.debug(
+                        f"pose_result type={type(pose_result)} attrs={dir(pose_result)}"
+                    )
+                except Exception:
+                    logger.debug(f"pose_result repr: {repr(pose_result)}")
+
+                def _extract_list(obj):
+                    # try common attribute names that may contain landmark lists
+                    for attr in (
+                        "landmarks",
+                        "pose_landmarks",
+                        "keypoints",
+                        "world_landmarks",
+                        "landmark",
+                    ):
+                        val = getattr(obj, attr, None)
+                        if val:
+                            # If the returned object wraps landmarks under 'landmark', unwrap it
+                            try:
+                                if hasattr(val, "landmark"):
+                                    inner = getattr(val, "landmark")
+                                    if inner:
+                                        return inner
+                            except Exception:
+                                pass
+                            return val
+                    return None
+
+                pose_list = _extract_list(pose_result)
+                if pose_list:
+                    landmarks = (
+                        pose_list[0]
+                        if isinstance(pose_list, list) and len(pose_list) > 0
+                        else pose_list
+                    )
+                    # build coords and confidences with fallbacks
+                    coords = []
+                    confs = []
+                    for lm in landmarks:
+                        x = getattr(lm, "x", getattr(lm, "position_x", None))
+                        y = getattr(lm, "y", getattr(lm, "position_y", None))
+                        z = getattr(lm, "z", getattr(lm, "position_z", 0.0))
+                        # 안전하게 None 처리
+                        if x is None or y is None:
+                            continue
+                        coords.append((x, y, z))
+                        p = getattr(lm, "presence", None)
+                        if p is None:
+                            p = getattr(lm, "visibility", None)
+                        try:
+                            confs.append(float(p) if p is not None else 1.0)
+                        except Exception:
+                            confs.append(1.0)
+
                     pose_data = LandmarkData(
-                        landmarks=[(lm.x, lm.y, lm.z) for lm in landmarks],
-                        confidences=[lm.presence for lm in landmarks],
+                        landmarks=[(c[0], c[1], c[2]) for c in coords],
+                        confidences=confs,
                         timestamp_ms=timestamp_ms,
+                    )
+                else:
+                    logger.debug(
+                        f"Pose 결과에 랜드마크 속성이 없습니다: attrs={dir(pose_result)}"
                     )
             except Exception as e:
                 logger.debug(f"Pose 추출 실패: {e}")
@@ -159,12 +221,65 @@ class LandmarkExtractor:
         if self.face_landmarker is not None:
             try:
                 face_result = self.face_landmarker.detect(mp_image)
-                if face_result.landmarks:
-                    landmarks = face_result.landmarks[0]
+                try:
+                    logger.debug(
+                        f"face_result type={type(face_result)} attrs={dir(face_result)}"
+                    )
+                except Exception:
+                    logger.debug(f"face_result repr: {repr(face_result)}")
+
+                def _extract_list(obj):
+                    for attr in (
+                        "landmarks",
+                        "face_landmarks",
+                        "keypoints",
+                        "landmark",
+                    ):
+                        val = getattr(obj, attr, None)
+                        if val:
+                            # If the returned object wraps landmarks under 'landmark', unwrap it
+                            try:
+                                if hasattr(val, "landmark"):
+                                    inner = getattr(val, "landmark")
+                                    if inner:
+                                        return inner
+                            except Exception:
+                                pass
+                            return val
+                    return None
+
+                face_list = _extract_list(face_result)
+                if face_list:
+                    landmarks = (
+                        face_list[0]
+                        if isinstance(face_list, list) and len(face_list) > 0
+                        else face_list
+                    )
+                    coords = []
+                    confs = []
+                    for lm in landmarks:
+                        x = getattr(lm, "x", getattr(lm, "position_x", None))
+                        y = getattr(lm, "y", getattr(lm, "position_y", None))
+                        z = getattr(lm, "z", getattr(lm, "position_z", 0.0))
+                        if x is None or y is None:
+                            continue
+                        coords.append((x, y, z))
+                        p = getattr(lm, "presence", None)
+                        if p is None:
+                            p = getattr(lm, "visibility", None)
+                        try:
+                            confs.append(float(p) if p is not None else 1.0)
+                        except Exception:
+                            confs.append(1.0)
+
                     face_data = LandmarkData(
-                        landmarks=[(lm.x, lm.y, lm.z) for lm in landmarks],
-                        confidences=[lm.presence for lm in landmarks],
+                        landmarks=[(c[0], c[1], c[2]) for c in coords],
+                        confidences=confs,
                         timestamp_ms=timestamp_ms,
+                    )
+                else:
+                    logger.debug(
+                        f"Face 결과에 랜드마크 속성이 없습니다: attrs={dir(face_result)}"
                     )
             except Exception as e:
                 logger.debug(f"Face 추출 실패: {e}")
@@ -173,15 +288,65 @@ class LandmarkExtractor:
         if self.hand_landmarker is not None:
             try:
                 hand_result = self.hand_landmarker.detect(mp_image)
-                if hand_result.landmarks:
+                try:
+                    logger.debug(
+                        f"hand_result type={type(hand_result)} attrs={dir(hand_result)}"
+                    )
+                except Exception:
+                    logger.debug(f"hand_result repr: {repr(hand_result)}")
+
+                def _extract_list(obj):
+                    for attr in (
+                        "landmarks",
+                        "hand_landmarks",
+                        "keypoints",
+                        "landmark",
+                    ):
+                        val = getattr(obj, attr, None)
+                        if val:
+                            # If the returned object wraps landmarks under 'landmark', unwrap it
+                            try:
+                                if hasattr(val, "landmark"):
+                                    inner = getattr(val, "landmark")
+                                    if inner:
+                                        return inner
+                            except Exception:
+                                pass
+                            return val
+                    return None
+
+                hand_list = _extract_list(hand_result)
+                if hand_list:
                     hands_data = []
-                    for hand_idx, landmarks in enumerate(hand_result.landmarks):
+                    iterable = hand_list if isinstance(hand_list, list) else [hand_list]
+                    for hand_idx, landmarks in enumerate(iterable):
+                        coords = []
+                        confs = []
+                        for lm in landmarks:
+                            x = getattr(lm, "x", getattr(lm, "position_x", None))
+                            y = getattr(lm, "y", getattr(lm, "position_y", None))
+                            z = getattr(lm, "z", getattr(lm, "position_z", 0.0))
+                            if x is None or y is None:
+                                continue
+                            coords.append((x, y, z))
+                            p = getattr(lm, "presence", None)
+                            if p is None:
+                                p = getattr(lm, "visibility", None)
+                            try:
+                                confs.append(float(p) if p is not None else 1.0)
+                            except Exception:
+                                confs.append(1.0)
+
                         hand_data = LandmarkData(
-                            landmarks=[(lm.x, lm.y, lm.z) for lm in landmarks],
-                            confidences=[lm.presence for lm in landmarks],
+                            landmarks=[(c[0], c[1], c[2]) for c in coords],
+                            confidences=confs,
                             timestamp_ms=timestamp_ms,
                         )
                         hands_data.append(hand_data)
+                else:
+                    logger.debug(
+                        f"Hand 결과에 랜드마크 속성이 없습니다: attrs={dir(hand_result)}"
+                    )
             except Exception as e:
                 logger.debug(f"Hand 추출 실패: {e}")
 
@@ -269,6 +434,21 @@ class LandmarkExtractor:
                         )
                     )
 
+        # 디버그: 필수 face 포인트 신뢰도 로깅(존재하지 않거나 낮으면 원인 파악에 도움됨)
+        try:
+            if extracted.face is not None:
+                fc = extracted.face.confidences
+                vals = {
+                    "face_30": float(fc[30]) if len(fc) > 30 else None,
+                    "face_1": float(fc[1]) if len(fc) > 1 else None,
+                    "face_4": float(fc[4]) if len(fc) > 4 else None,
+                    "face_152": float(fc[152]) if len(fc) > 152 else None,
+                    "face_378": float(fc[378]) if len(fc) > 378 else None,
+                }
+                logger.debug(f"Face landmark confidences: {vals}")
+        except Exception:
+            logger.debug("Face confidences 로깅 중 예외")
+
         # Pose 랜드마크 (어깨)
         if extracted.pose is not None and extracted.pose.landmarks:
             pose_lms = extracted.pose.landmarks
@@ -288,6 +468,18 @@ class LandmarkExtractor:
                     int(pose_lms[12][1] * frame_height),
                 )
                 landmarks["confidences"]["right_shoulder"] = pose_conf[12]
+
+        # 디버그: pose(어깨) 신뢰도 로깅
+        try:
+            if extracted.pose is not None:
+                pc = extracted.pose.confidences
+                pvals = {
+                    "pose_11": float(pc[11]) if len(pc) > 11 else None,
+                    "pose_12": float(pc[12]) if len(pc) > 12 else None,
+                }
+                logger.debug(f"Pose landmark confidences: {pvals}")
+        except Exception:
+            logger.debug("Pose confidences 로깅 중 예외")
 
         # Hand 랜드마크 (손가락 팁)
         if extracted.hands is not None:

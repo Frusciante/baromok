@@ -10,13 +10,14 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from datetime import datetime
 from typing import Optional
 import logging
+from src.utils.logger import get_logger
 
 from src.core.landmark_extractor import LandmarkExtractor, ExtractedLandmarks
 from src.core.indicator_calculator import IndicatorCalculator, PostureIndicators
 from src.core.judgment_engine import JudgmentEngine, PostureJudgmentResult
 from src.core.state_machine import StateMachine, PostureState
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class CameraWorker(QThread):
@@ -179,6 +180,16 @@ class CameraWorker(QThread):
         )
         try:
             landmarks = self.landmark_extractor.extract_landmarks(frame)
+            # 디버그: 어떤 타입의 랜드마크가 추출되었는지 로깅
+            try:
+                pose_present = landmarks.pose is not None
+                face_present = landmarks.face is not None
+                hands_count = len(landmarks.hands) if landmarks.hands else 0
+                logger.debug(
+                    f"랜드마크 추출 결과 - pose: {pose_present}, face: {face_present}, hands: {hands_count}"
+                )
+            except Exception:
+                logger.debug("랜드마크 추출 결과 로깅 중 예외 발생")
         except Exception as e:
             logger.debug(f"랜드마크 추출 실패: {e}")
 
@@ -191,15 +202,22 @@ class CameraWorker(QThread):
                 frame_width=frame_width,
                 frame_height=frame_height,
             )
+            logger.debug(f"관련 랜드마크 (픽셀 좌표): {relevant_landmarks}")
             normalized_landmarks = self.landmark_extractor.normalize_landmarks(
                 relevant_landmarks,
                 frame_width=frame_width,
                 frame_height=frame_height,
             )
+            logger.debug(f"정규화된 랜드마크: {normalized_landmarks}")
             indicators = self.indicator_calculator.calculate_all_indicators(
                 normalized_landmarks,
                 timestamp=timestamp.timestamp(),
             )
+            if indicators is None:
+                logger.debug(
+                    "IndicatorCalculator returned None (필수 랜드마크 누락). "
+                    f"relevant_landmarks={relevant_landmarks}"
+                )
         except Exception as e:
             logger.debug(f"지표 계산 실패: {e}")
 
