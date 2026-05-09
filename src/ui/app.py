@@ -142,7 +142,7 @@ class baromokApp:
 
         # 신호 연결
         self.baseline_screen.baseline_captured_signal.connect(
-            lambda: self.switch_screen(1)  # Hub로 이동
+            self._handle_baseline_captured
         )
         self.hub_screen.start_detection_signal.connect(self._start_detection)
         self.hub_screen.open_settings_signal.connect(
@@ -223,6 +223,14 @@ class baromokApp:
         if not self.camera_worker.isRunning():
             self.camera_worker.start()
         self.switch_screen(4)  # DetectionScreen으로 이동
+
+    def _handle_baseline_captured(self):
+        """Baseline 완료 후 다음 동작 처리"""
+        if self.settings_config.auto_start_detection:
+            logger.info("자동 감지 시작 설정 활성화: 바로 감지 시작")
+            self._start_detection()
+        else:
+            self.switch_screen(1)  # HubScreen으로 이동
 
     def _stop_detection(self):
         """감지 중지"""
