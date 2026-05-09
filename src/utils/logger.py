@@ -71,7 +71,7 @@ class LoggerSetup:
 
 
 def get_logger(
-    name: str, log_level: str = "DEBUG", log_file: Optional[str] = None
+    name: str, log_level: str = "INFO", log_file: Optional[str] = None
 ) -> logging.Logger:
     """
     로거 조회 또는 생성 (유틸 함수)

@@ -246,7 +246,7 @@ $ python main.py
 
 #### Git 커밋
 ```
-[wooseong e7c1039] Phase 5-2: 알림음 구현 - SoundManager + BarorokApp 통합 + 8/8 테스트 통과
+[wooseong e7c1039] Phase 5-2: 알림음 구현 - SoundManager + baromokApp 통합 + 8/8 테스트 통과
  14 files changed, 889 insertions(+)
 ```
 

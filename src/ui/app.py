@@ -6,8 +6,8 @@ PyQt UI 애플리케이션
 
 import time
 
-from PyQt6.QtCore import QObject, QTimer, pyqtSignal
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QObject, QTimer, pyqtSignal, Qt
+from PyQt6.QtWidgets import QApplication, QPushButton, QCheckBox, QRadioButton, QToolButton
 import sys
 
 from src.utils.logger import get_logger
@@ -107,6 +107,7 @@ class baromokApp:
 
         # 화면 생성 및 등록
         self._setup_screens()
+        self._apply_interactive_cursor_policy()
 
         logger.info("바로목 애플리케이션 초기화 완료")
 
@@ -121,7 +122,7 @@ class baromokApp:
             )
 
         # 의존성 주입과 함께 화면 생성
-        self.baseline_screen = BaselineScreen(self.theme_manager, self.camera_worker)
+        self.baseline_screen = BaselineScreen(self.theme_manager, self.camera_worker, self.baseline_manager)
         self.hub_screen = HubScreen(self.theme_manager)
         self.settings_screen = SettingsScreen(
             self.theme_manager, vars(self.settings_config)  # dataclass를 dict로 변환
@@ -144,6 +145,9 @@ class baromokApp:
         self.baseline_screen.baseline_captured_signal.connect(
             self._handle_baseline_captured
         )
+        self.hub_screen.open_baseline_signal.connect(
+            lambda: self.switch_screen(0)  # Baseline
+        )
         self.hub_screen.start_detection_signal.connect(self._start_detection)
         self.hub_screen.open_settings_signal.connect(
             lambda: self.switch_screen(2)  # Settings
@@ -164,6 +168,15 @@ class baromokApp:
         self.main_window.stacked_widget.setCurrentWidget(self.hub_screen)
 
         logger.info("화면 설정 완료 (5개 화면 등록)")
+
+    def _apply_interactive_cursor_policy(self):
+        """QSS의 cursor 규칙 대신 코드에서 인터랙티브 위젯 커서를 적용한다."""
+        interactive_widgets = self.main_window.findChildren((QPushButton, QCheckBox, QRadioButton, QToolButton))
+        for widget in interactive_widgets:
+            if widget.isEnabled():
+                widget.setCursor(Qt.CursorShape.PointingHandCursor)
+            else:
+                widget.setCursor(Qt.CursorShape.ArrowCursor)
 
     # ========== 프로퍼티: 설정값 실시간 반영 ==========
     @property

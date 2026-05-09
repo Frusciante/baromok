@@ -392,47 +392,39 @@ class LandmarkExtractor:
 
             # 코 (30), 양쪽 눈 (1,4), 양쪽 광대 (152,378), 턱 (199,427)
             if len(face_lms) > 30 and face_conf[30] > confidence_threshold:
-                landmarks["face_center"] = (
-                    int(face_lms[30][0] * frame_width),
-                    int(face_lms[30][1] * frame_height),
-                )
+                x = int(min(max(face_lms[30][0] * frame_width, 0), frame_width - 1))
+                y = int(min(max(face_lms[30][1] * frame_height, 0), frame_height - 1))
+                landmarks["face_center"] = (x, y)
 
             if len(face_lms) > 1 and face_conf[1] > confidence_threshold:
-                landmarks["left_eye"] = (
-                    int(face_lms[1][0] * frame_width),
-                    int(face_lms[1][1] * frame_height),
-                )
+                x = int(min(max(face_lms[1][0] * frame_width, 0), frame_width - 1))
+                y = int(min(max(face_lms[1][1] * frame_height, 0), frame_height - 1))
+                landmarks["left_eye"] = (x, y)
 
             if len(face_lms) > 4 and face_conf[4] > confidence_threshold:
-                landmarks["right_eye"] = (
-                    int(face_lms[4][0] * frame_width),
-                    int(face_lms[4][1] * frame_height),
-                )
+                x = int(min(max(face_lms[4][0] * frame_width, 0), frame_width - 1))
+                y = int(min(max(face_lms[4][1] * frame_height, 0), frame_height - 1))
+                landmarks["right_eye"] = (x, y)
 
             if len(face_lms) > 152 and face_conf[152] > confidence_threshold:
-                landmarks["left_cheek"] = (
-                    int(face_lms[152][0] * frame_width),
-                    int(face_lms[152][1] * frame_height),
-                )
+                x = int(min(max(face_lms[152][0] * frame_width, 0), frame_width - 1))
+                y = int(min(max(face_lms[152][1] * frame_height, 0), frame_height - 1))
+                landmarks["left_cheek"] = (x, y)
                 landmarks["confidences"]["left_cheek"] = face_conf[152]
 
             if len(face_lms) > 378 and face_conf[378] > confidence_threshold:
-                landmarks["right_cheek"] = (
-                    int(face_lms[378][0] * frame_width),
-                    int(face_lms[378][1] * frame_height),
-                )
+                x = int(min(max(face_lms[378][0] * frame_width, 0), frame_width - 1))
+                y = int(min(max(face_lms[378][1] * frame_height, 0), frame_height - 1))
+                landmarks["right_cheek"] = (x, y)
                 landmarks["confidences"]["right_cheek"] = face_conf[378]
 
             # 턱 포인트 (199, 427)
             chin_indices = [199, 427]
             for idx in chin_indices:
                 if len(face_lms) > idx and face_conf[idx] > confidence_threshold:
-                    landmarks["chin_points"].append(
-                        (
-                            int(face_lms[idx][0] * frame_width),
-                            int(face_lms[idx][1] * frame_height),
-                        )
-                    )
+                    x = int(min(max(face_lms[idx][0] * frame_width, 0), frame_width - 1))
+                    y = int(min(max(face_lms[idx][1] * frame_height, 0), frame_height - 1))
+                    landmarks["chin_points"].append((x, y))
 
         # 디버그: 필수 face 포인트 신뢰도 로깅(존재하지 않거나 낮으면 원인 파악에 도움됨)
         try:
@@ -456,18 +448,35 @@ class LandmarkExtractor:
 
             # 왼쪽 어깨 (11), 오른쪽 어깨 (12)
             if len(pose_lms) > 11 and pose_conf[11] > confidence_threshold:
-                landmarks["left_shoulder"] = (
-                    int(pose_lms[11][0] * frame_width),
-                    int(pose_lms[11][1] * frame_height),
-                )
+                x = int(min(max(pose_lms[11][0] * frame_width, 0), frame_width - 1))
+                y = int(min(max(pose_lms[11][1] * frame_height, 0), frame_height - 1))
+                landmarks["left_shoulder"] = (x, y)
                 landmarks["confidences"]["left_shoulder"] = pose_conf[11]
 
             if len(pose_lms) > 12 and pose_conf[12] > confidence_threshold:
-                landmarks["right_shoulder"] = (
-                    int(pose_lms[12][0] * frame_width),
-                    int(pose_lms[12][1] * frame_height),
-                )
+                x = int(min(max(pose_lms[12][0] * frame_width, 0), frame_width - 1))
+                y = int(min(max(pose_lms[12][1] * frame_height, 0), frame_height - 1))
+                landmarks["right_shoulder"] = (x, y)
                 landmarks["confidences"]["right_shoulder"] = pose_conf[12]
+
+        # 어깨 좌표가 이미지 좌표계상 좌/우가 반전되어 들어오는 경우 교정
+        try:
+            ls = landmarks.get("left_shoulder")
+            rs = landmarks.get("right_shoulder")
+            if ls is not None and rs is not None:
+                # 픽셀 x 좌표를 비교해서 왼쪽이 더 큰 경우(반전) swap
+                if ls[0] > rs[0]:
+                    logger.debug(
+                        f"어깨 좌표 좌우 반전 감지: left_shoulder.x={ls[0]} > right_shoulder.x={rs[0]}; 스왑 수행"
+                    )
+                    landmarks["left_shoulder"], landmarks["right_shoulder"] = rs, ls
+                    # confidences도 교체
+                    lc = landmarks["confidences"].get("left_shoulder")
+                    rc = landmarks["confidences"].get("right_shoulder")
+                    landmarks["confidences"]["left_shoulder"] = rc
+                    landmarks["confidences"]["right_shoulder"] = lc
+        except Exception:
+            logger.debug("어깨 좌표 교정 중 예외 발생")
 
         # 디버그: pose(어깨) 신뢰도 로깅
         try:
@@ -494,10 +503,10 @@ class LandmarkExtractor:
                         ):
                             finger_tips.append(
                                 (
-                                    int(hand_data.landmarks[tip_idx][0] * frame_width),
-                                    int(hand_data.landmarks[tip_idx][1] * frame_height),
-                                    hand_data.landmarks[tip_idx][2],  # z 포함
-                                )
+                                        int(min(max(hand_data.landmarks[tip_idx][0] * frame_width, 0), frame_width - 1)),
+                                        int(min(max(hand_data.landmarks[tip_idx][1] * frame_height, 0), frame_height - 1)),
+                                        hand_data.landmarks[tip_idx][2],  # z 포함
+                                    )
                             )
 
                     # Handedness 확인 (Right=0, Left=1)
@@ -530,19 +539,31 @@ class LandmarkExtractor:
             elif key == "confidences":
                 normalized[key] = value
             elif isinstance(value, list):
-                # chin_points, *_hand_tips 등
-                normalized[key] = [
-                    (
+                # 손가락 팁은 3D 유지, chin_points는 2D로 변환
+                if key in ['left_hand_tips', 'right_hand_tips']:
+                    normalized[key] = [
+                        (
+                            (
+                                p[0] / frame_width,
+                                p[1] / frame_height,
+                                p[2] if len(p) > 2 else 0,
+                            )
+                            if len(p) >= 2
+                            else p
+                        )
+                        for p in value
+                    ]
+                else:
+                    # chin_points는 2D 유지 (x, y)만
+                    normalized[key] = [
                         (
                             p[0] / frame_width,
                             p[1] / frame_height,
-                            p[2] if len(p) > 2 else 0,
                         )
                         if len(p) >= 2
                         else p
-                    )
-                    for p in value
-                ]
+                        for p in value
+                    ]
             elif isinstance(value, tuple):
                 # 일반 포인트
                 normalized[key] = (value[0] / frame_width, value[1] / frame_height)

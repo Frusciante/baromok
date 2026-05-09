@@ -46,6 +46,10 @@ class BaselineManager:
         self.collection_frames: list = []
         self.is_collecting = False
         self.collection_start_time = 0.0
+        # 마지막으로 누락 경고를 로깅한 시간(metric_name -> timestamp)
+        self._last_missing_warning_time: Dict[str, float] = {}
+        # 경고 쓰로틀(초)
+        self._missing_warning_interval = 5.0
         
         logger.info(f"BaselineManager 초기화 완료 (data_dir: {self.data_dir})")
     
@@ -92,11 +96,15 @@ class BaselineManager:
         actual_duration = time.time() - self.collection_start_time
         frame_count = len(self.collection_frames)
         expected_frame_count = int(expected_duration * fps)
+        minimum_frame_count = max(15, int(expected_frame_count * 0.1))
         
         logger.info(f"Baseline 수집 완료: {frame_count} 프레임 (예상 {expected_frame_count})")
         
-        if frame_count < expected_frame_count * 0.8:  # 80% 이상
-            logger.warning(f"Baseline 프레임 부족: {frame_count} < {expected_frame_count}")
+        if frame_count < minimum_frame_count:
+            logger.warning(
+                f"Baseline 프레임 부족: {frame_count} < {minimum_frame_count} "
+                f"(예상 {expected_frame_count}, 실제 {actual_duration:.1f}초)"
+            )
             return False
         
         # 평균/중앙값 계산
@@ -219,7 +227,11 @@ class BaselineManager:
             filepath = Path(filepath)
         
         if not filepath.exists():
-            logger.warning(f"Baseline 파일 없음: {filepath}")
+            now = time.time()
+            last = self._last_missing_warning_time.get("baseline_file", 0)
+            if now - last > self._missing_warning_interval:
+                logger.warning(f"Baseline 파일 없음: {filepath}")
+                self._last_missing_warning_time["baseline_file"] = now
             return False
         
         try:
@@ -270,7 +282,11 @@ class BaselineManager:
                 baseline=10, current=9 → 10% 감소 → -10
         """
         if self.baseline_metrics is None or metric_name not in self.baseline_metrics.metrics:
-            logger.warning(f"Baseline이 없거나 지표 '{metric_name}'을(를) 찾을 수 없음")
+            now = time.time()
+            last = self._last_missing_warning_time.get(metric_name, 0)
+            if now - last > self._missing_warning_interval:
+                logger.warning(f"Baseline이 없거나 지표 '{metric_name}'을(를) 찾을 수 없음")
+                self._last_missing_warning_time[metric_name] = now
             return 0.0
         
         baseline_value = self.baseline_metrics.metrics[metric_name]
@@ -301,7 +317,11 @@ class BaselineManager:
         
         for metric_name in required_metrics:
             if metric_name not in self.baseline_metrics.metrics:
-                logger.warning(f"필수 지표 부재: {metric_name}")
+                now = time.time()
+                last = self._last_missing_warning_time.get(metric_name, 0)
+                if now - last > self._missing_warning_interval:
+                    logger.warning(f"필수 지표 부재: {metric_name}")
+                    self._last_missing_warning_time[metric_name] = now
                 return False
         
         return True

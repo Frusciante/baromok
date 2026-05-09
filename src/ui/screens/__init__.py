@@ -41,10 +41,11 @@ class BaselineScreen(QWidget):
 
     baseline_captured_signal = pyqtSignal()
 
-    def __init__(self, theme_manager: ThemeManager, camera_worker=None):
+    def __init__(self, theme_manager: ThemeManager, camera_worker=None, baseline_manager=None):
         super().__init__()
         self.theme_manager = theme_manager
         self.camera_worker = camera_worker
+        self.baseline_manager = baseline_manager
         self.capture_duration = 50
         self.capture_elapsed = 0
         self.setup_ui()
@@ -52,6 +53,10 @@ class BaselineScreen(QWidget):
         if self.camera_worker:
             self.camera_worker.frame_processed_signal.connect(self._on_frame_processed)
             self.camera_worker.error_signal.connect(self._on_camera_error)
+            # baseline 수집용: 프레임에서 indicators를 모아 BaselineManager로 전달
+            # baseline_manager가 주입되어 있으면 프레임마다 add_frame_to_collection 호출
+            # (단, 수집은 start_capture/finish 시 제어)
+            
 
     def setup_ui(self):
         """UI 구성"""
@@ -115,6 +120,12 @@ class BaselineScreen(QWidget):
         if self.camera_worker is None:
             logger.warning("카메라 워커 없음")
             return
+        # baseline 수집 시작
+        try:
+            if self.baseline_manager is not None:
+                self.baseline_manager.start_baseline_collection()
+        except Exception as e:
+            logger.debug(f"Baseline 수집 시작 실패: {e}")
 
         self.capture_elapsed = 0
         self.progress_bar.setValue(0)
@@ -134,6 +145,16 @@ class BaselineScreen(QWidget):
         if self.capture_elapsed >= self.capture_duration:
             self.capture_timer.stop()
             self.camera_worker.stop_capture()
+            # baseline 수집 종료 및 저장 시도
+            try:
+                if self.baseline_manager is not None:
+                    # fps는 camera_worker에서 가져오거나 기본 30
+                    fps = getattr(self.camera_worker, 'camera_fps', 30)
+                    ok = self.baseline_manager.finish_baseline_collection(fps=fps)
+                    if not ok:
+                        logger.warning("Baseline 수집이 정상적으로 완료되지 않았습니다")
+            except Exception as e:
+                logger.error(f"Baseline 수집 완료 처리 중 오류: {e}")
             self.capture_btn.setEnabled(True)
             self.capture_btn.setText("촬영 시작")
             logger.info("초기화 촬영 완료")
@@ -150,6 +171,14 @@ class BaselineScreen(QWidget):
                     Qt.TransformationMode.SmoothTransformation,
                 )
                 self.preview_label.setPixmap(scaled_pixmap)
+            # baseline 수집용 indicators 전달
+            try:
+                if self.baseline_manager is not None and self.baseline_manager.is_collecting:
+                    indicators = frame_data.get('indicators')
+                    if indicators is not None:
+                        self.baseline_manager.add_frame_to_collection(indicators)
+            except Exception:
+                pass
         except Exception as e:
             logger.error(f"프리뷰 업데이트 실패: {e}")
 
@@ -165,6 +194,7 @@ class BaselineScreen(QWidget):
 class HubScreen(QWidget):
     """메인 허브 화면"""
 
+    open_baseline_signal = pyqtSignal()
     start_detection_signal = pyqtSignal()
     open_settings_signal = pyqtSignal()
     open_statistics_signal = pyqtSignal()
@@ -193,6 +223,11 @@ class HubScreen(QWidget):
         settings_btn.setFixedSize(*self.theme_manager.get_button_size())
         settings_btn.clicked.connect(self.open_settings_signal.emit)
         button_layout.addWidget(settings_btn)
+
+        baseline_btn = QPushButton("초기 바른자세 촬영")
+        baseline_btn.setFixedSize(*self.theme_manager.get_button_size())
+        baseline_btn.clicked.connect(self.open_baseline_signal.emit)
+        button_layout.addWidget(baseline_btn)
 
         stats_btn = QPushButton("나의 통계")
         stats_btn.setFixedSize(*self.theme_manager.get_button_size())
@@ -520,7 +555,8 @@ class DetectionScreen(QWidget):
             self._update_posture_status(state, posture_type, probability)
 
             if self.session_manager:
-                self.session_manager.add_frame_data(frame_data)
+                if getattr(self.session_manager, "current_session", None) is not None:
+                    self.session_manager.add_frame_data(frame_data)
 
         except Exception as e:
             logger.error(f"프레임 처리 오류: {e}")

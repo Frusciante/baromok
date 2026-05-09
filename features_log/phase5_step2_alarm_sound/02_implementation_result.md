@@ -27,7 +27,7 @@
   - 음량 0 이하면 재생 스킵
   - 예외 처리 및 로깅
 
-### ✅ Task 2: BarorokApp 통합
+### ✅ Task 2: baromokApp 통합
 **파일**: `src/ui/app.py` (수정, 4줄 추가)
 
 1. **Import 추가** (line 11)
@@ -306,7 +306,7 @@ play_alert() 메서드
 ## 체크리스트
 
 - [x] SoundManager 클래스 작성
-- [x] BarorokApp에 주입
+- [x] baromokApp에 주입
 - [x] _show_alert_popup 수정
 - [x] Import 추가
 - [x] 구문 검증

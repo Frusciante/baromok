@@ -135,7 +135,6 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     
     QPushButton:hover {{
         background-color: #6A4E91;
-        cursor: pointer;
     }}
     
     QPushButton:pressed {{
@@ -145,7 +144,6 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     QPushButton:disabled {{
         background-color: {Colors.GRAY_DARK.value};
         color: {Colors.GRAY_LIGHT.value};
-        cursor: not-allowed;
     }}
     
     /* 버튼 - 세컨더리 (아웃라인) */
@@ -230,11 +228,6 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     QCheckBox::indicator:checked {{
         background-color: {Colors.PURPLE_PRIMARY.value};
         border: 2px solid {Colors.PURPLE_PRIMARY.value};
-    }}
-    
-    QCheckBox::indicator:checked::after {{
-        content: "✓";
-        color: {Colors.WHITE.value};
     }}
     
     /* 라디오 버튼 */

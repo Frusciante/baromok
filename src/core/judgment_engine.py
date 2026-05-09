@@ -269,7 +269,8 @@ class JudgmentEngine:
             # 조건 확인
             eye_triggered = abs(indicators.eye_line_tilt) >= eye_threshold
             shoulder_triggered = abs(indicators.shoulder_tilt_deg) >= shoulder_threshold
-            hand_triggered = indicators.hand_near_face or indicators.chin_occlusion > 0.2
+            # 손 관련 트리거: 손이 얼굴 근처이거나(우선) 턱 가림이 충분히 큰 경우로 제한
+            hand_triggered = indicators.hand_near_face or indicators.chin_occlusion > 0.25
             
             # 점수 계산
             eye_score = self._normalize_score(
