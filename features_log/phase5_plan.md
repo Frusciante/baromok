@@ -74,7 +74,7 @@ if self.settings_config.notification_enabled:
 ```
 
 **작업 항목**:
-- `BarorokApp._save_settings()` 수정: 설정값을 상태 머신/카메라에 전달
+- `baromokApp._save_settings()` 수정: 설정값을 상태 머신/카메라에 전달
 - `StateMachine` 생성자에 `settings_config` 주입
 - 알림 간격 설정값 적용
 
@@ -128,7 +128,7 @@ class SoundManager:
 
 **작업 항목**:
 - SoundManager 클래스 구현
-- BarorokApp에 주입
+- baromokApp에 주입
 - 알림 발생 시 `play_alert()` 호출
 - 소리 크기 설정값 적용
 

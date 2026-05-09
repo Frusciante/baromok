@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from src.config import ConfigManager
 from src.utils.logger import get_logger
-from src.ui.app import BarorokApp
+from src.ui.app import baromokApp
 
 logger = get_logger(__name__, "DEBUG")
 
@@ -48,7 +48,7 @@ def main():
 
         # PyQt 애플리케이션 실행
         logger.info("PyQt 애플리케이션 시작...")
-        app = BarorokApp()
+        app = baromokApp()
         return app.run()
 
     except Exception as e:

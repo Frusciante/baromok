@@ -40,7 +40,7 @@
 - `SettingsConfig` 클래스 (`src/config.py`)
 - `SettingsScreen` UI 구현
 - JSON 파일 저장/로드
-- `BarorokApp._save_settings()` 메서드
+- `baromokApp._save_settings()` 메서드
 
 ❌ **미완료**:
 - 설정값이 실제 동작에 반영 안 됨
@@ -215,13 +215,13 @@ def _apply_settings(self):
 ```
 SettingsScreen
     ↓ (settings_saved_signal 발생)
-BarorokApp._save_settings()
+baromokApp._save_settings()
     ↓ (설정값 객체에 저장)
 SettingsConfig (메모리)
     ↓ (JSON 파일에 저장)
 data/config.json
     ↓ (즉시 반영)
-BarorokApp._apply_settings()
+baromokApp._apply_settings()
     ├─ 알림 쿨다운 업데이트 ✓
     ├─ 팝업 위치 업데이트 ✓
     └─ 팝업 타임아웃 업데이트 ✓

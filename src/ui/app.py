@@ -19,6 +19,7 @@ from src.core.judgment_engine import JudgmentEngine
 from src.core.state_machine import StateMachine, StateTransitionEvent
 from src.core.camera_worker import create_camera_worker
 from src.core.session_manager import create_session_manager
+from src.core.sound_manager import SoundManager
 from src.ui.main_window import create_main_window
 from src.ui.screens import (
     BaselineScreen,
@@ -38,7 +39,7 @@ class AlertSignalBridge(QObject):
     alert_requested = pyqtSignal(str, str)
 
 
-class BarorokApp:
+class baromokApp:
     """바로목 메인 애플리케이션"""
 
     def __init__(self):
@@ -98,6 +99,9 @@ class BarorokApp:
         # 설정 로드
         self.settings_config = SettingsConfig.load_from_json("data/config.json")
         logger.info("사용자 설정 로드 완료")
+        # 알림음 관리자
+        self.sound_manager = SoundManager()
+        
 
         # 메인 윈도우
         self.main_window = create_main_window(self.config)
@@ -285,6 +289,9 @@ class BarorokApp:
             logger.debug(f"팝업 타이머 시작: {timeout_ms}ms")
         else:
             logger.debug("팝업 타이머 비활성화 (수동 닫기)")
+        # 알림음 재생
+        if self.settings_config.sound_enabled:
+            self.sound_manager.play_alert(self.settings_config.sound_volume)
 
     def _hide_alert_popup(self):
         """알림 팝업 숨김"""
@@ -329,7 +336,7 @@ class BarorokApp:
 def main():
     """메인 진입점"""
     try:
-        app = BarorokApp()
+        app = baromokApp()
         sys.exit(app.run())
     except Exception as e:
         logger.error("애플리케이션 오류: %s", e, exc_info=True)
