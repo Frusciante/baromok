@@ -108,7 +108,7 @@ class CameraWorker(QThread):
             while self.is_running:
                 # 일시정지 상태 확인
                 if self.is_paused:
-                    self.msleep(100)
+                    self.msleep(1)
                     continue
 
                 # 프레임 읽기
@@ -331,12 +331,22 @@ class CameraWorker(QThread):
             annotated, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2
         )
 
-        # 랜드마크 시각화 (얼굴 중앙점만 간단히)
+        # 랜드마크 시각화 (어깨, 눈, 코 등 인식된 모든 점 그리기)
         if landmarks.pose is not None and landmarks.pose.landmarks:
-            nose = landmarks.pose.landmarks[0]
-            x = int(nose[0] * annotated.shape[1])
-            y = int(nose[1] * annotated.shape[0])
-            cv2.circle(annotated, (x, y), 5, (0, 255, 255), -1)
+            for idx, lm in enumerate(landmarks.pose.landmarks):
+                # lm은 [x, y, z, visibility, presence] 형태일 확률이 높음
+                x = int(lm[0] * annotated.shape[1])
+                y = int(lm[1] * annotated.shape[0])
+
+                # 어깨(11, 12번)는 빨간색으로 크고 눈에 띄게 표시
+                if idx in [11, 12]:
+                    cv2.circle(annotated, (x, y), 8, (0, 0, 255), -1)
+                # 코(0번)는 노란색으로 표시
+                elif idx == 0:
+                    cv2.circle(annotated, (x, y), 6, (0, 255, 255), -1)
+                # 나머지 관절들은 작은 초록색 점으로 표시
+                else:
+                    cv2.circle(annotated, (x, y), 3, (0, 255, 0), -1)
 
         # 지표 정보 (간단한 버전)
         if indicators is not None:
