@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import QApplication
 import sys
 
 from src.utils.logger import get_logger
-from src.config import ConfigManager
+from src.config import ConfigManager, SettingsConfig
 from src.core.landmark_extractor import LandmarkExtractor
 from src.core.indicator_calculator import IndicatorCalculator
 from src.core.baseline_manager import BaselineManager
@@ -98,6 +98,10 @@ class BarorokApp:
         )
         logger.info("✓ 카메라 워커 준비 완료")
 
+        # 설정 로드
+        self.settings_config = SettingsConfig.load_from_json("data/config.json")
+        logger.info("사용자 설정 로드 완료")
+
         # 메인 윈도우
         self.main_window = create_main_window(self.config)
 
@@ -119,7 +123,9 @@ class BarorokApp:
         # 의존성 주입과 함께 화면 생성
         self.baseline_screen = BaselineScreen(self.theme_manager, self.camera_worker)
         self.hub_screen = HubScreen(self.theme_manager)
-        self.settings_screen = SettingsScreen(self.theme_manager)
+        self.settings_screen = SettingsScreen(
+            self.theme_manager, vars(self.settings_config)  # dataclass를 dict로 변환
+        )
         self.statistics_screen = StatisticsScreen(
             self.theme_manager, self.session_manager
         )
@@ -145,6 +151,7 @@ class BarorokApp:
         self.hub_screen.open_statistics_signal.connect(
             lambda: self.switch_screen(3)  # Statistics
         )
+        self.settings_screen.settings_saved_signal.connect(self._save_settings)
         self.settings_screen.back_to_hub_signal.connect(
             lambda: self.switch_screen(1)  # Hub
         )
@@ -245,6 +252,20 @@ class BarorokApp:
         """알림 팝업 숨김"""
         if self.alert_popup is not None:
             self.alert_popup.hide()
+
+    def _save_settings(self, settings_dict: dict):
+        """설정 저장"""
+        try:
+            # 설정값 업데이트
+            for key, value in settings_dict.items():
+                if hasattr(self.settings_config, key):
+                    setattr(self.settings_config, key, value)
+
+            # JSON 파일에 저장
+            self.settings_config.save_to_json("data/config.json")
+            logger.info(f"설정 저장 완료: {settings_dict}")
+        except Exception as e:
+            logger.error(f"설정 저장 실패: {e}")
 
     def run(self):
         """애플리케이션 실행"""

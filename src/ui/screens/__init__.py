@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QProgressBar,
     QFrame,
+    QStackedWidget,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QPixmap, QImage
@@ -217,32 +218,71 @@ class SettingsScreen(QWidget):
     settings_saved_signal = pyqtSignal(dict)
     back_to_hub_signal = pyqtSignal()
 
-    def __init__(self, theme_manager: ThemeManager):
+    def __init__(self, theme_manager: ThemeManager, settings_config=None):
         super().__init__()
         self.theme_manager = theme_manager
+        self.settings_config = settings_config or {}
+        self.category_widgets = []
+        self.category_buttons = []
+        self.current_category_index = 0
         self.setup_ui()
 
     def setup_ui(self):
         """UI 구성"""
+        from PyQt6.QtWidgets import QStackedWidget
+        from src.ui.widgets.settings_widgets import (
+            NotificationSettingsWidget,
+            SoundSettingsWidget,
+            PopupSettingsWidget,
+            AutoStartSettingsWidget,
+        )
+
         layout = QHBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
 
+        # 좌측: 카테고리 버튼
         left_layout = QVBoxLayout()
+        left_layout.setSpacing(10)
+
         categories = ["알림 설정", "소리 설정", "팝업 설정", "자동 시작"]
-        for cat in categories:
+        category_widget_classes = [
+            NotificationSettingsWidget,
+            SoundSettingsWidget,
+            PopupSettingsWidget,
+            AutoStartSettingsWidget,
+        ]
+
+        for idx, (cat, widget_class) in enumerate(
+            zip(categories, category_widget_classes)
+        ):
             btn = QPushButton(cat)
             btn.setFixedHeight(self.theme_manager.scale_pixel(40))
             btn.setObjectName("secondary")
+            btn.clicked.connect(lambda checked, i=idx: self._on_category_clicked(i))
+            self.category_buttons.append(btn)
             left_layout.addWidget(btn)
+
+            # 카테고리 위젯 생성
+            widget = widget_class(self.theme_manager, self.settings_config)
+            widget.value_changed_signal.connect(self._on_widget_value_changed)
+            self.category_widgets.append(widget)
+
         left_layout.addStretch()
-        layout.addLayout(left_layout)
+        layout.addLayout(left_layout, 0)
 
+        # 우측: 스택 위젯 (카테고리 전환)
         right_layout = QVBoxLayout()
-        right_label = QLabel("[설정값 UI]\n(향후 구현)")
-        right_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        right_layout.addWidget(right_label, 1)
+        right_layout.setSpacing(10)
 
+        self.stacked_widget = QStackedWidget()
+        for widget in self.category_widgets:
+            self.stacked_widget.addWidget(widget)
+
+        self.stacked_widget.setCurrentIndex(0)
+        right_layout.addWidget(self.stacked_widget, 1)
+
+        # 확인 버튼
         confirm_btn = QPushButton("확인")
         confirm_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
         confirm_btn.clicked.connect(self._save_settings)
@@ -251,9 +291,41 @@ class SettingsScreen(QWidget):
         layout.addLayout(right_layout, 1)
         self.setLayout(layout)
 
+        # 첫 번째 카테고리 버튼 스타일 (활성화)
+        self._update_button_styles(0)
+
+    def _on_category_clicked(self, index: int):
+        """카테고리 버튼 클릭 시"""
+        self.current_category_index = index
+        self.stacked_widget.setCurrentIndex(index)
+        self._update_button_styles(index)
+
+    def _update_button_styles(self, active_index: int):
+        """버튼 스타일 업데이트 (활성화/비활성화)"""
+        for idx, btn in enumerate(self.category_buttons):
+            if idx == active_index:
+                btn.setObjectName("secondary")
+                btn.setStyleSheet(
+                    "QPushButton#secondary { background-color: #7B5BA8; color: white; }"
+                )
+            else:
+                btn.setObjectName("secondary")
+                btn.setStyleSheet("")
+
+    def _on_widget_value_changed(self, value_dict: dict):
+        """위젯 값 변경 시 (실시간 추적용)"""
+        logger.debug(f"설정값 변경: {value_dict}")
+
     def _save_settings(self):
         """설정 저장"""
-        self.settings_saved_signal.emit({})
+        all_settings = {}
+
+        for widget in self.category_widgets:
+            all_settings.update(widget.get_value())
+
+        logger.info(f"설정 저장: {all_settings}")
+        self.settings_saved_signal.emit(all_settings)
+        self.back_to_hub_signal.emit()  # HubScreen으로 돌아가기
 
 
 class StatisticsScreen(QWidget):
@@ -269,6 +341,8 @@ class StatisticsScreen(QWidget):
 
     def setup_ui(self):
         """UI 구성"""
+        from src.ui.widgets.chart_widgets import StatisticsLineChart
+
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
@@ -279,11 +353,12 @@ class StatisticsScreen(QWidget):
         )
         layout.addWidget(title)
 
-        chart = QLabel("[차트 영역]\n(Phase 5에서 matplotlib/PyQtGraph)")
-        chart.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        chart.setMinimumHeight(self.theme_manager.scale_pixel(350))
-        chart.setStyleSheet(f"background-color: {Colors.WHITE.value};")
-        layout.addWidget(chart, 1)
+        # 차트 위젯
+        self.chart_widget = StatisticsLineChart(self.theme_manager)
+        layout.addWidget(self.chart_widget, 1)
+
+        # 데이터 로드 및 플로팅
+        self._load_and_plot_data()
 
         avg_text = "데이터 없음"
         if self.session_manager:
@@ -305,6 +380,38 @@ class StatisticsScreen(QWidget):
         layout.addWidget(back_btn)
 
         self.setLayout(layout)
+
+    def _load_and_plot_data(self):
+        """세션 데이터 로드 및 차트 플로팅"""
+        try:
+            if self.session_manager:
+                recent_sessions = self.session_manager.load_recent_sessions(10)
+                if recent_sessions:
+                    # 오래된 순서로 정렬 (최신이 마지막)
+                    recent_sessions.reverse()
+
+                    # 차트용 데이터 준비
+                    sessions_data = []
+                    for session in recent_sessions:
+                        sessions_data.append(
+                            {
+                                "good_posture_percentage": session.statistics.get(
+                                    "good_posture_percentage", 0
+                                )
+                            }
+                        )
+
+                    self.chart_widget.plot_data(sessions_data)
+                    logger.info(f"차트 데이터 로드: {len(sessions_data)}개 세션")
+                else:
+                    self.chart_widget.plot_data([])
+                    logger.info("로드할 세션 데이터 없음")
+            else:
+                logger.warning("SessionManager 없음")
+                self.chart_widget.plot_data([])
+        except Exception as e:
+            logger.error(f"차트 데이터 로드 실패: {e}")
+            self.chart_widget.plot_data([])
 
 
 class DetectionScreen(QWidget):
