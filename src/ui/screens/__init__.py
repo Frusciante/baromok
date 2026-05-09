@@ -1,22 +1,22 @@
 """UI 화면 모듈"""
 
-import cv2
-import numpy as np
-from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QProgressBar,
-    QFrame,
-    QStackedWidget,
-)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QFont, QPixmap, QImage
 import logging
 
-from src.ui.styles.theme import ThemeManager, Colors
+import cv2
+import numpy as np
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QFont, QImage, QPixmap
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from src.ui.styles.theme import Colors, ThemeManager
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,11 @@ def cv2_to_qpixmap(frame: np.ndarray) -> QPixmap:
         h, w, ch = rgb_frame.shape
         bytes_per_line = ch * w
         qt_image = QImage(
-            rgb_frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888
+            rgb_frame.data,
+            w,
+            h,
+            bytes_per_line,
+            QImage.Format.Format_RGB888,
         )
         return QPixmap.fromImage(qt_image)
     except Exception as e:
@@ -41,22 +45,33 @@ class BaselineScreen(QWidget):
 
     baseline_captured_signal = pyqtSignal()
 
-    def __init__(self, theme_manager: ThemeManager, camera_worker=None, baseline_manager=None):
+    def __init__(
+        self,
+        theme_manager: ThemeManager,
+        camera_worker=None,
+        baseline_manager=None,
+    ):
         super().__init__()
         self.theme_manager = theme_manager
         self.camera_worker = camera_worker
         self.baseline_manager = baseline_manager
-        self.capture_duration = 50
-        self.capture_elapsed = 0
+
+        # 기존 5초 고정 종료 방식 대신, 실제 유효 indicators 프레임 수를 기준으로 baseline을 종료한다.
+        self.target_valid_baseline_frames = 90
+        self.minimum_valid_baseline_frames = 60
+        self.maximum_capture_seconds = 15
+        self.warmup_frames = 5
+
+        self.capture_elapsed_ticks = 0
+        self.received_frame_count = 0
+        self.valid_baseline_frame_count = 0
+        self.is_capturing_baseline = False
+
         self.setup_ui()
 
         if self.camera_worker:
             self.camera_worker.frame_processed_signal.connect(self._on_frame_processed)
             self.camera_worker.error_signal.connect(self._on_camera_error)
-            # baseline 수집용: 프레임에서 indicators를 모아 BaselineManager로 전달
-            # baseline_manager가 주입되어 있으면 프레임마다 add_frame_to_collection 호출
-            # (단, 수집은 start_capture/finish 시 제어)
-            
 
     def setup_ui(self):
         """UI 구성"""
@@ -78,12 +93,14 @@ class BaselineScreen(QWidget):
             border-radius: 10px;
         """)
         self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(400))
+
         preview_layout = QVBoxLayout()
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setText("카메라 프리뷰")
         self.preview_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
         preview_layout.addWidget(self.preview_label)
+
         self.preview_frame.setLayout(preview_layout)
         layout.addWidget(self.preview_frame, 1)
 
@@ -103,6 +120,16 @@ class BaselineScreen(QWidget):
         self.progress_bar.setValue(0)
         layout.addWidget(self.progress_bar)
 
+        self.capture_status_label = QLabel(
+            f"유효 프레임 0 / {self.target_valid_baseline_frames}"
+        )
+        self.capture_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.capture_status_label.setFont(
+            QFont("Segoe UI", self.theme_manager.scale_pixel(11))
+        )
+        self.capture_status_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
+        layout.addWidget(self.capture_status_label)
+
         self.capture_btn = QPushButton("촬영 시작")
         self.capture_btn.setFixedHeight(self.theme_manager.scale_pixel(50))
         self.capture_btn.setFont(
@@ -112,6 +139,7 @@ class BaselineScreen(QWidget):
         layout.addWidget(self.capture_btn)
 
         self.setLayout(layout)
+
         self.capture_timer = QTimer()
         self.capture_timer.timeout.connect(self._update_progress)
 
@@ -119,46 +147,62 @@ class BaselineScreen(QWidget):
         """촬영 시작"""
         if self.camera_worker is None:
             logger.warning("카메라 워커 없음")
+            self.preview_label.setText("카메라 워커가 없습니다.")
             return
-        # baseline 수집 시작
-        try:
-            if self.baseline_manager is not None:
-                self.baseline_manager.start_baseline_collection()
-        except Exception as e:
-            logger.debug(f"Baseline 수집 시작 실패: {e}")
 
-        self.capture_elapsed = 0
+        if self.baseline_manager is None:
+            logger.warning("BaselineManager 없음")
+            self.preview_label.setText("BaselineManager가 없습니다.")
+            return
+
+        self.capture_elapsed_ticks = 0
+        self.received_frame_count = 0
+        self.valid_baseline_frame_count = 0
+        self.is_capturing_baseline = True
+
         self.progress_bar.setValue(0)
-        self.capture_btn.setEnabled(False)
-        self.capture_btn.setText("촬영 중... (5초)")
+        self.capture_status_label.setText(
+            f"유효 프레임 0 / {self.target_valid_baseline_frames}"
+        )
 
-        self.camera_worker.start()
+        self.capture_btn.setEnabled(False)
+        self.capture_btn.setText("촬영 중...")
+
+        if hasattr(self.camera_worker, "set_baseline_mode"):
+            self.camera_worker.set_baseline_mode(True)
+
+        self.baseline_manager.start_baseline_collection()
+
+        if not self.camera_worker.isRunning():
+            self.camera_worker.start()
+
         self.capture_timer.start(100)
         logger.info("초기화 촬영 시작")
 
     def _update_progress(self):
-        """진행바 업데이트"""
-        self.capture_elapsed += 1
-        progress = int((self.capture_elapsed / self.capture_duration) * 100)
-        self.progress_bar.setValue(min(progress, 100))
+        """최대 촬영 시간 초과 확인"""
+        if not self.is_capturing_baseline:
+            return
 
-        if self.capture_elapsed >= self.capture_duration:
-            self.capture_timer.stop()
-            self.camera_worker.stop_capture()
-            # baseline 수집 종료 및 저장 시도
-            try:
-                if self.baseline_manager is not None:
-                    # fps는 camera_worker에서 가져오거나 기본 30
-                    fps = getattr(self.camera_worker, 'camera_fps', 30)
-                    ok = self.baseline_manager.finish_baseline_collection(fps=fps)
-                    if not ok:
-                        logger.warning("Baseline 수집이 정상적으로 완료되지 않았습니다")
-            except Exception as e:
-                logger.error(f"Baseline 수집 완료 처리 중 오류: {e}")
-            self.capture_btn.setEnabled(True)
-            self.capture_btn.setText("촬영 시작")
-            logger.info("초기화 촬영 완료")
-            self.baseline_captured_signal.emit()
+        self.capture_elapsed_ticks += 1
+        elapsed_seconds = self.capture_elapsed_ticks / 10
+
+        self.capture_status_label.setText(
+            f"유효 프레임 {self.valid_baseline_frame_count} / "
+            f"{self.target_valid_baseline_frames} "
+            f"({elapsed_seconds:.1f}s / {self.maximum_capture_seconds}s)"
+        )
+
+        if elapsed_seconds >= self.maximum_capture_seconds:
+            if self.valid_baseline_frame_count >= self.minimum_valid_baseline_frames:
+                self._finish_capture()
+            else:
+                self._fail_capture(
+                    f"Baseline 프레임이 부족합니다.\n"
+                    f"수집된 유효 프레임: {self.valid_baseline_frame_count}개\n"
+                    f"최소 필요 프레임: {self.minimum_valid_baseline_frames}개\n"
+                    "카메라 앞에서 얼굴과 양쪽 어깨가 잘 보이도록 한 뒤 다시 촬영해 주세요."
+                )
 
     def _on_frame_processed(self, frame_data: dict):
         """프레임 처리 완료 시 호출"""
@@ -171,33 +215,149 @@ class BaselineScreen(QWidget):
                     Qt.TransformationMode.SmoothTransformation,
                 )
                 self.preview_label.setPixmap(scaled_pixmap)
-            # baseline 수집용 indicators 전달
-            try:
-                if self.baseline_manager is not None and self.baseline_manager.is_collecting:
-                    indicators = frame_data.get('indicators')
-                    if indicators is not None:
-                        self.baseline_manager.add_frame_to_collection(indicators)
-            except Exception:
-                pass
+
+            if (
+                not self.is_capturing_baseline
+                or self.baseline_manager is None
+                or not self.baseline_manager.is_collecting
+            ):
+                return
+
+            self.received_frame_count += 1
+
+            # 초반 카메라/MediaPipe 안정화 프레임은 baseline에서 제외한다.
+            if self.received_frame_count <= self.warmup_frames:
+                self.capture_status_label.setText(
+                    f"카메라 안정화 중... "
+                    f"{self.received_frame_count} / {self.warmup_frames}"
+                )
+                return
+
+            indicators = frame_data.get("indicators")
+            if indicators is None:
+                logger.debug("Baseline 수집 중 indicators가 없는 프레임 제외")
+                return
+
+            self.baseline_manager.add_frame_to_collection(indicators)
+            self.valid_baseline_frame_count += 1
+
+            progress = int(
+                self.valid_baseline_frame_count
+                / self.target_valid_baseline_frames
+                * 100
+            )
+            self.progress_bar.setValue(min(progress, 100))
+
+            self.capture_status_label.setText(
+                f"유효 프레임 {self.valid_baseline_frame_count} / "
+                f"{self.target_valid_baseline_frames}"
+            )
+
+            if self.valid_baseline_frame_count >= self.target_valid_baseline_frames:
+                self._finish_capture()
+
         except Exception as e:
             logger.error(f"프리뷰 업데이트 실패: {e}")
+
+    def _finish_capture(self):
+        """Baseline 촬영 완료"""
+        if not self.is_capturing_baseline:
+            return
+
+        self.is_capturing_baseline = False
+        self.capture_timer.stop()
+
+        # 중요:
+        # baseline mode를 먼저 끄면, QThread가 완전히 종료되기 전 남은 프레임이
+        # 일반 감지 모드로 처리되면서 아직 저장되지 않은 baseline을 참조할 수 있다.
+        # 따라서 카메라를 먼저 멈추고, baseline 저장을 끝낸 뒤 baseline mode를 해제한다.
+        if self.camera_worker and self.camera_worker.isRunning():
+            self.camera_worker.stop_capture()
+
+        actual_elapsed_seconds = max(1.0, self.capture_elapsed_ticks / 10)
+        actual_fps = max(
+            1,
+            int(self.valid_baseline_frame_count / actual_elapsed_seconds),
+        )
+
+        success = False
+        if self.baseline_manager:
+            success = self.baseline_manager.finish_baseline_collection(fps=actual_fps)
+
+        if self.camera_worker and hasattr(self.camera_worker, "set_baseline_mode"):
+            self.camera_worker.set_baseline_mode(False)
+
+        self.capture_btn.setEnabled(True)
+        self.capture_btn.setText("촬영 시작")
+
+        if success:
+            self.progress_bar.setValue(100)
+            self.capture_status_label.setText(
+                f"Baseline 저장 완료 "
+                f"({self.valid_baseline_frame_count}개 유효 프레임)"
+            )
+            logger.info("초기화 촬영 완료")
+            self.baseline_captured_signal.emit()
+        else:
+            self.preview_label.setText(
+                "Baseline 저장에 실패했습니다.\n"
+                "얼굴과 양쪽 어깨가 화면에 잘 보이도록 한 뒤 다시 촬영해 주세요."
+            )
+            self.capture_status_label.setText(
+                f"Baseline 저장 실패 "
+                f"({self.valid_baseline_frame_count}개 유효 프레임)"
+            )
+            logger.warning("초기화 촬영 실패")
+
+    def _fail_capture(self, message: str):
+        """Baseline 촬영 실패 처리"""
+        self.is_capturing_baseline = False
+        self.capture_timer.stop()
+
+        # 실패 시에도 baseline mode 상태에서 먼저 카메라를 멈춘다.
+        if self.camera_worker and self.camera_worker.isRunning():
+            self.camera_worker.stop_capture()
+
+        if self.baseline_manager:
+            self.baseline_manager.reset()
+
+        if self.camera_worker and hasattr(self.camera_worker, "set_baseline_mode"):
+            self.camera_worker.set_baseline_mode(False)
+
+        self.capture_btn.setEnabled(True)
+        self.capture_btn.setText("다시 촬영")
+        self.progress_bar.setValue(0)
+        self.preview_label.setText(message)
+        self.capture_status_label.setText("Baseline 촬영 실패")
+
+        logger.warning(message.replace("\n", " "))
 
     def _on_camera_error(self, error_msg: str):
         """카메라 오류"""
         logger.error(f"카메라 오류: {error_msg}")
+
+        self.is_capturing_baseline = False
         self.capture_timer.stop()
+
+        if self.baseline_manager:
+            self.baseline_manager.reset()
+
+        if self.camera_worker and hasattr(self.camera_worker, "set_baseline_mode"):
+            self.camera_worker.set_baseline_mode(False)
+
         self.capture_btn.setEnabled(True)
         self.capture_btn.setText("촬영 시작")
         self.preview_label.setText(f"오류: {error_msg}")
+        self.capture_status_label.setText("카메라 오류")
 
 
 class HubScreen(QWidget):
     """메인 허브 화면"""
 
-    open_baseline_signal = pyqtSignal()
     start_detection_signal = pyqtSignal()
     open_settings_signal = pyqtSignal()
     open_statistics_signal = pyqtSignal()
+    open_baseline_signal = pyqtSignal()
 
     def __init__(self, theme_manager: ThemeManager):
         super().__init__()
@@ -219,15 +379,15 @@ class HubScreen(QWidget):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(15)
 
+        baseline_btn = QPushButton("초기 자세 촬영")
+        baseline_btn.setFixedSize(*self.theme_manager.get_button_size())
+        baseline_btn.clicked.connect(self.open_baseline_signal.emit)
+        button_layout.addWidget(baseline_btn)
+
         settings_btn = QPushButton("환경 설정")
         settings_btn.setFixedSize(*self.theme_manager.get_button_size())
         settings_btn.clicked.connect(self.open_settings_signal.emit)
         button_layout.addWidget(settings_btn)
-
-        baseline_btn = QPushButton("초기 바른자세 촬영")
-        baseline_btn.setFixedSize(*self.theme_manager.get_button_size())
-        baseline_btn.clicked.connect(self.open_baseline_signal.emit)
-        button_layout.addWidget(baseline_btn)
 
         stats_btn = QPushButton("나의 통계")
         stats_btn.setFixedSize(*self.theme_manager.get_button_size())
@@ -253,71 +413,33 @@ class SettingsScreen(QWidget):
     settings_saved_signal = pyqtSignal(dict)
     back_to_hub_signal = pyqtSignal()
 
-    def __init__(self, theme_manager: ThemeManager, settings_config=None):
+    def __init__(self, theme_manager: ThemeManager, settings_config: dict = None):
         super().__init__()
         self.theme_manager = theme_manager
         self.settings_config = settings_config or {}
-        self.category_widgets = []
-        self.category_buttons = []
-        self.current_category_index = 0
         self.setup_ui()
 
     def setup_ui(self):
         """UI 구성"""
-        from PyQt6.QtWidgets import QStackedWidget
-        from src.ui.widgets.settings_widgets import (
-            NotificationSettingsWidget,
-            SoundSettingsWidget,
-            PopupSettingsWidget,
-            AutoStartSettingsWidget,
-        )
-
         layout = QHBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
 
-        # 좌측: 카테고리 버튼
         left_layout = QVBoxLayout()
-        left_layout.setSpacing(10)
-
         categories = ["알림 설정", "소리 설정", "팝업 설정", "자동 시작"]
-        category_widget_classes = [
-            NotificationSettingsWidget,
-            SoundSettingsWidget,
-            PopupSettingsWidget,
-            AutoStartSettingsWidget,
-        ]
-
-        for idx, (cat, widget_class) in enumerate(
-            zip(categories, category_widget_classes)
-        ):
+        for cat in categories:
             btn = QPushButton(cat)
             btn.setFixedHeight(self.theme_manager.scale_pixel(40))
             btn.setObjectName("secondary")
-            btn.clicked.connect(lambda checked, i=idx: self._on_category_clicked(i))
-            self.category_buttons.append(btn)
             left_layout.addWidget(btn)
-
-            # 카테고리 위젯 생성
-            widget = widget_class(self.theme_manager, self.settings_config)
-            widget.value_changed_signal.connect(self._on_widget_value_changed)
-            self.category_widgets.append(widget)
-
         left_layout.addStretch()
-        layout.addLayout(left_layout, 0)
+        layout.addLayout(left_layout)
 
-        # 우측: 스택 위젯 (카테고리 전환)
         right_layout = QVBoxLayout()
-        right_layout.setSpacing(10)
+        right_label = QLabel("[설정값 UI]\n(향후 구현)")
+        right_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        right_layout.addWidget(right_label, 1)
 
-        self.stacked_widget = QStackedWidget()
-        for widget in self.category_widgets:
-            self.stacked_widget.addWidget(widget)
-
-        self.stacked_widget.setCurrentIndex(0)
-        right_layout.addWidget(self.stacked_widget, 1)
-
-        # 확인 버튼
         confirm_btn = QPushButton("확인")
         confirm_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
         confirm_btn.clicked.connect(self._save_settings)
@@ -326,41 +448,9 @@ class SettingsScreen(QWidget):
         layout.addLayout(right_layout, 1)
         self.setLayout(layout)
 
-        # 첫 번째 카테고리 버튼 스타일 (활성화)
-        self._update_button_styles(0)
-
-    def _on_category_clicked(self, index: int):
-        """카테고리 버튼 클릭 시"""
-        self.current_category_index = index
-        self.stacked_widget.setCurrentIndex(index)
-        self._update_button_styles(index)
-
-    def _update_button_styles(self, active_index: int):
-        """버튼 스타일 업데이트 (활성화/비활성화)"""
-        for idx, btn in enumerate(self.category_buttons):
-            if idx == active_index:
-                btn.setObjectName("secondary")
-                btn.setStyleSheet(
-                    "QPushButton#secondary { background-color: #7B5BA8; color: white; }"
-                )
-            else:
-                btn.setObjectName("secondary")
-                btn.setStyleSheet("")
-
-    def _on_widget_value_changed(self, value_dict: dict):
-        """위젯 값 변경 시 (실시간 추적용)"""
-        logger.debug(f"설정값 변경: {value_dict}")
-
     def _save_settings(self):
         """설정 저장"""
-        all_settings = {}
-
-        for widget in self.category_widgets:
-            all_settings.update(widget.get_value())
-
-        logger.info(f"설정 저장: {all_settings}")
-        self.settings_saved_signal.emit(all_settings)
-        self.back_to_hub_signal.emit()  # HubScreen으로 돌아가기
+        self.settings_saved_signal.emit(self.settings_config)
 
 
 class StatisticsScreen(QWidget):
@@ -376,8 +466,6 @@ class StatisticsScreen(QWidget):
 
     def setup_ui(self):
         """UI 구성"""
-        from src.ui.widgets.chart_widgets import StatisticsLineChart
-
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
@@ -388,12 +476,11 @@ class StatisticsScreen(QWidget):
         )
         layout.addWidget(title)
 
-        # 차트 위젯
-        self.chart_widget = StatisticsLineChart(self.theme_manager)
-        layout.addWidget(self.chart_widget, 1)
-
-        # 데이터 로드 및 플로팅
-        self._load_and_plot_data()
+        chart = QLabel("[차트 영역]\n(Phase 5에서 matplotlib/PyQtGraph)")
+        chart.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        chart.setMinimumHeight(self.theme_manager.scale_pixel(350))
+        chart.setStyleSheet(f"background-color: {Colors.WHITE.value};")
+        layout.addWidget(chart, 1)
 
         avg_text = "데이터 없음"
         if self.session_manager:
@@ -416,38 +503,6 @@ class StatisticsScreen(QWidget):
 
         self.setLayout(layout)
 
-    def _load_and_plot_data(self):
-        """세션 데이터 로드 및 차트 플로팅"""
-        try:
-            if self.session_manager:
-                recent_sessions = self.session_manager.load_recent_sessions(10)
-                if recent_sessions:
-                    # 오래된 순서로 정렬 (최신이 마지막)
-                    recent_sessions.reverse()
-
-                    # 차트용 데이터 준비
-                    sessions_data = []
-                    for session in recent_sessions:
-                        sessions_data.append(
-                            {
-                                "good_posture_percentage": session.statistics.get(
-                                    "good_posture_percentage", 0
-                                )
-                            }
-                        )
-
-                    self.chart_widget.plot_data(sessions_data)
-                    logger.info(f"차트 데이터 로드: {len(sessions_data)}개 세션")
-                else:
-                    self.chart_widget.plot_data([])
-                    logger.info("로드할 세션 데이터 없음")
-            else:
-                logger.warning("SessionManager 없음")
-                self.chart_widget.plot_data([])
-        except Exception as e:
-            logger.error(f"차트 데이터 로드 실패: {e}")
-            self.chart_widget.plot_data([])
-
 
 class DetectionScreen(QWidget):
     """감지 진행 화면"""
@@ -456,7 +511,10 @@ class DetectionScreen(QWidget):
     detection_stopped_signal = pyqtSignal()
 
     def __init__(
-        self, theme_manager: ThemeManager, camera_worker=None, session_manager=None
+        self,
+        theme_manager: ThemeManager,
+        camera_worker=None,
+        session_manager=None,
     ):
         super().__init__()
         self.theme_manager = theme_manager
@@ -481,16 +539,20 @@ class DetectionScreen(QWidget):
         layout.setSpacing(20)
 
         top_layout = QHBoxLayout()
+
         self.status_label = QLabel("준비중")
         self.status_label.setFont(
             QFont("Segoe UI", self.theme_manager.scale_pixel(14), QFont.Weight.Bold)
         )
         self.status_label.setObjectName("status_normal")
         top_layout.addWidget(self.status_label)
+
         top_layout.addStretch()
+
         settings_btn = QPushButton("⚙ 설정")
         settings_btn.setFixedHeight(self.theme_manager.scale_pixel(32))
         top_layout.addWidget(settings_btn)
+
         layout.addLayout(top_layout)
 
         self.time_label = QLabel("00:00:00")
@@ -506,10 +568,12 @@ class DetectionScreen(QWidget):
             border: 1px solid {Colors.GRAY_MEDIUM.value};
         """)
         self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(300))
+
         preview_layout = QVBoxLayout()
         self.preview_label = QLabel("[카메라 프리뷰]")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview_layout.addWidget(self.preview_label)
+
         self.preview_frame.setLayout(preview_layout)
         layout.addWidget(self.preview_frame, 1)
 
@@ -540,6 +604,9 @@ class DetectionScreen(QWidget):
     def _on_frame_processed(self, frame_data: dict):
         """프레임 처리 완료 시 호출"""
         try:
+            if frame_data.get("posture_type") == "baseline":
+                return
+
             annotated_frame = frame_data.get("frame")
             if annotated_frame is not None:
                 pixmap = cv2_to_qpixmap(annotated_frame)
@@ -554,9 +621,11 @@ class DetectionScreen(QWidget):
             probability = frame_data.get("probability", 0.0)
             self._update_posture_status(state, posture_type, probability)
 
-            if self.session_manager:
-                if getattr(self.session_manager, "current_session", None) is not None:
-                    self.session_manager.add_frame_data(frame_data)
+            if (
+                self.session_manager
+                and getattr(self.session_manager, "current_session", None) is not None
+            ):
+                self.session_manager.add_frame_data(frame_data)
 
         except Exception as e:
             logger.error(f"프레임 처리 오류: {e}")
@@ -569,12 +638,16 @@ class DetectionScreen(QWidget):
             "recline": "기댄 자세",
             "crossed_leg_estimated": "다리 꼬기",
             "chin_rest_estimated": "턱 받침",
+            "baseline": "기준 자세 촬영",
         }
 
         posture_text = posture_map.get(posture_type, "알 수 없음")
         self.posture_label.setText(f"{posture_text} ({probability:.1%})")
 
         state_text = {
+            "normal": "바른 자세",
+            "warning": "경고",
+            "bad_posture": "나쁜 자세",
             "NORMAL": "바른 자세",
             "WARNING": "경고",
             "BAD_POSTURE": "나쁜 자세",
@@ -582,6 +655,9 @@ class DetectionScreen(QWidget):
         self.status_label.setText(state_text.get(state, "상태 알 수 없음"))
 
         state_colors = {
+            "normal": "status_normal",
+            "warning": "status_warning",
+            "bad_posture": "status_bad",
             "NORMAL": "status_normal",
             "WARNING": "status_warning",
             "BAD_POSTURE": "status_bad",
@@ -702,7 +778,8 @@ class AlertPopup(QWidget):
 
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(
-            self.theme_manager.scale_pixel(24), self.theme_manager.scale_pixel(24)
+            self.theme_manager.scale_pixel(24),
+            self.theme_manager.scale_pixel(24),
         )
         close_btn.setStyleSheet(f"""
             background-color: rgba(255, 255, 255, 0.3);

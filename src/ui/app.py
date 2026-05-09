@@ -5,9 +5,16 @@ PyQt UI 애플리케이션
 """
 
 import time
+import threading
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal, Qt
-from PyQt6.QtWidgets import QApplication, QPushButton, QCheckBox, QRadioButton, QToolButton
+from PyQt6.QtWidgets import (
+    QApplication,
+    QPushButton,
+    QCheckBox,
+    QRadioButton,
+    QToolButton,
+)
 import sys
 
 from src.utils.logger import get_logger
@@ -101,6 +108,9 @@ class baromokApp:
         logger.info("사용자 설정 로드 완료")
         # 알림음 관리자
         self.sound_manager = SoundManager()
+        self._sound_playing = False
+        self._last_sound_time = 0.0
+        self._sound_cooldown_seconds = 3.0
 
         # 메인 윈도우
         self.main_window = create_main_window(self.config)
@@ -122,7 +132,9 @@ class baromokApp:
             )
 
         # 의존성 주입과 함께 화면 생성
-        self.baseline_screen = BaselineScreen(self.theme_manager, self.camera_worker, self.baseline_manager)
+        self.baseline_screen = BaselineScreen(
+            self.theme_manager, self.camera_worker, self.baseline_manager
+        )
         self.hub_screen = HubScreen(self.theme_manager)
         self.settings_screen = SettingsScreen(
             self.theme_manager, vars(self.settings_config)  # dataclass를 dict로 변환
@@ -171,7 +183,9 @@ class baromokApp:
 
     def _apply_interactive_cursor_policy(self):
         """QSS의 cursor 규칙 대신 코드에서 인터랙티브 위젯 커서를 적용한다."""
-        interactive_widgets = self.main_window.findChildren((QPushButton, QCheckBox, QRadioButton, QToolButton))
+        interactive_widgets = self.main_window.findChildren(
+            (QPushButton, QCheckBox, QRadioButton, QToolButton)
+        )
         for widget in interactive_widgets:
             if widget.isEnabled():
                 widget.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -230,6 +244,7 @@ class baromokApp:
     def _start_detection(self):
         """감지 시작"""
         logger.info("감지 시작")
+        self.camera_worker.set_baseline_mode(False)
         self.state_machine.reset()
         self._hide_alert_popup()
         self.session_manager.start_session()
@@ -311,12 +326,38 @@ class baromokApp:
             logger.debug("팝업 타이머 비활성화 (수동 닫기)")
         # 알림음 재생
         if self.settings_config.sound_enabled:
-            self.sound_manager.play_alert(self.settings_config.sound_volume)
+            self._play_alert_sound_async()
 
     def _hide_alert_popup(self):
         """알림 팝업 숨김"""
         if self.alert_popup is not None:
             self.alert_popup.hide()
+
+    def _play_alert_sound_async(self):
+        """알림음을 UI 스레드를 막지 않도록 백그라운드에서 재생"""
+        if not self.settings_config.sound_enabled:
+            return
+
+        now = time.time()
+        if now - self._last_sound_time < self._sound_cooldown_seconds:
+            return
+
+        if self._sound_playing:
+            return
+
+        self._last_sound_time = now
+        self._sound_playing = True
+
+        def _play():
+            try:
+                self.sound_manager.play_alert(self.settings_config.sound_volume)
+            except Exception as e:
+                logger.error(f"알림음 재생 실패: {e}", exc_info=True)
+            finally:
+                self._sound_playing = False
+
+        thread = threading.Thread(target=_play, daemon=True)
+        thread.start()
 
     def _save_settings(self, settings_dict: dict):
         """설정 저장"""

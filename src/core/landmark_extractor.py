@@ -464,41 +464,56 @@ class LandmarkExtractor:
             face_lms = extracted.face.landmarks
             face_conf = extracted.face.confidences
 
-            # 코 (30), 양쪽 눈 (1,4), 양쪽 광대 (152,378), 턱 (199,427)
-            if len(face_lms) > 30 and face_conf[30] > confidence_threshold:
-                x = int(min(max(face_lms[30][0] * frame_width, 0), frame_width - 1))
-                y = int(min(max(face_lms[30][1] * frame_height, 0), frame_height - 1))
-                landmarks["face_center"] = (x, y)
+            def _get_face_point(index: int, name: str):
+                """Face landmark index를 픽셀 좌표로 변환"""
+                if len(face_lms) > index and len(face_conf) > index:
+                    if face_conf[index] > confidence_threshold:
+                        x = int(min(max(face_lms[index][0] * frame_width, 0), frame_width - 1))
+                        y = int(min(max(face_lms[index][1] * frame_height, 0), frame_height - 1))
+                        landmarks["confidences"][name] = face_conf[index]
+                        return (x, y)
+                return None
 
-            if len(face_lms) > 1 and face_conf[1] > confidence_threshold:
-                x = int(min(max(face_lms[1][0] * frame_width, 0), frame_width - 1))
-                y = int(min(max(face_lms[1][1] * frame_height, 0), frame_height - 1))
-                landmarks["left_eye"] = (x, y)
+            def _assign_pair_by_x(left_key: str, right_key: str, point_a, point_b):
+                """화면 x좌표 기준으로 왼쪽/오른쪽 포인트를 정렬해서 저장"""
+                if point_a is None or point_b is None:
+                    return
 
-            if len(face_lms) > 4 and face_conf[4] > confidence_threshold:
-                x = int(min(max(face_lms[4][0] * frame_width, 0), frame_width - 1))
-                y = int(min(max(face_lms[4][1] * frame_height, 0), frame_height - 1))
-                landmarks["right_eye"] = (x, y)
+                if point_a[0] <= point_b[0]:
+                    landmarks[left_key] = point_a
+                    landmarks[right_key] = point_b
+                else:
+                    landmarks[left_key] = point_b
+                    landmarks[right_key] = point_a
 
-            if len(face_lms) > 152 and face_conf[152] > confidence_threshold:
-                x = int(min(max(face_lms[152][0] * frame_width, 0), frame_width - 1))
-                y = int(min(max(face_lms[152][1] * frame_height, 0), frame_height - 1))
-                landmarks["left_cheek"] = (x, y)
-                landmarks["confidences"]["left_cheek"] = face_conf[152]
+            # 대표 얼굴 포인트
+            # 1: 코 끝에 가까운 face mesh point
+            nose_point = _get_face_point(1, "face_center")
+            if nose_point is not None:
+                landmarks["face_center"] = nose_point
 
-            if len(face_lms) > 378 and face_conf[378] > confidence_threshold:
-                x = int(min(max(face_lms[378][0] * frame_width, 0), frame_width - 1))
-                y = int(min(max(face_lms[378][1] * frame_height, 0), frame_height - 1))
-                landmarks["right_cheek"] = (x, y)
-                landmarks["confidences"]["right_cheek"] = face_conf[378]
+            # 눈: 화면 기준 좌/우 눈 외곽 포인트
+            # 33, 263은 양쪽 눈 외곽 기준점으로 쓰기 좋음
+            eye_a = _get_face_point(33, "eye_a")
+            eye_b = _get_face_point(263, "eye_b")
+            _assign_pair_by_x("left_eye", "right_eye", eye_a, eye_b)
 
-            # 턱 포인트 (199, 427)
-            chin_indices = [199, 427]
-            for idx in chin_indices:
-                if len(face_lms) > idx and face_conf[idx] > confidence_threshold:
-                    x = int(min(max(face_lms[idx][0] * frame_width, 0), frame_width - 1))
-                    y = int(min(max(face_lms[idx][1] * frame_height, 0), frame_height - 1))
-                    landmarks["chin_points"].append((x, y))
+            # 광대/볼: 화면 기준 좌/우 얼굴 외곽 쪽 포인트
+            # 234, 454는 cheek/face side 기준점으로 쓰기 좋음
+            cheek_a = _get_face_point(234, "cheek_a")
+            cheek_b = _get_face_point(454, "cheek_b")
+            _assign_pair_by_x("left_cheek", "right_cheek", cheek_a, cheek_b)
+
+            # 입꼬리: 시각화 및 추후 턱 괸 자세 보조용
+            mouth_a = _get_face_point(61, "mouth_a")
+            mouth_b = _get_face_point(291, "mouth_b")
+            _assign_pair_by_x("left_mouth", "right_mouth", mouth_a, mouth_b)
+
+            # 턱 포인트
+            # 152는 턱 아래쪽 대표 포인트
+            chin_point = _get_face_point(152, "chin")
+            if chin_point is not None:
+                landmarks["chin_points"].append(chin_point)
 
         # 디버그: 필수 face 포인트 신뢰도 로깅(존재하지 않거나 낮으면 원인 파악에 도움됨)
         try:
