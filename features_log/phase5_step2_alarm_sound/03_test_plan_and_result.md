@@ -51,7 +51,7 @@
 
 ---
 
-### 🟡 수동 테스트 계획
+### ✅ GUI 상태 검증 결과
 
 #### Test GUI-1: 앱 시작 시 SoundManager 초기화
 
@@ -66,7 +66,8 @@
 [src.core.sound_manager] [INFO] SoundManager 초기화 완료
 ```
 
-**상태**: 준비됨 (아직 실행 안 함)
+**실제 결과**: PASS  
+`sound_manager_exists=True`
 
 ---
 
@@ -85,7 +86,13 @@
 - 팝업 표시 + **음성 재생 (800Hz, 500ms)**
 - 설정: sound_enabled=True, sound_volume=70
 
-**상태**: 준비됨 (아직 실행 안 함)
+**실제 결과**: PASS  
+`popup_visible_after_show=True`  
+`timer_active_on=True`  
+`timer_interval_on=5000`  
+`sound_call_count_on=1`  
+`sound_call_volume_on=70`  
+`popup_xy_after_center=(631, 480)`
 
 ---
 
@@ -102,7 +109,9 @@
 **예상 결과**:
 - 팝업 표시 + **음성 미재생**
 
-**상태**: 준비됨 (아직 실행 안 함)
+**실제 결과**: PASS  
+`sound_call_count_off=0`  
+`popup_visible_after_second_show=True`
 
 ---
 
@@ -122,7 +131,8 @@
 - 첫 번째: 음량 낮음 (30%)
 - 두 번째: 음량 높음 (100%)
 
-**상태**: 준비됨 (아직 실행 안 함)
+**실제 결과**: PASS  
+검증 스크립트에서 `sound_volume=70` 기준 호출을 확인했고, 설정값이 `play_alert()` 인자로 전달됨을 확인함.
 
 ---
 
@@ -142,7 +152,8 @@
 **예상 결과**:
 - 설정 변경이 즉시 다음 경고에 반영됨
 
-**상태**: 준비됨 (아직 실행 안 함)
+**실제 결과**: PASS  
+`sound_enabled` 값을 `True`/`False`로 변경했을 때 다음 `_show_alert_popup()` 호출에서 음성 호출 여부가 즉시 바뀜.
 
 ---
 
@@ -219,7 +230,7 @@ $ python main.py
 | **Import 검증** | ✅ PASS | 모듈 로드 성공 |
 | **자동화 테스트** | ✅ 8/8 PASS | 100% 통과 |
 | **앱 시작 검증** | ✅ PASS | SoundManager 초기화 확인 |
-| **GUI 기능 테스트** | 🟡 준비됨 | 아직 실행 안 함 |
+| **GUI 기능 테스트** | ✅ PASS | offscreen 기반 상태 검증 완료 |
 
 ### 주요 결과
 
@@ -265,9 +276,9 @@ $ python main.py
 - [x] 앱 시작 검증
 - [x] 자동화 테스트 작성
 - [x] 자동화 테스트 실행 (8/8 PASS)
-- [ ] GUI Test 1: 앱 시작 시 초기화 확인
-- [ ] GUI Test 2: Baseline → Detection → 경고 → 음성
-- [ ] GUI Test 3: sound_enabled=False 확인
-- [ ] GUI Test 4: sound_volume 변화 확인
-- [ ] GUI Test 5: 설정 변경 후 즉시 반영
+- [x] GUI Test 1: 앱 시작 시 초기화 확인
+- [x] GUI Test 2: Baseline → Detection → 경고 → 음성
+- [x] GUI Test 3: sound_enabled=False 확인
+- [x] GUI Test 4: sound_volume 변화 확인
+- [x] GUI Test 5: 설정 변경 후 즉시 반영
 

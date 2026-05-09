@@ -101,7 +101,6 @@ class baromokApp:
         logger.info("사용자 설정 로드 완료")
         # 알림음 관리자
         self.sound_manager = SoundManager()
-        
 
         # 메인 윈도우
         self.main_window = create_main_window(self.config)
