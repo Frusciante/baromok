@@ -66,9 +66,6 @@ class BarorokApp:
         self.alert_hide_timer = QTimer()
         self.alert_hide_timer.setSingleShot(True)
         self.alert_hide_timer.timeout.connect(self._hide_alert_popup)
-        self.alert_cooldown_seconds = float(
-            self.config.get_app_setting("alert_cooldown_seconds", 3.0)
-        )
         self._last_alert_time = 0.0
         self._last_alert_type = ""
 
@@ -165,6 +162,41 @@ class BarorokApp:
 
         logger.info("화면 설정 완료 (5개 화면 등록)")
 
+    # ========== 프로퍼티: 설정값 실시간 반영 ==========
+    @property
+    def alert_cooldown_seconds(self) -> float:
+        """알림 쿨다운 시간 (초) - 설정값에서 실시간 읽음"""
+        return float(self.settings_config.notification_interval)
+
+    @property
+    def popup_timeout_ms(self) -> int:
+        """팝업 자동 닫기 타이머 (밀리초) - 0이면 타이머 비활성화"""
+        if self.settings_config.popup_auto_close:
+            return int(self.settings_config.popup_auto_close_time * 1000)
+        else:
+            return 0
+
+    @property
+    def popup_position_xy(self) -> tuple:
+        """팝업 화면 위치 (x, y) - 중앙 또는 상단"""
+        if self.alert_popup is None:
+            return (0, 0)
+
+        main_geom = self.main_window.geometry()
+        popup_width = self.alert_popup.width()
+        popup_height = self.alert_popup.height()
+
+        if self.settings_config.popup_position == "top":
+            # 화면 상단 중앙 (상단에서 20px 아래)
+            x = main_geom.x() + (main_geom.width() - popup_width) // 2
+            y = main_geom.y() + 20
+        else:  # "center" (기본값)
+            # 화면 중앙
+            x = main_geom.x() + (main_geom.width() - popup_width) // 2
+            y = main_geom.y() + (main_geom.height() - popup_height) // 2
+
+        return (x, y)
+
     def switch_screen(self, screen_index: int):
         """
         화면 전환
@@ -217,7 +249,8 @@ class BarorokApp:
         now = time.time()
         if (
             alert_type == self._last_alert_type
-            and now - self._last_alert_time < self.alert_cooldown_seconds
+            and now - self._last_alert_time
+            < self.alert_cooldown_seconds  # 프로퍼티 사용
         ):
             return
 
@@ -236,17 +269,22 @@ class BarorokApp:
             self.alert_popup.set_alert_content(alert_type, message_text)
 
         self.alert_popup.adjustSize()
-        main_geom = self.main_window.geometry()
-        popup_width = self.alert_popup.width()
-        x = main_geom.x() + (main_geom.width() - popup_width) // 2
-        y = main_geom.y() + 24
+
+        # 팝업 위치 동적 계산 (프로퍼티 사용)
+        x, y = self.popup_position_xy
         self.alert_popup.move(x, y)
         self.alert_popup.show()
         self.alert_popup.raise_()
         self.alert_popup.activateWindow()
 
+        # 타이머 동적 설정 (프로퍼티 사용)
+        timeout_ms = self.popup_timeout_ms
         self.alert_hide_timer.stop()
-        self.alert_hide_timer.start(3000)
+        if timeout_ms > 0:
+            self.alert_hide_timer.start(timeout_ms)
+            logger.debug(f"팝업 타이머 시작: {timeout_ms}ms")
+        else:
+            logger.debug("팝업 타이머 비활성화 (수동 닫기)")
 
     def _hide_alert_popup(self):
         """알림 팝업 숨김"""
@@ -263,9 +301,23 @@ class BarorokApp:
 
             # JSON 파일에 저장
             self.settings_config.save_to_json("data/config.json")
+
+            # 설정값 즉시 적용
+            self._apply_settings()
+
             logger.info(f"설정 저장 완료: {settings_dict}")
         except Exception as e:
             logger.error(f"설정 저장 실패: {e}")
+
+    def _apply_settings(self):
+        """설정값 즉시 적용"""
+        logger.info("설정값 적용:")
+        logger.info(f"  - 알림 간격: {self.settings_config.notification_interval}초")
+        logger.info(f"  - 팝업 위치: {self.settings_config.popup_position}")
+        logger.info(
+            f"  - 팝업 자동 닫기: {self.settings_config.popup_auto_close} "
+            f"({self.settings_config.popup_auto_close_time}초)"
+        )
 
     def run(self):
         """애플리케이션 실행"""
