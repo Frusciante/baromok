@@ -53,6 +53,71 @@ class LandmarkExtractor:
         self._initialize_models()
         logger.info("LandmarkExtractor 초기화 완료")
 
+    # def _initialize_models(self):
+    #     """MediaPipe 모델 로드"""
+    #     model_dir = Path(self.model_base_path)
+
+    #     try:
+    #         # Pose Landmarker 로드
+    #         BaseOptions = mp.tasks.BaseOptions
+    #         PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
+    #         VisionRunningMode = mp.tasks.vision.RunningMode
+
+    #         options = PoseLandmarkerOptions(
+    #             base_options=BaseOptions(
+    #                 model_asset_path=str(model_dir / "pose_landmarker.task")
+    #             ),
+    #             running_mode=VisionRunningMode.IMAGE,
+    #             num_poses=1,
+    #         )
+    #         self.pose_landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(
+    #             options
+    #         )
+    #         logger.info("Pose Landmarker 로드 완료")
+
+    #     except Exception as e:
+    #         logger.warning(f"Pose Landmarker 로드 실패: {e}. 대체 모델 사용...")
+    #         self.pose_landmarker = None
+
+    #     try:
+    #         # Face Landmarker 로드
+    #         FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
+
+    #         options = FaceLandmarkerOptions(
+    #             base_options=BaseOptions(
+    #                 model_asset_path=str(model_dir / "face_landmarker.task")
+    #             ),
+    #             running_mode=VisionRunningMode.IMAGE,
+    #             num_faces=1,
+    #         )
+    #         self.face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
+    #             options
+    #         )
+    #         logger.info("Face Landmarker 로드 완료")
+
+    #     except Exception as e:
+    #         logger.warning(f"Face Landmarker 로드 실패: {e}. 대체 모델 사용...")
+    #         self.face_landmarker = None
+
+    #     try:
+    #         # Hand Landmarker 로드
+    #         HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
+
+    #         options = HandLandmarkerOptions(
+    #             base_options=BaseOptions(
+    #                 model_asset_path=str(model_dir / "hand_landmarker.task")
+    #             ),
+    #             running_mode=VisionRunningMode.IMAGE,
+    #             num_hands=2,
+    #         )
+    #         self.hand_landmarker = mp.tasks.vision.HandLandmarker.create_from_options(
+    #             options
+    #         )
+    #         logger.info("Hand Landmarker 로드 완료")
+
+    #     except Exception as e:
+    #         logger.warning(f"Hand Landmarker 로드 실패: {e}. 대체 모델 사용...")
+    #         self.hand_landmarker = None
     def _initialize_models(self):
         """MediaPipe 모델 로드"""
         model_dir = Path(self.model_base_path)
@@ -69,6 +134,9 @@ class LandmarkExtractor:
                 ),
                 running_mode=VisionRunningMode.IMAGE,
                 num_poses=1,
+                # 👇 [추가된 부분] 자세 인식 엄격도 상향 (기본 0.5 -> 0.7)
+                min_pose_detection_confidence=0.7,
+                min_pose_presence_confidence=0.7,
             )
             self.pose_landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(
                 options
@@ -89,6 +157,9 @@ class LandmarkExtractor:
                 ),
                 running_mode=VisionRunningMode.IMAGE,
                 num_faces=1,
+                # 👇 [추가된 부분] 얼굴 인식 엄격도 상향
+                min_face_detection_confidence=0.7,
+                min_face_presence_confidence=0.7,
             )
             self.face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
                 options
@@ -109,6 +180,9 @@ class LandmarkExtractor:
                 ),
                 running_mode=VisionRunningMode.IMAGE,
                 num_hands=2,
+                # 👇 [추가된 부분] 손 인식 엄격도 상향 (가짜 손 모양 오작동 방지)
+                min_hand_detection_confidence=0.7,
+                min_hand_presence_confidence=0.7,
             )
             self.hand_landmarker = mp.tasks.vision.HandLandmarker.create_from_options(
                 options
