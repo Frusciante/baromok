@@ -230,6 +230,9 @@ class SessionManager:
                 'duration_seconds': int,
                 'total_frames': int,
                 'posture_distribution': {...},
+                'good_posture_seconds': float,
+                'warning_posture_seconds': float,
+                'bad_posture_seconds': float,
                 'good_posture_percentage': float,
                 'bad_posture_percentage': float,
                 'warning_posture_percentage': float,
@@ -270,7 +273,7 @@ class SessionManager:
                     posture_distribution[posture] += 1
                 
                 # 상태 카운트
-                state = record.state
+                state = str(record.state).upper()
                 if state in state_counts:
                     state_counts[state] += 1
                 
@@ -300,6 +303,14 @@ class SessionManager:
             good_percentage = (good_count / total * 100) if total > 0 else 0
             warning_percentage = (warning_count / total * 100) if total > 0 else 0
             bad_percentage = (bad_count / total * 100) if total > 0 else 0
+
+            total_duration_seconds = session.duration_seconds
+            if total_duration_seconds <= 0 and total > 0:
+                total_duration_seconds = total
+
+            good_posture_seconds = total_duration_seconds * (good_count / total) if total > 0 else 0
+            warning_posture_seconds = total_duration_seconds * (warning_count / total) if total > 0 else 0
+            bad_posture_seconds = total_duration_seconds * (bad_count / total) if total > 0 else 0
             
             # 평균 확률
             avg_probability = (sum(probabilities) / len(probabilities)) if probabilities else 0
@@ -310,6 +321,9 @@ class SessionManager:
                 'fps': round(total / session.duration_seconds, 1) if session.duration_seconds > 0 else 0,
                 'posture_distribution': posture_distribution,
                 'state_counts': state_counts,
+                'good_posture_seconds': round(good_posture_seconds, 2),
+                'warning_posture_seconds': round(warning_posture_seconds, 2),
+                'bad_posture_seconds': round(bad_posture_seconds, 2),
                 'good_posture_percentage': round(good_percentage, 1),
                 'warning_posture_percentage': round(warning_percentage, 1),
                 'bad_posture_percentage': round(bad_percentage, 1),
@@ -389,6 +403,12 @@ class SessionManager:
                 data = json.load(f)
             
             session = SessionData.from_dict(data)
+
+            # 과거 세션에 잘못 계산된 통계(예: 소문자 state로 0% 집계)가 있을 수 있어
+            # 프레임 기록이 존재하면 로드시 통계를 재계산해 최신 로직으로 보정한다.
+            if session.frame_records:
+                session.statistics = self.calculate_session_stats(session)
+
             logger.info(f"세션 로드: {filepath}")
             return session
             

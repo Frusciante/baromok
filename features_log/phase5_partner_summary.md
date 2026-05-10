@@ -144,6 +144,44 @@ Phase 5에서는 설정값이 실제 동작에 반영되도록 연결했고, 알
 
 ---
 
+## 2026-05-10 추가 복구 내역
+
+- `src/ui/screens/__init__.py`
+	- `SettingsScreen`에서 카테고리별 설정 위젯(`Notification/Sound/Popup/AutoStart`)을 다시 연결했습니다.
+	- `QStackedWidget` 기반 카테고리 전환 로직과 확인 버튼 저장 로직을 복구했습니다.
+	- `StatisticsScreen`에서 placeholder 차트 대신 `StatisticsLineChart`를 다시 연결하고 최근 세션 데이터를 플로팅하도록 복구했습니다.
+
+- `src/ui/widgets/settings_widgets.py`
+	- 팝업 위치 옵션을 `center/top`으로 정리하여 앱 로직과 일치시켰습니다.
+	- 기존 `bottom_right` 값 사용 경로를 제거하고 저장값을 `top`으로 통일했습니다.
+
+- `src/config.py`
+	- `SettingsConfig.popup_position` 주석의 허용값 설명을 `center/top`으로 정리했습니다.
+
+이번 복구로 설정 화면의 토글/슬라이더 UI와 통계 차트 UI가 다시 실제 화면에 렌더링되며, 저장값 스키마 불일치로 인한 팝업 위치 오동작 가능성을 줄였습니다.
+
+## 2026-05-10 테스트 피드백 반영 수정
+
+- `src/core/camera_worker.py`
+	- 카메라 재시작 시 `is_paused`가 남아 다음 감지/촬영이 멈추는 문제를 방지하도록, `run()` 시작과 `stop_capture()`에서 일시정지 상태를 초기화했습니다.
+
+- `src/ui/app.py`
+	- 감지 시작 직후 경과 시간 타이머가 바로 시작되도록 처리했습니다.
+	- `notification_enabled=False`일 때 상태 전이 알림 생성을 차단하고, 기존 팝업도 즉시 숨기도록 반영했습니다.
+
+- `src/ui/screens/__init__.py`
+	- `DetectionScreen`에 감지 시작 직후 타이머를 즉시 동기화하는 `on_detection_started()`를 추가했습니다.
+	- `StatisticsScreen`은 화면 진입(`showEvent`)마다 차트/평균 라벨을 새로고침하도록 수정해 최신 세션이 즉시 반영되게 했습니다.
+	- `BaselineScreen` 촬영 시작 시 카메라가 일시정지 상태면 자동 재개하도록 보강했습니다.
+
+- `src/ui/widgets/chart_widgets.py`
+	- Matplotlib 백엔드를 `QtAgg`/`backend_qtagg`로 정리해 PyQt6 환경에서 차트 미표시 가능성을 낮췄습니다.
+	- 통계 차트를 세션별 유지율 막대 + 평균선 + 최신 세션 강조 + 날짜 라벨 형태의 상세 집계 카드로 재구성했습니다.
+
+이번 반영은 수동 테스트에서 보고된 4개 이슈(초기자세 재촬영, 시간 실시간 반영, 알림 토글 무시, 통계 그래프 미표시)를 직접 대상으로 한 수정입니다.
+
+---
+
 ## 파트너 공유용 한줄 정리
 
 이번 Phase 5는 "설정이 실제 동작에 연결되지 않던 문제를 해결하고, 알림음과 자동 시작을 추가한 뒤, 전체 흐름을 검증한 단계"입니다.

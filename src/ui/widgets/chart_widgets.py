@@ -4,8 +4,10 @@
 """
 
 import matplotlib
+from datetime import datetime
+from typing import Any
 
-matplotlib.use("Qt5Agg")  # PyQt5/PyQt6 호환성을 위해 명시적으로 설정
+matplotlib.use("QtAgg")  # PyQt6 환경에서 안정적으로 동작하는 Qt 백엔드
 
 # 한글 폰트 설정 (Windows 환경)
 import matplotlib.pyplot as plt
@@ -13,7 +15,7 @@ import matplotlib.pyplot as plt
 plt.rcParams["font.sans-serif"] = ["Malgun Gothic", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 import logging
@@ -24,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 class StatisticsLineChart(QWidget):
-    """바른자세 유지율 추이 선 그래프"""
+    """바른자세 유지율 추이 차트"""
 
     def __init__(self, theme_manager: ThemeManager):
         super().__init__()
@@ -53,55 +55,153 @@ class StatisticsLineChart(QWidget):
         """데이터 플로팅
 
         Args:
-            sessions_data: [{"good_posture_percentage": float}, ...] 형식의 리스트
+            sessions_data: [{"good_posture_percentage": float, "session_label": str, ...}, ...] 형식의 리스트
         """
         try:
             if not sessions_data:
                 self._show_empty_message()
                 return
 
-            # 데이터 추출
-            session_nums = list(range(1, len(sessions_data) + 1))
-            retention_rates = [
-                s.get("good_posture_percentage", 0) if isinstance(s, dict) else 0
-                for s in sessions_data
-            ]
+            prepared_sessions = self._prepare_sessions_data(sessions_data)
+            if not prepared_sessions:
+                self._show_empty_message()
+                return
+
+            session_nums = list(range(1, len(prepared_sessions) + 1))
+            retention_rates = [item["good_posture_percentage"] for item in prepared_sessions]
+            session_labels = [item["session_label"] for item in prepared_sessions]
+            avg_retention = sum(retention_rates) / len(retention_rates)
+            latest_index = len(prepared_sessions) - 1
 
             # Figure 초기화
             self.figure.clear()
             ax = self.figure.add_subplot(111)
+            self.figure.patch.set_facecolor("#F7CBD7")
+            ax.set_facecolor("#F7CBD7")
 
-            # 선 그래프 그리기
-            ax.plot(
+            bar_colors = ["#FFFFFF"] * len(session_nums)
+            bar_edge_colors = [Colors.WHITE.value] * len(session_nums)
+            bar_colors[latest_index] = Colors.PINK_PRIMARY.value
+            bar_edge_colors[latest_index] = Colors.PINK_PRIMARY.value
+
+            bars = ax.bar(
                 session_nums,
                 retention_rates,
-                marker="o",
+                width=0.52,
+                color=bar_colors,
+                edgecolor=bar_edge_colors,
                 linewidth=2,
-                markersize=8,
-                color=Colors.PURPLE_PRIMARY.value,
-                markerfacecolor=Colors.PINK_PRIMARY.value,
-                markeredgecolor=Colors.PINK_PRIMARY.value,
-                markeredgewidth=1.5,
-                label="바른자세 유지율",
+                zorder=3,
+            )
+
+            # 평균선
+            avg_line = ax.axhline(
+                avg_retention,
+                color=Colors.PINK_PRIMARY.value,
+                linewidth=2.5,
+                zorder=2,
             )
 
             # 축 레이블
             ax.set_xlabel("세션 번호", fontsize=11, fontweight="bold")
             ax.set_ylabel("유지율 (%)", fontsize=11, fontweight="bold")
             ax.set_ylim(0, 105)
-            ax.set_xlim(0.5, len(session_nums) + 0.5)
 
-            # Y축 눈금 (10% 간격)
-            ax.set_yticks(range(0, 101, 10))
+            # X축/ Y축 스타일
+            ax.set_xlim(0.4, len(session_nums) + 1.18)
+            ax.set_xticks(session_nums)
+            ax.set_xticklabels(session_labels, fontsize=10)
+            ax.set_yticks([0, 25, 50, 75, 100])
 
-            # 그리드
-            ax.grid(True, linestyle="--", alpha=0.3, color=Colors.GRAY_DARK.value)
-
-            # 배경색
-            ax.set_facecolor(Colors.WHITE.value)
+            # 그리드 및 스파인
+            ax.grid(True, axis="y", linestyle="--", alpha=0.28, color="#8A6BA8")
+            ax.set_axisbelow(True)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["left"].set_color("#3B2F4A")
+            ax.spines["bottom"].set_color("#3B2F4A")
+            ax.spines["left"].set_linewidth(1.2)
+            ax.spines["bottom"].set_linewidth(1.6)
 
             # 범례
-            ax.legend(loc="upper left", fontsize=10)
+            ax.legend(
+                [bars[0], avg_line],
+                ["바른자세 유지율", "평균 유지율"],
+                loc="upper left",
+                fontsize=10,
+                frameon=True,
+                facecolor="#FFFFFF",
+                edgecolor="#D7B0C0",
+            )
+
+            # 각 세션 값 표기
+            for idx, bar in enumerate(bars):
+                value = retention_rates[idx]
+                bar_x = bar.get_x() + bar.get_width() / 2
+                bar_height = bar.get_height()
+
+                if idx == latest_index:
+                    continue
+
+                ax.text(
+                    bar_x,
+                    bar_height + 2.2,
+                    f"{value:.1f}%",
+                    ha="center",
+                    va="bottom",
+                    fontsize=9,
+                    fontweight="bold",
+                    color="#5D3C6B",
+                    zorder=5,
+                )
+
+            latest_bar = bars[latest_index]
+            latest_value = retention_rates[latest_index]
+            latest_label = session_labels[latest_index]
+            latest_meta = self._extract_session_meta(prepared_sessions[latest_index])
+            latest_annotation = f"{latest_label} 유지율 {latest_value:.2f}%"
+            if latest_meta:
+                latest_annotation = f"{latest_annotation}\n{latest_meta}"
+
+            ax.annotate(
+                latest_annotation,
+                xy=(latest_bar.get_x() + latest_bar.get_width() / 2, latest_bar.get_height()),
+                xytext=(0, 28),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=10,
+                fontweight="bold",
+                color=Colors.WHITE.value,
+                bbox=dict(
+                    boxstyle="round,pad=0.55,rounding_size=0.8",
+                    fc=Colors.PINK_PRIMARY.value,
+                    ec=Colors.PINK_PRIMARY.value,
+                    alpha=0.98,
+                ),
+                arrowprops=dict(
+                    arrowstyle="-|>",
+                    color=Colors.PINK_PRIMARY.value,
+                    lw=1.2,
+                    shrinkA=0,
+                    shrinkB=4,
+                ),
+                zorder=6,
+            )
+
+            # 평균 라인 우측 표시
+            ax.text(
+                len(session_nums) + 0.63,
+                avg_retention,
+                f"평균\n{avg_retention:.1f}%",
+                ha="left",
+                va="center",
+                fontsize=13,
+                fontweight="bold",
+                color=Colors.PINK_PRIMARY.value,
+                clip_on=False,
+                zorder=6,
+            )
 
             # 레이아웃 조정
             self.figure.tight_layout()
@@ -140,3 +240,84 @@ class StatisticsLineChart(QWidget):
             self.canvas.draw()
         except Exception as e:
             logger.error(f"빈 메시지 표시 중 오류: {e}")
+
+    def _prepare_sessions_data(self, sessions_data: list) -> list:
+        """차트 표시용 세션 데이터를 정리한다."""
+        prepared = []
+        for index, session in enumerate(sessions_data, start=1):
+            if not isinstance(session, dict):
+                continue
+
+            retention_value = self._coerce_float(session.get("good_posture_percentage", 0))
+            session_label = self._format_session_label(session, index)
+            prepared.append(
+                {
+                    "good_posture_percentage": retention_value,
+                    "session_label": session_label,
+                    "duration_text": self._format_duration_text(session),
+                    "good_posture_time_text": self._format_time_ratio_text(session),
+                }
+            )
+
+        return prepared
+
+    def _coerce_float(self, value: Any) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _format_session_label(self, session: dict, fallback_index: int) -> str:
+        label = session.get("session_label")
+        if label:
+            return str(label)
+
+        start_time = session.get("start_time")
+        if start_time:
+            try:
+                return datetime.fromisoformat(str(start_time)).strftime("%m/%d")
+            except ValueError:
+                pass
+
+        return f"{fallback_index}"
+
+    def _format_duration_text(self, session: dict) -> str:
+        duration_seconds = session.get("duration_seconds")
+        try:
+            total_seconds = int(duration_seconds)
+        except (TypeError, ValueError):
+            return ""
+
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    def _format_time_ratio_text(self, session: dict) -> str:
+        good_seconds = self._coerce_float(session.get("good_posture_seconds", 0))
+        total_seconds = self._coerce_float(
+            session.get("total_detection_seconds", session.get("duration_seconds", 0))
+        )
+
+        if total_seconds <= 0:
+            return ""
+
+        return f"{self._seconds_to_hhmmss(good_seconds)}/{self._seconds_to_hhmmss(total_seconds)}"
+
+    def _seconds_to_hhmmss(self, seconds: float) -> str:
+        total_seconds = max(0, int(round(seconds)))
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        remaining_seconds = total_seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{remaining_seconds:02d}"
+
+    def _extract_session_meta(self, session: dict) -> str:
+        duration_text = session.get("good_posture_time_text", "")
+        if duration_text:
+            return duration_text
+
+        fallback_duration = session.get("duration_text", "")
+        if fallback_duration:
+            return fallback_duration
+
+        return ""

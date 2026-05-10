@@ -288,23 +288,23 @@ class PopupSettingsWidget(QWidget):
 
         self.radio_center = QRadioButton("화면 중앙")
         self.radio_center.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(11)))
-        self.radio_bottom_right = QRadioButton("우측 하단")
-        self.radio_bottom_right.setFont(
+        self.radio_top = QRadioButton("화면 상단")
+        self.radio_top.setFont(
             QFont("Segoe UI", self.theme_manager.scale_pixel(11))
         )
 
         self.position_group.addButton(self.radio_center, 0)
-        self.position_group.addButton(self.radio_bottom_right, 1)
+        self.position_group.addButton(self.radio_top, 1)
 
         if self.config.get("popup_position", "center") == "center":
             self.radio_center.setChecked(True)
         else:
-            self.radio_bottom_right.setChecked(True)
+            self.radio_top.setChecked(True)
 
         self.position_group.buttonClicked.connect(self._emit_value_changed)
 
         position_layout.addWidget(self.radio_center)
-        position_layout.addWidget(self.radio_bottom_right)
+        position_layout.addWidget(self.radio_top)
         position_layout.addStretch()
         layout.addLayout(position_layout)
 
@@ -390,7 +390,7 @@ class PopupSettingsWidget(QWidget):
         self.value_changed_signal.emit(
             {
                 "popup_position": (
-                    "center" if self.radio_center.isChecked() else "bottom_right"
+                    "center" if self.radio_center.isChecked() else "top"
                 ),
                 "popup_auto_close": self.auto_close_toggle.isChecked(),
                 "popup_auto_close_time": self.time_slider.value(),
@@ -401,7 +401,7 @@ class PopupSettingsWidget(QWidget):
         """현재 설정값 반환"""
         return {
             "popup_position": (
-                "center" if self.radio_center.isChecked() else "bottom_right"
+                "center" if self.radio_center.isChecked() else "top"
             ),
             "popup_auto_close": self.auto_close_toggle.isChecked(),
             "popup_auto_close_time": self.time_slider.value(),
@@ -413,7 +413,7 @@ class PopupSettingsWidget(QWidget):
         if position == "center":
             self.radio_center.setChecked(True)
         else:
-            self.radio_bottom_right.setChecked(True)
+            self.radio_top.setChecked(True)
 
         self.auto_close_toggle.setChecked(config.get("popup_auto_close", True))
         self.time_slider.setValue(config.get("popup_auto_close_time", 5))

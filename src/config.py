@@ -220,7 +220,7 @@ class SettingsConfig:
     sound_volume: int = 70  # 0-100
 
     # 팝업 설정
-    popup_position: str = "center"  # "center" | "bottom_right"
+    popup_position: str = "center"  # "center" | "top"
     popup_auto_close: bool = True
     popup_auto_close_time: int = 5  # 초
 

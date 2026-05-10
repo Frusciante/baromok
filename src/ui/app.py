@@ -245,12 +245,15 @@ class baromokApp:
         """감지 시작"""
         logger.info("감지 시작")
         self.camera_worker.set_baseline_mode(False)
+        if self.camera_worker.is_paused:
+            self.camera_worker.resume()
         self.state_machine.reset()
         self._hide_alert_popup()
         self.session_manager.start_session()
         if not self.camera_worker.isRunning():
             self.camera_worker.start()
         self.switch_screen(4)  # DetectionScreen으로 이동
+        self.detection_screen.on_detection_started()
 
     def _handle_baseline_captured(self):
         """Baseline 완료 후 다음 동작 처리"""
@@ -272,6 +275,11 @@ class baromokApp:
     def _handle_state_transition(self, event: StateTransitionEvent):
         """상태 전이 이벤트를 알림 팝업 요청으로 변환"""
         if event.to_state == event.from_state:
+            return
+
+        if not self.settings_config.notification_enabled:
+            self._hide_alert_popup()
+            self._last_alert_type = ""
             return
 
         if event.to_state.value == "normal":
@@ -299,6 +307,9 @@ class baromokApp:
 
     def _show_alert_popup(self, alert_type: str, message_text: str):
         """메인 스레드에서 알림 팝업 표시"""
+        if not self.settings_config.notification_enabled:
+            return
+
         if self.alert_popup is None:
             from src.ui.screens import AlertPopup
 
@@ -380,12 +391,17 @@ class baromokApp:
     def _apply_settings(self):
         """설정값 즉시 적용"""
         logger.info("설정값 적용:")
+        logger.info(f"  - 알림 활성화: {self.settings_config.notification_enabled}")
         logger.info(f"  - 알림 간격: {self.settings_config.notification_interval}초")
         logger.info(f"  - 팝업 위치: {self.settings_config.popup_position}")
         logger.info(
             f"  - 팝업 자동 닫기: {self.settings_config.popup_auto_close} "
             f"({self.settings_config.popup_auto_close_time}초)"
         )
+
+        if not self.settings_config.notification_enabled:
+            self.alert_hide_timer.stop()
+            self._hide_alert_popup()
 
     def run(self):
         """애플리케이션 실행"""

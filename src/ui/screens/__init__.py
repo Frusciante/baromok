@@ -12,9 +12,11 @@ from PyQt6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
+from datetime import datetime
 
 from src.ui.styles.theme import Colors, ThemeManager
 
@@ -167,6 +169,9 @@ class BaselineScreen(QWidget):
 
         self.capture_btn.setEnabled(False)
         self.capture_btn.setText("촬영 중...")
+
+        if self.camera_worker.is_paused:
+            self.camera_worker.resume()
 
         if hasattr(self.camera_worker, "set_baseline_mode"):
             self.camera_worker.set_baseline_mode(True)
@@ -417,28 +422,60 @@ class SettingsScreen(QWidget):
         super().__init__()
         self.theme_manager = theme_manager
         self.settings_config = settings_config or {}
+        self.category_widgets = []
+        self.category_buttons = []
+        self.current_category_index = 0
         self.setup_ui()
 
     def setup_ui(self):
         """UI 구성"""
+        from src.ui.widgets.settings_widgets import (
+            AutoStartSettingsWidget,
+            NotificationSettingsWidget,
+            PopupSettingsWidget,
+            SoundSettingsWidget,
+        )
+
         layout = QHBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
 
         left_layout = QVBoxLayout()
+        left_layout.setSpacing(10)
         categories = ["알림 설정", "소리 설정", "팝업 설정", "자동 시작"]
-        for cat in categories:
+        category_widget_classes = [
+            NotificationSettingsWidget,
+            SoundSettingsWidget,
+            PopupSettingsWidget,
+            AutoStartSettingsWidget,
+        ]
+
+        for idx, (cat, widget_class) in enumerate(
+            zip(categories, category_widget_classes)
+        ):
             btn = QPushButton(cat)
             btn.setFixedHeight(self.theme_manager.scale_pixel(40))
             btn.setObjectName("secondary")
+            btn.clicked.connect(lambda checked, i=idx: self._on_category_clicked(i))
+            self.category_buttons.append(btn)
             left_layout.addWidget(btn)
+
+            widget = widget_class(self.theme_manager, self.settings_config)
+            widget.value_changed_signal.connect(self._on_widget_value_changed)
+            self.category_widgets.append(widget)
+
         left_layout.addStretch()
         layout.addLayout(left_layout)
 
         right_layout = QVBoxLayout()
-        right_label = QLabel("[설정값 UI]\n(향후 구현)")
-        right_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        right_layout.addWidget(right_label, 1)
+        right_layout.setSpacing(10)
+
+        self.stacked_widget = QStackedWidget()
+        for widget in self.category_widgets:
+            self.stacked_widget.addWidget(widget)
+
+        self.stacked_widget.setCurrentIndex(0)
+        right_layout.addWidget(self.stacked_widget, 1)
 
         confirm_btn = QPushButton("확인")
         confirm_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
@@ -448,9 +485,38 @@ class SettingsScreen(QWidget):
         layout.addLayout(right_layout, 1)
         self.setLayout(layout)
 
+        self._update_button_styles(0)
+
+    def _on_category_clicked(self, index: int):
+        """카테고리 버튼 클릭 시"""
+        self.current_category_index = index
+        self.stacked_widget.setCurrentIndex(index)
+        self._update_button_styles(index)
+
+    def _update_button_styles(self, active_index: int):
+        """버튼 스타일 업데이트 (활성화/비활성화)"""
+        for idx, btn in enumerate(self.category_buttons):
+            if idx == active_index:
+                btn.setObjectName("secondary")
+                btn.setStyleSheet(
+                    "QPushButton#secondary { background-color: #7B5BA8; color: white; }"
+                )
+            else:
+                btn.setObjectName("secondary")
+                btn.setStyleSheet("")
+
+    def _on_widget_value_changed(self, value_dict: dict):
+        """위젯 값 변경 시 현재 설정 딕셔너리 갱신"""
+        self.settings_config.update(value_dict)
+
     def _save_settings(self):
         """설정 저장"""
-        self.settings_saved_signal.emit(self.settings_config)
+        all_settings = {}
+        for widget in self.category_widgets:
+            all_settings.update(widget.get_value())
+
+        self.settings_saved_signal.emit(all_settings)
+        self.back_to_hub_signal.emit()
 
 
 class StatisticsScreen(QWidget):
@@ -466,6 +532,8 @@ class StatisticsScreen(QWidget):
 
     def setup_ui(self):
         """UI 구성"""
+        from src.ui.widgets.chart_widgets import StatisticsLineChart
+
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
@@ -476,25 +544,17 @@ class StatisticsScreen(QWidget):
         )
         layout.addWidget(title)
 
-        chart = QLabel("[차트 영역]\n(Phase 5에서 matplotlib/PyQtGraph)")
-        chart.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        chart.setMinimumHeight(self.theme_manager.scale_pixel(350))
-        chart.setStyleSheet(f"background-color: {Colors.WHITE.value};")
-        layout.addWidget(chart, 1)
+        self.chart_widget = StatisticsLineChart(self.theme_manager)
+        layout.addWidget(self.chart_widget, 1)
 
-        avg_text = "데이터 없음"
-        if self.session_manager:
-            recent = self.session_manager.load_recent_sessions(1)
-            if recent:
-                avg_pct = recent[0].statistics.get("good_posture_percentage", 0)
-                avg_text = f"평균 유지율: {avg_pct:.1f}%"
-
-        avg_label = QLabel(avg_text)
-        avg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        avg_label.setFont(
+        self.avg_label = QLabel("데이터 없음")
+        self.avg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.avg_label.setFont(
             QFont("Segoe UI", self.theme_manager.scale_pixel(14), QFont.Weight.Bold)
         )
-        layout.addWidget(avg_label)
+        layout.addWidget(self.avg_label)
+
+        self._load_and_plot_data()
 
         back_btn = QPushButton("돌아가기")
         back_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
@@ -502,6 +562,80 @@ class StatisticsScreen(QWidget):
         layout.addWidget(back_btn)
 
         self.setLayout(layout)
+
+    def _load_and_plot_data(self):
+        """세션 데이터 로드 및 차트 플로팅"""
+        try:
+            if self.session_manager:
+                recent_sessions = self.session_manager.load_recent_sessions(10)
+                if recent_sessions:
+                    recent_sessions.reverse()
+                    sessions_data = []
+                    for session in recent_sessions:
+                        session_label = self._format_session_label(session)
+                        sessions_data.append(
+                            {
+                                "good_posture_percentage": session.statistics.get(
+                                    "good_posture_percentage", 0
+                                ),
+                                "good_posture_seconds": session.statistics.get(
+                                    "good_posture_seconds", 0
+                                ),
+                                "total_detection_seconds": session.statistics.get(
+                                    "duration_seconds", session.duration_seconds
+                                ),
+                                "session_label": session_label,
+                                "start_time": session.start_time,
+                                "duration_seconds": session.duration_seconds,
+                            }
+                        )
+
+                    self.chart_widget.plot_data(sessions_data)
+                    self._update_average_label(sessions_data)
+                    logger.info(f"차트 데이터 로드: {len(sessions_data)}개 세션")
+                else:
+                    self.chart_widget.plot_data([])
+                    self._update_average_label([])
+                    logger.info("로드할 세션 데이터 없음")
+            else:
+                logger.warning("SessionManager 없음")
+                self.chart_widget.plot_data([])
+                self._update_average_label([])
+        except Exception as e:
+            logger.error(f"차트 데이터 로드 실패: {e}")
+            self.chart_widget.plot_data([])
+            self._update_average_label([])
+
+    def _update_average_label(self, sessions_data: list):
+        """최근 세션 평균 라벨 갱신"""
+        if not hasattr(self, "avg_label"):
+            return
+
+        avg_text = "데이터 없음"
+        retention_values = []
+        for session in sessions_data:
+            try:
+                retention_values.append(float(session.get("good_posture_percentage", 0)))
+            except (TypeError, ValueError):
+                continue
+
+        if retention_values:
+            avg_pct = sum(retention_values) / len(retention_values)
+            avg_text = f"평균 유지율: {avg_pct:.1f}%"
+
+        self.avg_label.setText(avg_text)
+
+    def showEvent(self, event):
+        """화면 진입 시 최신 세션 데이터로 차트/라벨 갱신"""
+        super().showEvent(event)
+        self._load_and_plot_data()
+
+    def _format_session_label(self, session) -> str:
+        """세션 표시용 날짜 라벨 생성"""
+        try:
+            return datetime.fromisoformat(session.start_time).strftime("%m/%d")
+        except Exception:
+            return str(session.session_id)[-4:]
 
 
 class DetectionScreen(QWidget):
@@ -698,6 +832,13 @@ class DetectionScreen(QWidget):
             self.pause_btn.setText("일시정지")
             self.is_detection_paused = False
             self.detection_stopped_signal.emit()
+
+    def on_detection_started(self):
+        """감지 시작 직후 타이머/버튼 상태 동기화"""
+        self.is_detection_paused = False
+        self.pause_btn.setText("일시정지")
+        self._update_elapsed_time()
+        self.time_timer.start(1000)
 
     def showEvent(self, event):
         """화면 표시 시"""

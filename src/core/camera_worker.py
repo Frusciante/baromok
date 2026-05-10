@@ -99,6 +99,9 @@ class CameraWorker(QThread):
     def run(self):
         """스레드 메인 루프"""
         try:
+            # 이전 세션에서 남은 일시정지 상태를 제거한다.
+            self.is_paused = False
+
             # 카메라 초기화
             self.cap = cv2.VideoCapture(self.camera_index)
 
@@ -529,6 +532,7 @@ class CameraWorker(QThread):
     def stop_capture(self):
         """캡처 중지"""
         self.is_running = False
+        self.is_paused = False
         logger.info("카메라 중지 요청")
         self.wait()  # 스레드 종료 대기
 
