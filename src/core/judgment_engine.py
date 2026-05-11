@@ -529,8 +529,7 @@ class JudgmentEngine:
 
         if confirmed and confirmed != self.last_confirmed_posture:
             logger.info(
-                f"확정 자세: {confirmed} "
-                f"(지속: {max_duration_seconds:.1f}초)"
+                f"확정 자세: {confirmed} " f"(지속: {max_duration_seconds:.1f}초)"
             )
 
         self.last_confirmed_posture = confirmed

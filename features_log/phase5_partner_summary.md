@@ -177,6 +177,10 @@ Phase 5에서는 설정값이 실제 동작에 반영되도록 연결했고, 알
 - `src/ui/widgets/chart_widgets.py`
 	- Matplotlib 백엔드를 `QtAgg`/`backend_qtagg`로 정리해 PyQt6 환경에서 차트 미표시 가능성을 낮췄습니다.
 	- 통계 차트를 세션별 유지율 막대 + 평균선 + 최신 세션 강조 + 날짜 라벨 형태의 상세 집계 카드로 재구성했습니다.
+	- 최신 세션 강조 라벨에 `바른 자세 유지시간 / 총 감지시간`(예: `01:48:37/02:03:45`)을 표시하도록 연동했습니다.
+
+- `src/core/session_manager.py`
+	- 세션 통계 계산 시 `good_posture_seconds`, `warning_posture_seconds`, `bad_posture_seconds`를 추가 계산해 시간 기반 집계를 제공하도록 확장했습니다.
 
 이번 반영은 수동 테스트에서 보고된 4개 이슈(초기자세 재촬영, 시간 실시간 반영, 알림 토글 무시, 통계 그래프 미표시)를 직접 대상으로 한 수정입니다.
 

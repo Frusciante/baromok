@@ -43,6 +43,18 @@ class StatisticsLineChart(QWidget):
         # Canvas 생성
         self.canvas = FigureCanvas(self.figure)
 
+        # Hover 상태
+        self._bar_patches = []
+        self._hover_payloads = []
+        self._hover_annotation = None
+        self._last_hovered_index = None
+        self._motion_connection_id = self.canvas.mpl_connect(
+            "motion_notify_event", self._on_canvas_hover
+        )
+        self._leave_connection_id = self.canvas.mpl_connect(
+            "figure_leave_event", self._on_canvas_leave
+        )
+
         # 레이아웃
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -79,6 +91,26 @@ class StatisticsLineChart(QWidget):
             self.figure.patch.set_facecolor("#F7CBD7")
             ax.set_facecolor("#F7CBD7")
 
+            self._hover_annotation = ax.annotate(
+                "",
+                xy=(0, 0),
+                xytext=(10, 14),
+                textcoords="offset points",
+                ha="left",
+                va="bottom",
+                fontsize=9,
+                fontweight="bold",
+                color=Colors.WHITE.value,
+                bbox=dict(
+                    boxstyle="round,pad=0.45,rounding_size=0.4",
+                    fc="#5D3C6B",
+                    ec="#5D3C6B",
+                    alpha=0.95,
+                ),
+                zorder=7,
+            )
+            self._hover_annotation.set_visible(False)
+
             bar_colors = ["#FFFFFF"] * len(session_nums)
             bar_edge_colors = [Colors.WHITE.value] * len(session_nums)
             bar_colors[latest_index] = Colors.PINK_PRIMARY.value
@@ -93,6 +125,20 @@ class StatisticsLineChart(QWidget):
                 linewidth=2,
                 zorder=3,
             )
+
+            self._bar_patches = list(bars)
+            self._hover_payloads = []
+            for idx, session in enumerate(prepared_sessions):
+                self._hover_payloads.append(
+                    {
+                        "session_label": session.get("session_label", str(idx + 1)),
+                        "good_posture_percentage": session.get(
+                            "good_posture_percentage", 0
+                        ),
+                        "time_ratio_text": session.get("good_posture_time_text", ""),
+                    }
+                )
+            self._last_hovered_index = None
 
             # 평균선
             avg_line = ax.axhline(
@@ -237,9 +283,78 @@ class StatisticsLineChart(QWidget):
             ax.set_ylim(0, 1)
             ax.axis("off")
             ax.set_facecolor(Colors.WHITE.value)
+            self._bar_patches = []
+            self._hover_payloads = []
+            self._hover_annotation = None
+            self._last_hovered_index = None
             self.canvas.draw()
         except Exception as e:
             logger.error(f"빈 메시지 표시 중 오류: {e}")
+
+    def _on_canvas_hover(self, event):
+        """막대 그래프 hover 시 세션 상세 툴팁 표시"""
+        if (
+            event is None
+            or event.inaxes is None
+            or not self._bar_patches
+            or self._hover_annotation is None
+        ):
+            self._hide_hover_annotation()
+            return
+
+        hovered_index = None
+        for idx, bar in enumerate(self._bar_patches):
+            contains, _ = bar.contains(event)
+            if contains:
+                hovered_index = idx
+                break
+
+        if hovered_index is None:
+            self._hide_hover_annotation()
+            return
+
+        if hovered_index == self._last_hovered_index and self._hover_annotation.get_visible():
+            return
+
+        payload = self._hover_payloads[hovered_index]
+        tooltip_text = self._build_hover_text(payload)
+        bar = self._bar_patches[hovered_index]
+        bar_center_x = bar.get_x() + bar.get_width() / 2
+        bar_top_y = bar.get_height()
+
+        self._hover_annotation.xy = (bar_center_x, bar_top_y)
+        self._hover_annotation.set_text(tooltip_text)
+        self._hover_annotation.set_visible(True)
+        self._last_hovered_index = hovered_index
+        self.canvas.draw_idle()
+
+    def _on_canvas_leave(self, _event):
+        """차트 영역을 벗어나면 툴팁 숨김"""
+        self._hide_hover_annotation()
+
+    def _hide_hover_annotation(self):
+        if self._hover_annotation is None:
+            return
+
+        if self._hover_annotation.get_visible():
+            self._hover_annotation.set_visible(False)
+            self._last_hovered_index = None
+            self.canvas.draw_idle()
+
+    def _build_hover_text(self, payload: dict) -> str:
+        session_label = payload.get("session_label", "-")
+        percentage = self._coerce_float(payload.get("good_posture_percentage", 0))
+        ratio_text = payload.get("time_ratio_text", "")
+
+        lines = [
+            f"세션: {session_label}",
+            f"유지율: {percentage:.1f}%",
+        ]
+
+        if ratio_text:
+            lines.append(f"유지시간/총시간: {ratio_text}")
+
+        return "\n".join(lines)
 
     def _prepare_sessions_data(self, sessions_data: list) -> list:
         """차트 표시용 세션 데이터를 정리한다."""
