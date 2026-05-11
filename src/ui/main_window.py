@@ -105,7 +105,7 @@ class MainWindow(QMainWindow):
 
         # 앱 이름
         title = QLabel("바로목")
-        title.setFont(QFont("Segoe UI", int(24 * self.dpi_scale), QFont.Weight.Bold))
+        title.setFont(QFont("Noto Sans KR", int(24 * self.dpi_scale), QFont.Weight.Bold))
         title.setStyleSheet(f"color: {Colors.WHITE.value};")
         layout.addWidget(title)
 
@@ -114,7 +114,7 @@ class MainWindow(QMainWindow):
 
         # 최소화 버튼 (향후 구현)
         minimize_btn = QPushButton("−")
-        minimize_btn.setFont(QFont("Segoe UI", int(16 * self.dpi_scale)))
+        minimize_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
         minimize_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
@@ -132,7 +132,7 @@ class MainWindow(QMainWindow):
 
         # 닫기 버튼
         close_btn = QPushButton("✕")
-        close_btn.setFont(QFont("Segoe UI", int(16 * self.dpi_scale)))
+        close_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
         close_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
@@ -169,7 +169,7 @@ class MainWindow(QMainWindow):
         notice = QLabel(
             "본 애플리케이션은 의료 진단 도구가 아니며, 정보 제공 목적으로만 사용됩니다."
         )
-        notice.setFont(QFont("Segoe UI", int(9 * self.dpi_scale)))
+        notice.setFont(QFont("Noto Sans KR", int(9 * self.dpi_scale)))
         notice.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
         layout.addWidget(notice)
 
@@ -188,7 +188,7 @@ class MainWindow(QMainWindow):
         placeholder_layout = QVBoxLayout()
         placeholder_label = QLabel("화면 준비 중...\n(Phase 3에서 구현)")
         placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        placeholder_label.setFont(QFont("Segoe UI", 16))
+        placeholder_label.setFont(QFont("Noto Sans KR", 16))
         placeholder_layout.addWidget(placeholder_label)
         placeholder.setLayout(placeholder_layout)
 

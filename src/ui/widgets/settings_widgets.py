@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QSlider,
     QRadioButton,
     QButtonGroup,
+    QSizePolicy,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -36,13 +37,13 @@ class NotificationSettingsWidget(QWidget):
     def setup_ui(self):
         """UI 구성"""
         layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(15)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(20)
 
         # 토글 섹션
         toggle_layout = QHBoxLayout()
         toggle_label = QLabel("나쁜 자세 감지 알림")
-        toggle_label.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(12)))
+        toggle_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12)))
 
         self.toggle = QCheckBox()
         self.toggle.setChecked(self.config.get("notification_enabled", True))
@@ -55,16 +56,16 @@ class NotificationSettingsWidget(QWidget):
 
         # 슬라이더 섹션
         slider_layout = QVBoxLayout()
-        slider_layout.setSpacing(10)
+        slider_layout.setSpacing(12)
 
         # 슬라이더 헤더 (라벨 + 현재값)
         header_layout = QHBoxLayout()
         slider_label = QLabel("알림 간격")
-        slider_label.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(11)))
+        slider_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(11)))
 
         self.value_label = QLabel("30초")
         self.value_label.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(11), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(11), QFont.Weight.Bold)
         )
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
 
@@ -87,16 +88,15 @@ class NotificationSettingsWidget(QWidget):
         # 슬라이더 범위 표시
         range_layout = QHBoxLayout()
         min_label = QLabel("5초")
-        min_label.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(10)))
+        min_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
         max_label = QLabel("60초")
-        max_label.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(10)))
+        max_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
         range_layout.addWidget(min_label)
         range_layout.addStretch()
         range_layout.addWidget(max_label)
         slider_layout.addLayout(range_layout)
 
         layout.addLayout(slider_layout)
-        layout.addStretch()
 
         self.setLayout(layout)
 
@@ -157,13 +157,13 @@ class SoundSettingsWidget(QWidget):
     def setup_ui(self):
         """UI 구성"""
         layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(15)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(20)
 
         # 토글
         toggle_layout = QHBoxLayout()
         toggle_label = QLabel("알림음 활성화")
-        toggle_label.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(12)))
+        toggle_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12)))
 
         self.toggle = QCheckBox()
         self.toggle.setChecked(self.config.get("sound_enabled", True))
@@ -176,15 +176,15 @@ class SoundSettingsWidget(QWidget):
 
         # 슬라이더
         slider_layout = QVBoxLayout()
-        slider_layout.setSpacing(10)
+        slider_layout.setSpacing(12)
 
         header_layout = QHBoxLayout()
         slider_label = QLabel("소리 크기")
-        slider_label.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(11)))
+        slider_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(11)))
 
         self.volume_label = QLabel("70%")
         self.volume_label.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(11), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(11), QFont.Weight.Bold)
         )
         self.volume_label.setAlignment(Qt.AlignmentFlag.AlignRight)
 
@@ -205,16 +205,15 @@ class SoundSettingsWidget(QWidget):
 
         range_layout = QHBoxLayout()
         min_label = QLabel("음소거")
-        min_label.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(10)))
+        min_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
         max_label = QLabel("최대")
-        max_label.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(10)))
+        max_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
         range_layout.addWidget(min_label)
         range_layout.addStretch()
         range_layout.addWidget(max_label)
         slider_layout.addLayout(range_layout)
 
         layout.addLayout(slider_layout)
-        layout.addStretch()
 
         self.setLayout(layout)
         self._sync_slider_state()
@@ -273,25 +272,29 @@ class PopupSettingsWidget(QWidget):
     def setup_ui(self):
         """UI 구성"""
         layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(15)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(20)
 
         # 팝업 위치 선택 (라디오)
         position_label = QLabel("팝업 표시 위치")
         position_label.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(12), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(12), QFont.Weight.Bold)
         )
         layout.addWidget(position_label)
 
         self.position_group = QButtonGroup()
         position_layout = QHBoxLayout()
+        position_layout.setSpacing(20)
 
         self.radio_center = QRadioButton("화면 중앙")
-        self.radio_center.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(11)))
+        self.radio_center.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(11)))
+        self._apply_radio_button_style(self.radio_center)
+        
         self.radio_top = QRadioButton("화면 상단")
         self.radio_top.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(11))
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(11))
         )
+        self._apply_radio_button_style(self.radio_top)
 
         self.position_group.addButton(self.radio_center, 0)
         self.position_group.addButton(self.radio_top, 1)
@@ -308,12 +311,10 @@ class PopupSettingsWidget(QWidget):
         position_layout.addStretch()
         layout.addLayout(position_layout)
 
-        layout.addSpacing(self.theme_manager.scale_pixel(10))
-
         # 팝업 자동 닫기 (토글 + 슬라이더)
         auto_close_layout = QHBoxLayout()
         auto_close_label = QLabel("팝업 자동 닫기")
-        auto_close_label.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(12)))
+        auto_close_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12)))
 
         self.auto_close_toggle = QCheckBox()
         self.auto_close_toggle.setChecked(self.config.get("popup_auto_close", True))
@@ -326,15 +327,15 @@ class PopupSettingsWidget(QWidget):
 
         # 자동 닫기 시간 슬라이더
         time_slider_layout = QVBoxLayout()
-        time_slider_layout.setSpacing(10)
+        time_slider_layout.setSpacing(12)
 
         time_header_layout = QHBoxLayout()
         time_label = QLabel("자동 닫기 시간")
-        time_label.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(11)))
+        time_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(11)))
 
         self.time_value_label = QLabel("5초")
         self.time_value_label.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(11), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(11), QFont.Weight.Bold)
         )
         self.time_value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
 
@@ -355,18 +356,18 @@ class PopupSettingsWidget(QWidget):
 
         time_range_layout = QHBoxLayout()
         time_min = QLabel("3초")
-        time_min.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(10)))
+        time_min.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
         time_max = QLabel("10초")
-        time_max.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(10)))
+        time_max.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
         time_range_layout.addWidget(time_min)
         time_range_layout.addStretch()
         time_range_layout.addWidget(time_max)
         time_slider_layout.addLayout(time_range_layout)
 
         layout.addLayout(time_slider_layout)
-        layout.addStretch()
 
         self.setLayout(layout)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._sync_time_slider_state()
 
     def _on_auto_close_toggled(self):
@@ -384,6 +385,28 @@ class PopupSettingsWidget(QWidget):
         is_enabled = self.auto_close_toggle.isChecked()
         self.time_slider.setEnabled(is_enabled)
         self.time_value_label.setEnabled(is_enabled)
+
+    def _apply_radio_button_style(self, radio_button: QRadioButton):
+        """라디오 버튼에 커스텀 스타일 적용"""
+        stylesheet = """
+            QRadioButton {
+                spacing: 8px;
+            }
+            QRadioButton::indicator {
+                width: 18px;
+                height: 18px;
+                border-radius: 9px;
+            }
+            QRadioButton::indicator:unchecked {
+                background-color: white;
+                border: 2px solid #8B7BA8;
+            }
+            QRadioButton::indicator:checked {
+                background-color: #7B68A6;
+                border: 2px solid #7B68A6;
+            }
+        """
+        radio_button.setStyleSheet(stylesheet)
 
     def _emit_value_changed(self):
         """값 변경 신호 발생"""
@@ -435,13 +458,13 @@ class AutoStartSettingsWidget(QWidget):
     def setup_ui(self):
         """UI 구성"""
         layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(15)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(20)
 
         # 토글
         toggle_layout = QHBoxLayout()
         toggle_label = QLabel("프로그램 시작 시 감지 자동 시작")
-        toggle_label.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(12)))
+        toggle_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12)))
 
         self.toggle = QCheckBox()
         self.toggle.setChecked(self.config.get("auto_start_detection", False))
@@ -456,11 +479,9 @@ class AutoStartSettingsWidget(QWidget):
         description = QLabel(
             "프로그램 시작 후 Baseline을 완료하면\n" "자동으로 자세 감지가 시작됩니다."
         )
-        description.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(10)))
+        description.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
         description.setStyleSheet("color: #999999;")
         layout.addWidget(description)
-
-        layout.addStretch()
 
         self.setLayout(layout)
 

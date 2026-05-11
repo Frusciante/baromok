@@ -80,7 +80,9 @@ class StatisticsLineChart(QWidget):
                 return
 
             session_nums = list(range(1, len(prepared_sessions) + 1))
-            retention_rates = [item["good_posture_percentage"] for item in prepared_sessions]
+            retention_rates = [
+                item["good_posture_percentage"] for item in prepared_sessions
+            ]
             session_labels = [item["session_label"] for item in prepared_sessions]
             avg_retention = sum(retention_rates) / len(retention_rates)
             latest_index = len(prepared_sessions) - 1
@@ -211,7 +213,10 @@ class StatisticsLineChart(QWidget):
 
             ax.annotate(
                 latest_annotation,
-                xy=(latest_bar.get_x() + latest_bar.get_width() / 2, latest_bar.get_height()),
+                xy=(
+                    latest_bar.get_x() + latest_bar.get_width() / 2,
+                    latest_bar.get_height(),
+                ),
                 xytext=(0, 28),
                 textcoords="offset points",
                 ha="center",
@@ -313,7 +318,10 @@ class StatisticsLineChart(QWidget):
             self._hide_hover_annotation()
             return
 
-        if hovered_index == self._last_hovered_index and self._hover_annotation.get_visible():
+        if (
+            hovered_index == self._last_hovered_index
+            and self._hover_annotation.get_visible()
+        ):
             return
 
         payload = self._hover_payloads[hovered_index]
@@ -363,7 +371,9 @@ class StatisticsLineChart(QWidget):
             if not isinstance(session, dict):
                 continue
 
-            retention_value = self._coerce_float(session.get("good_posture_percentage", 0))
+            retention_value = self._coerce_float(
+                session.get("good_posture_percentage", 0)
+            )
             session_label = self._format_session_label(session, index)
             prepared.append(
                 {

@@ -1,6 +1,7 @@
 """UI 화면 모듈"""
 
 import logging
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -12,6 +13,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -83,7 +85,7 @@ class BaselineScreen(QWidget):
 
         title = QLabel("초기 바른자세 촬영")
         title.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(24), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(24), QFont.Weight.Bold)
         )
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
@@ -114,7 +116,7 @@ class BaselineScreen(QWidget):
             "• 팔꿈치: 90도\n"
             "• 턱: 자연스러운 위치"
         )
-        guide.setFont(QFont("Segoe UI", self.theme_manager.scale_pixel(12)))
+        guide.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12)))
         layout.addWidget(guide)
 
         self.progress_bar = QProgressBar()
@@ -127,7 +129,7 @@ class BaselineScreen(QWidget):
         )
         self.capture_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.capture_status_label.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(11))
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(11))
         )
         self.capture_status_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
         layout.addWidget(self.capture_status_label)
@@ -135,7 +137,7 @@ class BaselineScreen(QWidget):
         self.capture_btn = QPushButton("촬영 시작")
         self.capture_btn.setFixedHeight(self.theme_manager.scale_pixel(50))
         self.capture_btn.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(16), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(16), QFont.Weight.Bold)
         )
         self.capture_btn.clicked.connect(self.start_capture)
         layout.addWidget(self.capture_btn)
@@ -371,45 +373,92 @@ class HubScreen(QWidget):
 
     def setup_ui(self):
         """UI 구성"""
-        layout = QVBoxLayout()
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(20)
 
-        illust = QLabel("[일러스트 영역]")
-        illust.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        illust.setMinimumHeight(self.theme_manager.scale_pixel(300))
-        illust.setStyleSheet(f"background-color: {Colors.GRAY_LIGHT.value};")
-        layout.addWidget(illust, 1)
+        # 상단 영역: 가로 레이아웃 (일러스트 + 버튼)
+        top_layout = QHBoxLayout()
+        top_layout.setSpacing(30)
 
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(15)
+        # 왼쪽: 일러스트 영역
+        illust_frame = QFrame()
+        illust_frame.setStyleSheet(f"background-color: transparent; border: none;")
+        illust_frame.setMaximumWidth(self.theme_manager.scale_pixel(520))
+        illust_layout = QVBoxLayout(illust_frame)
+        illust_layout.setContentsMargins(0, 0, 0, 0)
+        illust_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        illust_label = QLabel()
+        illust_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # SVG 일러스트 로드
+        svg_path = Path("assets/ui/home_illustration.svg")
+        if svg_path.exists():
+            try:
+                pixmap = QPixmap(str(svg_path))
+                if not pixmap.isNull():
+                    scaled_pixmap = pixmap.scaledToHeight(
+                        self.theme_manager.scale_pixel(380),
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    illust_label.setPixmap(scaled_pixmap)
+                else:
+                    illust_label.setText("[일러스트]")
+            except Exception:
+                illust_label.setText("[일러스트]")
+        else:
+            illust_label.setText("[일러스트]")
+        
+        illust_layout.addWidget(illust_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        top_layout.addWidget(illust_frame, 0, Qt.AlignmentFlag.AlignCenter)
+
+        # 오른쪽: 버튼 영역 (세로 배치)
+        button_layout = QVBoxLayout()
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(12)
 
         baseline_btn = QPushButton("초기 자세 촬영")
-        baseline_btn.setFixedSize(*self.theme_manager.get_button_size())
+        baseline_btn.setFixedHeight(self.theme_manager.scale_pixel(48))
+        baseline_btn.setFixedWidth(self.theme_manager.scale_pixel(360))
+        baseline_btn.setFont(
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(14), QFont.Weight.Bold)
+        )
         baseline_btn.clicked.connect(self.open_baseline_signal.emit)
         button_layout.addWidget(baseline_btn)
 
         settings_btn = QPushButton("환경 설정")
-        settings_btn.setFixedSize(*self.theme_manager.get_button_size())
+        settings_btn.setFixedHeight(self.theme_manager.scale_pixel(48))
+        settings_btn.setFixedWidth(self.theme_manager.scale_pixel(360))
+        settings_btn.setFont(
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(14), QFont.Weight.Bold)
+        )
         settings_btn.clicked.connect(self.open_settings_signal.emit)
         button_layout.addWidget(settings_btn)
 
         stats_btn = QPushButton("나의 통계")
-        stats_btn.setFixedSize(*self.theme_manager.get_button_size())
+        stats_btn.setFixedHeight(self.theme_manager.scale_pixel(48))
+        stats_btn.setFixedWidth(self.theme_manager.scale_pixel(360))
+        stats_btn.setFont(
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(14), QFont.Weight.Bold)
+        )
         stats_btn.clicked.connect(self.open_statistics_signal.emit)
         button_layout.addWidget(stats_btn)
 
-        layout.addLayout(button_layout)
+        top_layout.addLayout(button_layout, 1)
+        main_layout.addLayout(top_layout, 1)
+
+        main_layout.addStretch()
 
         start_btn = QPushButton("바로목 감지 시작")
-        start_btn.setFixedHeight(self.theme_manager.scale_pixel(50))
+        start_btn.setFixedHeight(self.theme_manager.scale_pixel(56))
         start_btn.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(16), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(20), QFont.Weight.Bold)
         )
         start_btn.clicked.connect(self.start_detection_signal.emit)
-        layout.addWidget(start_btn)
+        main_layout.addWidget(start_btn)
 
-        self.setLayout(layout)
+        self.setLayout(main_layout)
 
 
 class SettingsScreen(QWidget):
@@ -423,8 +472,6 @@ class SettingsScreen(QWidget):
         self.theme_manager = theme_manager
         self.settings_config = settings_config or {}
         self.category_widgets = []
-        self.category_buttons = []
-        self.current_category_index = 0
         self.setup_ui()
 
     def setup_ui(self):
@@ -436,13 +483,33 @@ class SettingsScreen(QWidget):
             SoundSettingsWidget,
         )
 
-        layout = QHBoxLayout()
+        layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
+        layout.setSpacing(14)
 
-        left_layout = QVBoxLayout()
-        left_layout.setSpacing(10)
-        categories = ["알림 설정", "소리 설정", "팝업 설정", "자동 시작"]
+        title = QLabel("환경 설정")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setFont(
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(30), QFont.Weight.Bold)
+        )
+        title.setStyleSheet(
+            f"color: {Colors.WHITE.value}; background-color: {Colors.PURPLE_PRIMARY.value}; "
+            f"padding: {self.theme_manager.scale_pixel(10)}px; border-radius: 14px;"
+        )
+        layout.addWidget(title)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout()
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
+        scroll_layout.setSpacing(12)
+        scroll_content.setLayout(scroll_layout)
+
+        categories = ["알림 설정", "소리 설정", "팝업 설정", "컴퓨터 부팅 시\n프로그램 자동 시작"]
         category_widget_classes = [
             NotificationSettingsWidget,
             SoundSettingsWidget,
@@ -450,60 +517,58 @@ class SettingsScreen(QWidget):
             AutoStartSettingsWidget,
         ]
 
-        for idx, (cat, widget_class) in enumerate(
-            zip(categories, category_widget_classes)
-        ):
-            btn = QPushButton(cat)
-            btn.setFixedHeight(self.theme_manager.scale_pixel(40))
-            btn.setObjectName("secondary")
-            btn.clicked.connect(lambda checked, i=idx: self._on_category_clicked(i))
-            self.category_buttons.append(btn)
-            left_layout.addWidget(btn)
+        for cat, widget_class in zip(categories, category_widget_classes):
+            row_frame = QFrame()
+            row_frame.setStyleSheet(
+                f"background-color: #C9C5E2; border-radius: {self.theme_manager.scale_pixel(8)}px;"
+            )
+            # 기본 높이
+            row_frame.setMinimumHeight(self.theme_manager.scale_pixel(220))
+            row_layout = QHBoxLayout()
+            row_layout.setContentsMargins(16, 16, 16, 16)
+            row_layout.setSpacing(16)
+            row_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+            category_label = QLabel(cat)
+            category_label.setFixedWidth(self.theme_manager.scale_pixel(210))
+            category_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            category_label.setFont(
+                QFont("Noto Sans KR", self.theme_manager.scale_pixel(16), QFont.Weight.Bold)
+            )
+            category_label.setStyleSheet(
+                f"background-color: {Colors.PURPLE_PRIMARY.value}; color: {Colors.WHITE.value}; "
+                f"border-radius: {self.theme_manager.scale_pixel(10)}px; padding: {self.theme_manager.scale_pixel(10)}px;"
+            )
 
             widget = widget_class(self.theme_manager, self.settings_config)
+            # 팝업 설정은 내부 컨트롤이 많아 더 큰 높이를 사용
+            if cat == "팝업 설정":
+                # 팝업 내부 텍스트가 잘리는 문제 해결을 위해 충분히 큰 높이로 설정
+                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(360))
+                widget.setMinimumHeight(self.theme_manager.scale_pixel(320))
+            else:
+                widget.setMinimumHeight(self.theme_manager.scale_pixel(188))
             widget.value_changed_signal.connect(self._on_widget_value_changed)
             self.category_widgets.append(widget)
 
-        left_layout.addStretch()
-        layout.addLayout(left_layout)
+            row_layout.addWidget(category_label)
+            row_layout.addWidget(widget, 1)
+            row_frame.setLayout(row_layout)
+            scroll_layout.addWidget(row_frame)
 
-        right_layout = QVBoxLayout()
-        right_layout.setSpacing(10)
-
-        self.stacked_widget = QStackedWidget()
-        for widget in self.category_widgets:
-            self.stacked_widget.addWidget(widget)
-
-        self.stacked_widget.setCurrentIndex(0)
-        right_layout.addWidget(self.stacked_widget, 1)
+        scroll_layout.addStretch()
+        scroll_area.setWidget(scroll_content)
+        layout.addWidget(scroll_area, 1)
 
         confirm_btn = QPushButton("확인")
-        confirm_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
+        confirm_btn.setFixedHeight(self.theme_manager.scale_pixel(56))
+        confirm_btn.setFont(
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(20), QFont.Weight.Bold)
+        )
         confirm_btn.clicked.connect(self._save_settings)
-        right_layout.addWidget(confirm_btn)
+        layout.addWidget(confirm_btn, 0, Qt.AlignmentFlag.AlignCenter)
 
-        layout.addLayout(right_layout, 1)
         self.setLayout(layout)
-
-        self._update_button_styles(0)
-
-    def _on_category_clicked(self, index: int):
-        """카테고리 버튼 클릭 시"""
-        self.current_category_index = index
-        self.stacked_widget.setCurrentIndex(index)
-        self._update_button_styles(index)
-
-    def _update_button_styles(self, active_index: int):
-        """버튼 스타일 업데이트 (활성화/비활성화)"""
-        for idx, btn in enumerate(self.category_buttons):
-            if idx == active_index:
-                btn.setObjectName("secondary")
-                btn.setStyleSheet(
-                    "QPushButton#secondary { background-color: #7B5BA8; color: white; }"
-                )
-            else:
-                btn.setObjectName("secondary")
-                btn.setStyleSheet("")
 
     def _on_widget_value_changed(self, value_dict: dict):
         """위젯 값 변경 시 현재 설정 딕셔너리 갱신"""
@@ -540,7 +605,7 @@ class StatisticsScreen(QWidget):
 
         title = QLabel("최근 10개 세션 바른자세 유지율")
         title.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(18), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(18), QFont.Weight.Bold)
         )
         layout.addWidget(title)
 
@@ -550,7 +615,7 @@ class StatisticsScreen(QWidget):
         self.avg_label = QLabel("데이터 없음")
         self.avg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.avg_label.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(14), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(14), QFont.Weight.Bold)
         )
         layout.addWidget(self.avg_label)
 
@@ -676,7 +741,7 @@ class DetectionScreen(QWidget):
 
         self.status_label = QLabel("준비중")
         self.status_label.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(14), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(14), QFont.Weight.Bold)
         )
         self.status_label.setObjectName("status_normal")
         top_layout.addWidget(self.status_label)
@@ -692,7 +757,7 @@ class DetectionScreen(QWidget):
         self.time_label = QLabel("00:00:00")
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.time_label.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(48), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(48), QFont.Weight.Bold)
         )
         layout.addWidget(self.time_label)
 
@@ -714,7 +779,7 @@ class DetectionScreen(QWidget):
         self.posture_label = QLabel("감지 중")
         self.posture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.posture_label.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(16), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(16), QFont.Weight.Bold)
         )
         layout.addWidget(self.posture_label)
 
@@ -912,7 +977,7 @@ class AlertPopup(QWidget):
 
         self.message_label = QLabel(self.message_text)
         self.message_label.setFont(
-            QFont("Segoe UI", self.theme_manager.scale_pixel(12), QFont.Weight.Bold)
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(12), QFont.Weight.Bold)
         )
         self.message_label.setStyleSheet(f"color: {Colors.WHITE.value};")
         layout.addWidget(self.message_label, 1)

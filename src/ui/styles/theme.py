@@ -76,7 +76,7 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     /* 기본 설정 */
     QMainWindow {{
         background-color: {Colors.GRAY_LIGHT.value};
-        font-family: "Segoe UI", "나눔고딕", sans-serif;
+        font-family: "Noto Sans KR", "나눔고딕", sans-serif;
         font-size: {normal_font}pt;
     }}
     
