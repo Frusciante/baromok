@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 import logging
 
-from src.ui.styles.theme import ThemeManager
+from src.ui.styles.theme import Colors, ThemeManager
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,10 @@ class NotificationSettingsWidget(QWidget):
         layout = QVBoxLayout()
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(20)
+        self.setObjectName("settings_card")
+        self.setStyleSheet(
+            f"#settings_card {{ background-color: {Colors.WHITE.value}; border: 1px solid #E3E0F2; border-radius: 12px; }}"
+        )
 
         # 토글 섹션
         toggle_layout = QHBoxLayout()
@@ -280,6 +284,7 @@ class PopupSettingsWidget(QWidget):
         position_label.setFont(
             QFont("Noto Sans KR", self.theme_manager.scale_pixel(12), QFont.Weight.Bold)
         )
+        position_label.setStyleSheet(f"color: {Colors.PURPLE_PRIMARY.value};")
         layout.addWidget(position_label)
 
         self.position_group = QButtonGroup()
@@ -287,9 +292,11 @@ class PopupSettingsWidget(QWidget):
         position_layout.setSpacing(20)
 
         self.radio_center = QRadioButton("화면 중앙")
-        self.radio_center.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(11)))
+        self.radio_center.setFont(
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(11))
+        )
         self._apply_radio_button_style(self.radio_center)
-        
+
         self.radio_top = QRadioButton("화면 상단")
         self.radio_top.setFont(
             QFont("Noto Sans KR", self.theme_manager.scale_pixel(11))
@@ -314,7 +321,10 @@ class PopupSettingsWidget(QWidget):
         # 팝업 자동 닫기 (토글 + 슬라이더)
         auto_close_layout = QHBoxLayout()
         auto_close_label = QLabel("팝업 자동 닫기")
-        auto_close_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12)))
+        auto_close_label.setFont(
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(12))
+        )
+        auto_close_label.setStyleSheet(f"color: {Colors.PURPLE_PRIMARY.value};")
 
         self.auto_close_toggle = QCheckBox()
         self.auto_close_toggle.setChecked(self.config.get("popup_auto_close", True))
@@ -332,6 +342,7 @@ class PopupSettingsWidget(QWidget):
         time_header_layout = QHBoxLayout()
         time_label = QLabel("자동 닫기 시간")
         time_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(11)))
+        time_label.setStyleSheet(f"color: {Colors.PURPLE_PRIMARY.value};")
 
         self.time_value_label = QLabel("5초")
         self.time_value_label.setFont(
@@ -423,9 +434,7 @@ class PopupSettingsWidget(QWidget):
     def get_value(self) -> dict:
         """현재 설정값 반환"""
         return {
-            "popup_position": (
-                "center" if self.radio_center.isChecked() else "top"
-            ),
+            "popup_position": ("center" if self.radio_center.isChecked() else "top"),
             "popup_auto_close": self.auto_close_toggle.isChecked(),
             "popup_auto_close_time": self.time_slider.value(),
         }
@@ -460,11 +469,16 @@ class AutoStartSettingsWidget(QWidget):
         layout = QVBoxLayout()
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(20)
+        self.setObjectName("settings_card")
+        self.setStyleSheet(
+            f"#settings_card {{ background-color: {Colors.WHITE.value}; border: 1px solid #E3E0F2; border-radius: 12px; }}"
+        )
 
         # 토글
         toggle_layout = QHBoxLayout()
         toggle_label = QLabel("프로그램 시작 시 감지 자동 시작")
         toggle_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12)))
+        toggle_label.setStyleSheet(f"color: {Colors.PURPLE_PRIMARY.value};")
 
         self.toggle = QCheckBox()
         self.toggle.setChecked(self.config.get("auto_start_detection", False))
@@ -480,7 +494,7 @@ class AutoStartSettingsWidget(QWidget):
             "프로그램 시작 후 Baseline을 완료하면\n" "자동으로 자세 감지가 시작됩니다."
         )
         description.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
-        description.setStyleSheet("color: #999999;")
+        description.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
         layout.addWidget(description)
 
         self.setLayout(layout)

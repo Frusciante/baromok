@@ -105,7 +105,9 @@ class MainWindow(QMainWindow):
 
         # 앱 이름
         title = QLabel("바로목")
-        title.setFont(QFont("Noto Sans KR", int(24 * self.dpi_scale), QFont.Weight.Bold))
+        title.setFont(
+            QFont("Noto Sans KR", int(24 * self.dpi_scale), QFont.Weight.Bold)
+        )
         title.setStyleSheet(f"color: {Colors.WHITE.value};")
         layout.addWidget(title)
 

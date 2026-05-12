@@ -11,7 +11,7 @@ from typing import Dict, Tuple
 class Colors(Enum):
     """색상 팔레트"""
 
-    PURPLE_PRIMARY = "#7B5BA8"  # 보라 (주요 액션)
+    PURPLE_PRIMARY = "#4333A6"  # 보라 (주요 액션)
     PINK_PRIMARY = "#E85D75"  # 핑크 (강조/경고)
     GRAY_LIGHT = "#F5F5F5"  # 배경 (밝음)
     GRAY_MEDIUM = "#CCCCCC"  # 테두리

@@ -388,28 +388,35 @@ class HubScreen(QWidget):
         illust_layout = QVBoxLayout(illust_frame)
         illust_layout.setContentsMargins(0, 0, 0, 0)
         illust_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
+
         illust_label = QLabel()
         illust_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # SVG 일러스트 로드
-        svg_path = Path("assets/ui/home_illustration.svg")
-        if svg_path.exists():
+
+        # 홈 일러스트 로드
+        image_path_candidates = [
+            Path("assets/ui/바로목로고.png"),
+            Path("assets/ui/home_illustration.svg"),
+        ]
+        for image_path in image_path_candidates:
+            if not image_path.exists():
+                continue
+
             try:
-                pixmap = QPixmap(str(svg_path))
-                if not pixmap.isNull():
-                    scaled_pixmap = pixmap.scaledToHeight(
-                        self.theme_manager.scale_pixel(380),
-                        Qt.TransformationMode.SmoothTransformation
-                    )
-                    illust_label.setPixmap(scaled_pixmap)
-                else:
-                    illust_label.setText("[일러스트]")
+                pixmap = QPixmap(str(image_path))
+                if pixmap.isNull():
+                    continue
+
+                scaled_pixmap = pixmap.scaledToHeight(
+                    self.theme_manager.scale_pixel(380),
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                illust_label.setPixmap(scaled_pixmap)
+                break
             except Exception:
-                illust_label.setText("[일러스트]")
+                continue
         else:
             illust_label.setText("[일러스트]")
-        
+
         illust_layout.addWidget(illust_label, alignment=Qt.AlignmentFlag.AlignCenter)
         top_layout.addWidget(illust_frame, 0, Qt.AlignmentFlag.AlignCenter)
 
@@ -509,7 +516,12 @@ class SettingsScreen(QWidget):
         scroll_layout.setSpacing(12)
         scroll_content.setLayout(scroll_layout)
 
-        categories = ["알림 설정", "소리 설정", "팝업 설정", "컴퓨터 부팅 시\n프로그램 자동 시작"]
+        categories = [
+            "알림 설정",
+            "소리 설정",
+            "팝업 설정",
+            "컴퓨터 부팅 시\n프로그램 자동 시작",
+        ]
         category_widget_classes = [
             NotificationSettingsWidget,
             SoundSettingsWidget,
@@ -520,7 +532,7 @@ class SettingsScreen(QWidget):
         for cat, widget_class in zip(categories, category_widget_classes):
             row_frame = QFrame()
             row_frame.setStyleSheet(
-                f"background-color: #C9C5E2; border-radius: {self.theme_manager.scale_pixel(8)}px;"
+                f"background-color: {Colors.WHITE.value}; border: 1px solid #E3E0F2; border-radius: {self.theme_manager.scale_pixel(8)}px;"
             )
             # 기본 높이
             row_frame.setMinimumHeight(self.theme_manager.scale_pixel(220))
@@ -533,7 +545,11 @@ class SettingsScreen(QWidget):
             category_label.setFixedWidth(self.theme_manager.scale_pixel(210))
             category_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             category_label.setFont(
-                QFont("Noto Sans KR", self.theme_manager.scale_pixel(16), QFont.Weight.Bold)
+                QFont(
+                    "Noto Sans KR",
+                    self.theme_manager.scale_pixel(16),
+                    QFont.Weight.Bold,
+                )
             )
             category_label.setStyleSheet(
                 f"background-color: {Colors.PURPLE_PRIMARY.value}; color: {Colors.WHITE.value}; "
@@ -680,7 +696,9 @@ class StatisticsScreen(QWidget):
         retention_values = []
         for session in sessions_data:
             try:
-                retention_values.append(float(session.get("good_posture_percentage", 0)))
+                retention_values.append(
+                    float(session.get("good_posture_percentage", 0))
+                )
             except (TypeError, ValueError):
                 continue
 

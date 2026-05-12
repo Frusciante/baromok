@@ -13,14 +13,19 @@ families = QFontDatabase.families()
 
 print("시스템에 설치된 한글 폰트:")
 for font in families:
-    if 'noto' in font.lower() or 'sans' in font.lower() or '고딕' in font or 'arial' in font.lower():
+    if (
+        "noto" in font.lower()
+        or "sans" in font.lower()
+        or "고딕" in font
+        or "arial" in font.lower()
+    ):
         print(f"  - {font}")
 
 # Noto Sans CJK KR 테스트
 font = QFont("Noto Sans CJK KR")
 print(f"\nNoto Sans CJK KR 로드: {font.family()}")
 
-# Malgun Gothic 테스트  
+# Malgun Gothic 테스트
 font2 = QFont("Malgun Gothic")
 print(f"Malgun Gothic 로드: {font2.family()}")
 
