@@ -726,6 +726,7 @@ class DetectionScreen(QWidget):
 
     detection_paused_signal = pyqtSignal()
     detection_stopped_signal = pyqtSignal()
+    open_settings_signal = pyqtSignal()
 
     def __init__(
         self,
@@ -768,6 +769,7 @@ class DetectionScreen(QWidget):
 
         settings_btn = QPushButton("⚙ 설정")
         settings_btn.setFixedHeight(self.theme_manager.scale_pixel(32))
+        settings_btn.clicked.connect(self.open_settings_signal.emit)
         top_layout.addWidget(settings_btn)
 
         layout.addLayout(top_layout)

@@ -76,6 +76,7 @@ class baromokApp:
         self.alert_hide_timer.timeout.connect(self._hide_alert_popup)
         self._last_alert_time = 0.0
         self._last_alert_type = ""
+        self._previous_screen_index = 1
 
         # 엔진 컴포넌트 초기화 (Phase 2)
         logger.info("엔진 컴포넌트 초기화...")
@@ -167,10 +168,11 @@ class baromokApp:
         self.hub_screen.open_statistics_signal.connect(
             lambda: self.switch_screen(3)  # Statistics
         )
-        self.settings_screen.settings_saved_signal.connect(self._save_settings)
-        self.settings_screen.back_to_hub_signal.connect(
-            lambda: self.switch_screen(1)  # Hub
+        self.detection_screen.open_settings_signal.connect(
+            lambda: self.switch_screen(2)  # Settings
         )
+        self.settings_screen.settings_saved_signal.connect(self._save_settings)
+        self.settings_screen.back_to_hub_signal.connect(self._return_from_settings)
         self.statistics_screen.back_to_hub_signal.connect(
             lambda: self.switch_screen(1)  # Hub
         )
@@ -235,11 +237,19 @@ class baromokApp:
             screen_index: 화면 인덱스
         """
         if 0 <= screen_index < self.main_window.stacked_widget.count():
+            self._previous_screen_index = self.main_window.stacked_widget.currentIndex()
             self.main_window.stacked_widget.setCurrentIndex(screen_index)
             screen_names = ["baseline", "hub", "settings", "statistics", "detection"]
             logger.info("화면 전환: %s", screen_names[screen_index])
         else:
             logger.warning("잘못된 화면 인덱스: %s", screen_index)
+
+    def _return_from_settings(self):
+        """설정 화면에서 마지막 화면으로 복귀"""
+        target_index = self._previous_screen_index
+        if target_index == 2:
+            target_index = 1
+        self.switch_screen(target_index)
 
     def _start_detection(self):
         """감지 시작"""
