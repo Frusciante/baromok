@@ -24,6 +24,17 @@ from src.ui.styles.theme import Colors, ThemeManager
 
 logger = logging.getLogger(__name__)
 
+RECOGNITION_DIFFICULT_MESSAGE = "인식이 어렵습니다"
+
+
+def _set_recognition_message(label: QLabel, visible: bool):
+    """사용자 미탐지 안내 문구 표시/숨김"""
+    label.setVisible(visible)
+    if visible:
+        label.setText(RECOGNITION_DIFFICULT_MESSAGE)
+    else:
+        label.clear()
+
 
 def cv2_to_qpixmap(frame: np.ndarray) -> QPixmap:
     """OpenCV 프레임을 QPixmap으로 변환"""
@@ -108,14 +119,25 @@ class BaselineScreen(QWidget):
         self.preview_frame.setLayout(preview_layout)
         layout.addWidget(self.preview_frame, 1)
 
+        self.recognition_label = QLabel("")
+        self.recognition_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.recognition_label.setFont(
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(12), QFont.Weight.Bold)
+        )
+        self.recognition_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
+        _set_recognition_message(self.recognition_label, False)
+        layout.addWidget(self.recognition_label)
+
         guide = QLabel(
             "바른 자세로 촬영하세요:\n"
-            "• 카메라와 거리: 50-60cm\n"
-            "• 등 & 허리: 의자에 붙인 상태\n"
-            "• 무릎: 90도\n"
-            "• 팔꿈치: 90도\n"
-            "• 턱: 자연스러운 위치"
+            "• 카메라와 거리는 50-60cm로 유지해주세요\n"
+            "• 화면과 눈 사이의 거리를 40-50cm로 유지 해 주세요.\n"
+            "• 등을 의자 등받이에 깊숙이 밀착한 후 허리를 펴 주세요.\n"
+            "• 무릎은 90도를 유지하고, 발바닥은 바닥에 닿게 해주세요.\n"
+            "• 팔꿈치 각도는 90도 내외를 유지해 주세요.\n"
+            "• 턱을 가볍게 아래로 당겨주세요."
         )
+
         guide.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12)))
         layout.addWidget(guide)
 
@@ -231,19 +253,26 @@ class BaselineScreen(QWidget):
                 return
 
             self.received_frame_count += 1
+            indicators = frame_data.get("indicators")
 
             # 초반 카메라/MediaPipe 안정화 프레임은 baseline에서 제외한다.
             if self.received_frame_count <= self.warmup_frames:
+                _set_recognition_message(
+                    self.recognition_label,
+                    indicators is None,
+                )
                 self.capture_status_label.setText(
                     f"카메라 안정화 중... "
                     f"{self.received_frame_count} / {self.warmup_frames}"
                 )
                 return
 
-            indicators = frame_data.get("indicators")
             if indicators is None:
                 logger.debug("Baseline 수집 중 indicators가 없는 프레임 제외")
+                _set_recognition_message(self.recognition_label, True)
                 return
+
+            _set_recognition_message(self.recognition_label, False)
 
             self.baseline_manager.add_frame_to_collection(indicators)
             self.valid_baseline_frame_count += 1
@@ -796,6 +825,15 @@ class DetectionScreen(QWidget):
         self.preview_frame.setLayout(preview_layout)
         layout.addWidget(self.preview_frame, 1)
 
+        self.recognition_label = QLabel("")
+        self.recognition_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.recognition_label.setFont(
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(12), QFont.Weight.Bold)
+        )
+        self.recognition_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
+        _set_recognition_message(self.recognition_label, False)
+        layout.addWidget(self.recognition_label)
+
         self.posture_label = QLabel("감지 중")
         self.posture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.posture_label.setFont(
@@ -834,6 +872,17 @@ class DetectionScreen(QWidget):
                     Qt.TransformationMode.SmoothTransformation,
                 )
                 self.preview_label.setPixmap(scaled_pixmap)
+
+            indicators = frame_data.get("indicators")
+            if indicators is None:
+                _set_recognition_message(self.recognition_label, True)
+                self.status_label.setText(RECOGNITION_DIFFICULT_MESSAGE)
+                self.status_label.setObjectName("status_normal")
+                self.status_label.style().polish(self.status_label)
+                self.posture_label.setText(RECOGNITION_DIFFICULT_MESSAGE)
+                return
+
+            _set_recognition_message(self.recognition_label, False)
 
             state = frame_data.get("state", "NORMAL")
             posture_type = frame_data.get("posture_type", "normal")
