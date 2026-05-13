@@ -280,7 +280,7 @@ def switch_to_screen()       # 화면 전환 (신호 방출)
 | theme.py | 460 | 색상팔레트(8색), QSS 스타일시트(50+ 컴포넌트), ThemeManager |
 | main_window.py | 230 | QMainWindow, 헤더/푸터, QStackedWidget |
 | screens/__init__.py | 320 | 6개 화면 클래스 (BaselineScreen, HubScreen, SettingsScreen, StatisticsScreen, DetectionScreen, AlertPopup) |
-| app.py | 130 | BarorokApp, 신호 연결, 화면 전환 로직 |
+| app.py | 130 | baromokApp, 신호 연결, 화면 전환 로직 |
 | main.py (수정) | 47 | PyQt 진입점 추가 |
 | **합계** | **~1,187** | **UI 프레임워크 완성** |
 

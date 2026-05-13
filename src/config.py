@@ -197,3 +197,58 @@ config_manager = ConfigManager()
 def get_config() -> ConfigManager:
     """설정 관리자 조회 (유틸 함수)"""
     return config_manager
+
+
+# ============================================================================
+# 사용자 UI 설정 (SettingsScreen용)
+# ============================================================================
+
+
+from dataclasses import dataclass, asdict, fields
+
+
+@dataclass
+class SettingsConfig:
+    """사용자 커스터마이징 가능한 UI 설정"""
+
+    # 알림 설정
+    notification_enabled: bool = True
+    notification_interval: int = 30  # 초
+
+    # 소리 설정
+    sound_enabled: bool = True
+    sound_volume: int = 70  # 0-100
+
+    # 팝업 설정
+    popup_position: str = "center"  # "center" | "top"
+    popup_auto_close: bool = True
+    popup_auto_close_time: int = 5  # 초
+
+    # 자동 시작
+    auto_start_detection: bool = False
+
+    @classmethod
+    def load_from_json(cls, file_path: str) -> "SettingsConfig":
+        """JSON 파일에서 설정 로드"""
+        try:
+            if Path(file_path).exists():
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                # 유효한 필드만 필터링
+                field_names = {f.name for f in fields(cls)}
+                filtered_data = {k: v for k, v in data.items() if k in field_names}
+                return cls(**filtered_data)
+            return cls()
+        except Exception as e:
+            logger.warning("설정 파일 로드 실패, 기본값 사용: %s", e)
+            return cls()
+
+    def save_to_json(self, file_path: str) -> None:
+        """JSON 파일에 설정 저장"""
+        try:
+            Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(asdict(self), f, indent=2, ensure_ascii=False)
+            logger.info("설정 저장 완료: %s", file_path)
+        except Exception as e:
+            logger.error("설정 저장 실패: %s", e)

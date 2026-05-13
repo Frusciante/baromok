@@ -1,5 +1,6 @@
 # Core Dependencies
 python-version >= 3.9
+python-version < 3.14
 
 # MediaPipe and Computer Vision
 opencv-python==4.8.1.78

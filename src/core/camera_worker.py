@@ -9,7 +9,7 @@ import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 from datetime import datetime
 from typing import Optional
-import logging
+
 from src.utils.logger import get_logger
 
 from src.core.landmark_extractor import LandmarkExtractor, ExtractedLandmarks
@@ -72,6 +72,11 @@ class CameraWorker(QThread):
         self.is_running = False
         self.is_paused = False
 
+        # baseline 수집 모드
+        # True일 때는 랜드마크 추출과 지표 계산까지만 수행하고,
+        # JudgmentEngine / StateMachine은 실행하지 않는다.
+        self.is_baseline_mode = False
+
         # 프레임 카운터
         self.frame_count = 0
         self.start_time: Optional[datetime] = None
@@ -80,9 +85,23 @@ class CameraWorker(QThread):
             f"CameraWorker 초기화: {camera_width}x{camera_height} @ {camera_fps} FPS"
         )
 
+    def set_baseline_mode(self, enabled: bool):
+        """Baseline 수집 모드 설정"""
+        self.is_baseline_mode = enabled
+
+        if enabled:
+            self.judgment_engine.reset_history()
+            self.state_machine.reset()
+            logger.info("Baseline 모드 활성화: 판정/상태 머신 업데이트 비활성화")
+        else:
+            logger.info("Baseline 모드 비활성화: 일반 자세 감지 모드")
+
     def run(self):
         """스레드 메인 루프"""
         try:
+            # 이전 세션에서 남은 일시정지 상태를 제거한다.
+            self.is_paused = False
+
             # 카메라 초기화
             self.cap = cv2.VideoCapture(self.camera_index)
 
@@ -100,6 +119,10 @@ class CameraWorker(QThread):
             self.is_running = True
             self.start_time = datetime.now()
             self.frame_count = 0
+
+            # 일반 감지 모드로 새로 시작할 때는 이전 자세 누적 이력을 제거한다.
+            if not self.is_baseline_mode:
+                self.judgment_engine.reset_history()
 
             logger.info("카메라 캡처 시작")
             self.status_changed_signal.emit("카메라 시작됨")
@@ -170,6 +193,7 @@ class CameraWorker(QThread):
             }
         """
         timestamp = datetime.now()
+        current_timestamp_seconds = timestamp.timestamp()
 
         # 1. 랜드마크 추출
         landmarks = ExtractedLandmarks(
@@ -180,16 +204,18 @@ class CameraWorker(QThread):
         )
         try:
             landmarks = self.landmark_extractor.extract_landmarks(frame)
-            # 디버그: 어떤 타입의 랜드마크가 추출되었는지 로깅
+
             try:
                 pose_present = landmarks.pose is not None
                 face_present = landmarks.face is not None
                 hands_count = len(landmarks.hands) if landmarks.hands else 0
                 logger.debug(
-                    f"랜드마크 추출 결과 - pose: {pose_present}, face: {face_present}, hands: {hands_count}"
+                    f"랜드마크 추출 결과 - pose: {pose_present}, "
+                    f"face: {face_present}, hands: {hands_count}"
                 )
             except Exception:
                 logger.debug("랜드마크 추출 결과 로깅 중 예외 발생")
+
         except Exception as e:
             logger.debug(f"랜드마크 추출 실패: {e}")
 
@@ -197,41 +223,79 @@ class CameraWorker(QThread):
         indicators: Optional[PostureIndicators] = None
         try:
             frame_height, frame_width = frame.shape[:2]
+
             relevant_landmarks = self.landmark_extractor.get_relevant_landmarks(
                 landmarks,
                 frame_width=frame_width,
                 frame_height=frame_height,
             )
             logger.debug(f"관련 랜드마크 (픽셀 좌표): {relevant_landmarks}")
+
             normalized_landmarks = self.landmark_extractor.normalize_landmarks(
                 relevant_landmarks,
                 frame_width=frame_width,
                 frame_height=frame_height,
             )
             logger.debug(f"정규화된 랜드마크: {normalized_landmarks}")
+
             indicators = self.indicator_calculator.calculate_all_indicators(
                 normalized_landmarks,
-                timestamp=timestamp.timestamp(),
+                timestamp=current_timestamp_seconds,
             )
+
             if indicators is None:
                 logger.debug(
                     "IndicatorCalculator returned None (필수 랜드마크 누락). "
                     f"relevant_landmarks={relevant_landmarks}"
                 )
+
         except Exception as e:
             logger.debug(f"지표 계산 실패: {e}")
+
+        # Baseline 모드에서는 판정 엔진과 상태 머신을 실행하지 않는다.
+        # baseline 수집 중에 JudgmentEngine이 baseline 대비 변화율을 계산하려 하면
+        # 아직 baseline이 없기 때문에 불필요한 경고와 오탐 이력이 생길 수 있다.
+        if self.is_baseline_mode:
+            current_state = self.state_machine.get_current_state()
+
+            annotated_frame = self._annotate_frame(
+                frame,
+                landmarks,
+                indicators,
+                "baseline",
+                0.0,
+                current_state,
+            )
+
+            return {
+                "frame": annotated_frame,
+                "frame_rgb": cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
+                "landmarks": landmarks,
+                "indicators": indicators,
+                "posture_type": "baseline",
+                "probability": 0.0,
+                "state": current_state.value,
+                "timestamp": timestamp,
+                "frame_number": self.frame_count,
+            }
 
         # 3. 판정 (posture_type, probability)
         posture_type = "normal"
         probability = 0.0
         confirmed_posture = None
         judgment_result: Optional[PostureJudgmentResult] = None
+
         if indicators is not None:
             try:
                 judgment_result = self.judgment_engine.judge_single_frame(indicators)
-                self.judgment_engine.accumulate_frame(judgment_result)
+
+                self.judgment_engine.accumulate_frame(
+                    judgment_result,
+                    current_timestamp=current_timestamp_seconds,
+                )
+
                 confirmed_posture = self.judgment_engine.get_confirmed_posture(
-                    fps=self.camera_fps
+                    current_timestamp=current_timestamp_seconds,
                 )
 
                 if judgment_result.dominant_posture:
@@ -239,12 +303,18 @@ class CameraWorker(QThread):
                     likelihood_map = {
                         "forward_head": judgment_result.forward_head_likelihood,
                         "recline": judgment_result.recline_likelihood,
-                        "crossed_leg_estimated": judgment_result.crossed_leg_likelihood,
+                        "crossed_leg_estimated": (
+                            judgment_result.crossed_leg_likelihood
+                        ),
                         "chin_rest_estimated": judgment_result.chin_rest_likelihood,
                     }
                     probability = float(likelihood_map.get(posture_type, 0.0))
+
             except Exception as e:
                 logger.debug(f"판정 실패: {e}")
+        else:
+            # 필수 지표가 없으면 자세 누적 이력을 초기화한다.
+            self.judgment_engine.reset_history()
 
         # 4. 상태 머신 업데이트
         try:
@@ -259,7 +329,12 @@ class CameraWorker(QThread):
 
         # 5. 시각화 (주석 달린 프레임)
         annotated_frame = self._annotate_frame(
-            frame, landmarks, indicators, posture_type, probability, current_state
+            frame,
+            landmarks,
+            indicators,
+            posture_type,
+            probability,
+            current_state,
         )
 
         # 결과 반환
@@ -270,7 +345,7 @@ class CameraWorker(QThread):
             "indicators": indicators,
             "posture_type": posture_type,
             "probability": probability,
-            "state": current_state.value,  # "NORMAL", "WARNING", "BAD_POSTURE"
+            "state": current_state.value,
             "timestamp": timestamp,
             "frame_number": self.frame_count,
         }
@@ -279,7 +354,7 @@ class CameraWorker(QThread):
         self,
         frame: np.ndarray,
         landmarks: ExtractedLandmarks,
-        indicators: PostureIndicators,
+        indicators: Optional[PostureIndicators],
         posture_type: str,
         probability: float,
         state: PostureState,
@@ -328,15 +403,104 @@ class CameraWorker(QThread):
         # 상단 정보 표시
         info_text = f"{state_text} | {posture_type} | Prob: {probability:.2f}"
         cv2.putText(
-            annotated, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2
+            annotated,
+            info_text,
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            color,
+            2,
         )
 
-        # 랜드마크 시각화 (얼굴 중앙점만 간단히)
-        if landmarks.pose is not None and landmarks.pose.landmarks:
-            nose = landmarks.pose.landmarks[0]
-            x = int(nose[0] * annotated.shape[1])
-            y = int(nose[1] * annotated.shape[0])
-            cv2.circle(annotated, (x, y), 5, (0, 255, 255), -1)
+        # 랜드마크 시각화
+        frame_height, frame_width = annotated.shape[:2]
+
+        try:
+            relevant_landmarks = self.landmark_extractor.get_relevant_landmarks(
+                landmarks,
+                frame_width=frame_width,
+                frame_height=frame_height,
+            )
+
+            point_styles = {
+                "face_center": ((0, 255, 255), 5, "Nose"),
+                "left_eye": ((255, 255, 0), 4, "L Eye"),
+                "right_eye": ((255, 255, 0), 4, "R Eye"),
+                "left_cheek": ((255, 0, 255), 4, "L Cheek"),
+                "right_cheek": ((255, 0, 255), 4, "R Cheek"),
+                "left_mouth": ((0, 128, 255), 4, "L Mouth"),
+                "right_mouth": ((0, 128, 255), 4, "R Mouth"),
+                "left_shoulder": ((0, 255, 0), 6, "L Shoulder"),
+                "right_shoulder": ((0, 255, 0), 6, "R Shoulder"),
+            }
+
+            for key, (point_color, radius, label) in point_styles.items():
+                point = relevant_landmarks.get(key)
+                if point is None:
+                    continue
+
+                x, y = point
+                cv2.circle(annotated, (x, y), radius, point_color, -1)
+                cv2.putText(
+                    annotated,
+                    label,
+                    (x + 6, y - 6),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    point_color,
+                    1,
+                )
+
+            # 턱 포인트
+            for index, point in enumerate(relevant_landmarks.get("chin_points", [])):
+                x, y = point
+                cv2.circle(annotated, (x, y), 4, (0, 128, 255), -1)
+                cv2.putText(
+                    annotated,
+                    f"Chin {index + 1}",
+                    (x + 6, y - 6),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    (0, 128, 255),
+                    1,
+                )
+
+            # 손가락 팁
+            for hand_key, hand_color in [
+                ("left_hand_tips", (255, 128, 0)),
+                ("right_hand_tips", (128, 0, 255)),
+            ]:
+                for point in relevant_landmarks.get(hand_key, []):
+                    x = int(point[0])
+                    y = int(point[1])
+                    cv2.circle(annotated, (x, y), 4, hand_color, -1)
+
+            # 어깨 연결선
+            left_shoulder = relevant_landmarks.get("left_shoulder")
+            right_shoulder = relevant_landmarks.get("right_shoulder")
+            if left_shoulder is not None and right_shoulder is not None:
+                cv2.line(
+                    annotated,
+                    left_shoulder,
+                    right_shoulder,
+                    (0, 255, 0),
+                    2,
+                )
+
+            # 눈 연결선
+            left_eye = relevant_landmarks.get("left_eye")
+            right_eye = relevant_landmarks.get("right_eye")
+            if left_eye is not None and right_eye is not None:
+                cv2.line(
+                    annotated,
+                    left_eye,
+                    right_eye,
+                    (255, 255, 0),
+                    2,
+                )
+
+        except Exception as e:
+            logger.debug(f"랜드마크 시각화 실패: {e}")
 
         # 지표 정보 (간단한 버전)
         if indicators is not None:
@@ -368,6 +532,7 @@ class CameraWorker(QThread):
     def stop_capture(self):
         """캡처 중지"""
         self.is_running = False
+        self.is_paused = False
         logger.info("카메라 중지 요청")
         self.wait()  # 스레드 종료 대기
 

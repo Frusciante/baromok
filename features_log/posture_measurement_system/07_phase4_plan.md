@@ -440,8 +440,8 @@ class StatisticsScreen(QWidget):
 **파일**: `src/ui/app.py`
 
 ```python
-class BarorokApp:
-    """업데이트된 BarorokApp"""
+class baromokApp:
+    """업데이트된 baromokApp"""
     
     def __init__(self):
         # 기존 초기화...

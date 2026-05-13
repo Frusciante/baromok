@@ -53,6 +53,71 @@ class LandmarkExtractor:
         self._initialize_models()
         logger.info("LandmarkExtractor 초기화 완료")
 
+    # def _initialize_models(self):
+    #     """MediaPipe 모델 로드"""
+    #     model_dir = Path(self.model_base_path)
+
+    #     try:
+    #         # Pose Landmarker 로드
+    #         BaseOptions = mp.tasks.BaseOptions
+    #         PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
+    #         VisionRunningMode = mp.tasks.vision.RunningMode
+
+    #         options = PoseLandmarkerOptions(
+    #             base_options=BaseOptions(
+    #                 model_asset_path=str(model_dir / "pose_landmarker.task")
+    #             ),
+    #             running_mode=VisionRunningMode.IMAGE,
+    #             num_poses=1,
+    #         )
+    #         self.pose_landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(
+    #             options
+    #         )
+    #         logger.info("Pose Landmarker 로드 완료")
+
+    #     except Exception as e:
+    #         logger.warning(f"Pose Landmarker 로드 실패: {e}. 대체 모델 사용...")
+    #         self.pose_landmarker = None
+
+    #     try:
+    #         # Face Landmarker 로드
+    #         FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
+
+    #         options = FaceLandmarkerOptions(
+    #             base_options=BaseOptions(
+    #                 model_asset_path=str(model_dir / "face_landmarker.task")
+    #             ),
+    #             running_mode=VisionRunningMode.IMAGE,
+    #             num_faces=1,
+    #         )
+    #         self.face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
+    #             options
+    #         )
+    #         logger.info("Face Landmarker 로드 완료")
+
+    #     except Exception as e:
+    #         logger.warning(f"Face Landmarker 로드 실패: {e}. 대체 모델 사용...")
+    #         self.face_landmarker = None
+
+    #     try:
+    #         # Hand Landmarker 로드
+    #         HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
+
+    #         options = HandLandmarkerOptions(
+    #             base_options=BaseOptions(
+    #                 model_asset_path=str(model_dir / "hand_landmarker.task")
+    #             ),
+    #             running_mode=VisionRunningMode.IMAGE,
+    #             num_hands=2,
+    #         )
+    #         self.hand_landmarker = mp.tasks.vision.HandLandmarker.create_from_options(
+    #             options
+    #         )
+    #         logger.info("Hand Landmarker 로드 완료")
+
+    #     except Exception as e:
+    #         logger.warning(f"Hand Landmarker 로드 실패: {e}. 대체 모델 사용...")
+    #         self.hand_landmarker = None
     def _initialize_models(self):
         """MediaPipe 모델 로드"""
         model_dir = Path(self.model_base_path)
@@ -69,6 +134,9 @@ class LandmarkExtractor:
                 ),
                 running_mode=VisionRunningMode.IMAGE,
                 num_poses=1,
+                # 👇 [추가된 부분] 자세 인식 엄격도 상향 (기본 0.5 -> 0.7)
+                min_pose_detection_confidence=0.7,
+                min_pose_presence_confidence=0.7,
             )
             self.pose_landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(
                 options
@@ -89,6 +157,9 @@ class LandmarkExtractor:
                 ),
                 running_mode=VisionRunningMode.IMAGE,
                 num_faces=1,
+                # 👇 [추가된 부분] 얼굴 인식 엄격도 상향
+                min_face_detection_confidence=0.7,
+                min_face_presence_confidence=0.7,
             )
             self.face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
                 options
@@ -109,6 +180,9 @@ class LandmarkExtractor:
                 ),
                 running_mode=VisionRunningMode.IMAGE,
                 num_hands=2,
+                # 👇 [추가된 부분] 손 인식 엄격도 상향 (가짜 손 모양 오작동 방지)
+                min_hand_detection_confidence=0.7,
+                min_hand_presence_confidence=0.7,
             )
             self.hand_landmarker = mp.tasks.vision.HandLandmarker.create_from_options(
                 options
@@ -390,49 +464,56 @@ class LandmarkExtractor:
             face_lms = extracted.face.landmarks
             face_conf = extracted.face.confidences
 
-            # 코 (30), 양쪽 눈 (1,4), 양쪽 광대 (152,378), 턱 (199,427)
-            if len(face_lms) > 30 and face_conf[30] > confidence_threshold:
-                landmarks["face_center"] = (
-                    int(face_lms[30][0] * frame_width),
-                    int(face_lms[30][1] * frame_height),
-                )
+            def _get_face_point(index: int, name: str):
+                """Face landmark index를 픽셀 좌표로 변환"""
+                if len(face_lms) > index and len(face_conf) > index:
+                    if face_conf[index] > confidence_threshold:
+                        x = int(min(max(face_lms[index][0] * frame_width, 0), frame_width - 1))
+                        y = int(min(max(face_lms[index][1] * frame_height, 0), frame_height - 1))
+                        landmarks["confidences"][name] = face_conf[index]
+                        return (x, y)
+                return None
 
-            if len(face_lms) > 1 and face_conf[1] > confidence_threshold:
-                landmarks["left_eye"] = (
-                    int(face_lms[1][0] * frame_width),
-                    int(face_lms[1][1] * frame_height),
-                )
+            def _assign_pair_by_x(left_key: str, right_key: str, point_a, point_b):
+                """화면 x좌표 기준으로 왼쪽/오른쪽 포인트를 정렬해서 저장"""
+                if point_a is None or point_b is None:
+                    return
 
-            if len(face_lms) > 4 and face_conf[4] > confidence_threshold:
-                landmarks["right_eye"] = (
-                    int(face_lms[4][0] * frame_width),
-                    int(face_lms[4][1] * frame_height),
-                )
+                if point_a[0] <= point_b[0]:
+                    landmarks[left_key] = point_a
+                    landmarks[right_key] = point_b
+                else:
+                    landmarks[left_key] = point_b
+                    landmarks[right_key] = point_a
 
-            if len(face_lms) > 152 and face_conf[152] > confidence_threshold:
-                landmarks["left_cheek"] = (
-                    int(face_lms[152][0] * frame_width),
-                    int(face_lms[152][1] * frame_height),
-                )
-                landmarks["confidences"]["left_cheek"] = face_conf[152]
+            # 대표 얼굴 포인트
+            # 1: 코 끝에 가까운 face mesh point
+            nose_point = _get_face_point(1, "face_center")
+            if nose_point is not None:
+                landmarks["face_center"] = nose_point
 
-            if len(face_lms) > 378 and face_conf[378] > confidence_threshold:
-                landmarks["right_cheek"] = (
-                    int(face_lms[378][0] * frame_width),
-                    int(face_lms[378][1] * frame_height),
-                )
-                landmarks["confidences"]["right_cheek"] = face_conf[378]
+            # 눈: 화면 기준 좌/우 눈 외곽 포인트
+            # 33, 263은 양쪽 눈 외곽 기준점으로 쓰기 좋음
+            eye_a = _get_face_point(33, "eye_a")
+            eye_b = _get_face_point(263, "eye_b")
+            _assign_pair_by_x("left_eye", "right_eye", eye_a, eye_b)
 
-            # 턱 포인트 (199, 427)
-            chin_indices = [199, 427]
-            for idx in chin_indices:
-                if len(face_lms) > idx and face_conf[idx] > confidence_threshold:
-                    landmarks["chin_points"].append(
-                        (
-                            int(face_lms[idx][0] * frame_width),
-                            int(face_lms[idx][1] * frame_height),
-                        )
-                    )
+            # 광대/볼: 화면 기준 좌/우 얼굴 외곽 쪽 포인트
+            # 234, 454는 cheek/face side 기준점으로 쓰기 좋음
+            cheek_a = _get_face_point(234, "cheek_a")
+            cheek_b = _get_face_point(454, "cheek_b")
+            _assign_pair_by_x("left_cheek", "right_cheek", cheek_a, cheek_b)
+
+            # 입꼬리: 시각화 및 추후 턱 괸 자세 보조용
+            mouth_a = _get_face_point(61, "mouth_a")
+            mouth_b = _get_face_point(291, "mouth_b")
+            _assign_pair_by_x("left_mouth", "right_mouth", mouth_a, mouth_b)
+
+            # 턱 포인트
+            # 152는 턱 아래쪽 대표 포인트
+            chin_point = _get_face_point(152, "chin")
+            if chin_point is not None:
+                landmarks["chin_points"].append(chin_point)
 
         # 디버그: 필수 face 포인트 신뢰도 로깅(존재하지 않거나 낮으면 원인 파악에 도움됨)
         try:
@@ -456,18 +537,35 @@ class LandmarkExtractor:
 
             # 왼쪽 어깨 (11), 오른쪽 어깨 (12)
             if len(pose_lms) > 11 and pose_conf[11] > confidence_threshold:
-                landmarks["left_shoulder"] = (
-                    int(pose_lms[11][0] * frame_width),
-                    int(pose_lms[11][1] * frame_height),
-                )
+                x = int(min(max(pose_lms[11][0] * frame_width, 0), frame_width - 1))
+                y = int(min(max(pose_lms[11][1] * frame_height, 0), frame_height - 1))
+                landmarks["left_shoulder"] = (x, y)
                 landmarks["confidences"]["left_shoulder"] = pose_conf[11]
 
             if len(pose_lms) > 12 and pose_conf[12] > confidence_threshold:
-                landmarks["right_shoulder"] = (
-                    int(pose_lms[12][0] * frame_width),
-                    int(pose_lms[12][1] * frame_height),
-                )
+                x = int(min(max(pose_lms[12][0] * frame_width, 0), frame_width - 1))
+                y = int(min(max(pose_lms[12][1] * frame_height, 0), frame_height - 1))
+                landmarks["right_shoulder"] = (x, y)
                 landmarks["confidences"]["right_shoulder"] = pose_conf[12]
+
+        # 어깨 좌표가 이미지 좌표계상 좌/우가 반전되어 들어오는 경우 교정
+        try:
+            ls = landmarks.get("left_shoulder")
+            rs = landmarks.get("right_shoulder")
+            if ls is not None and rs is not None:
+                # 픽셀 x 좌표를 비교해서 왼쪽이 더 큰 경우(반전) swap
+                if ls[0] > rs[0]:
+                    logger.debug(
+                        f"어깨 좌표 좌우 반전 감지: left_shoulder.x={ls[0]} > right_shoulder.x={rs[0]}; 스왑 수행"
+                    )
+                    landmarks["left_shoulder"], landmarks["right_shoulder"] = rs, ls
+                    # confidences도 교체
+                    lc = landmarks["confidences"].get("left_shoulder")
+                    rc = landmarks["confidences"].get("right_shoulder")
+                    landmarks["confidences"]["left_shoulder"] = rc
+                    landmarks["confidences"]["right_shoulder"] = lc
+        except Exception:
+            logger.debug("어깨 좌표 교정 중 예외 발생")
 
         # 디버그: pose(어깨) 신뢰도 로깅
         try:
@@ -494,10 +592,10 @@ class LandmarkExtractor:
                         ):
                             finger_tips.append(
                                 (
-                                    int(hand_data.landmarks[tip_idx][0] * frame_width),
-                                    int(hand_data.landmarks[tip_idx][1] * frame_height),
-                                    hand_data.landmarks[tip_idx][2],  # z 포함
-                                )
+                                        int(min(max(hand_data.landmarks[tip_idx][0] * frame_width, 0), frame_width - 1)),
+                                        int(min(max(hand_data.landmarks[tip_idx][1] * frame_height, 0), frame_height - 1)),
+                                        hand_data.landmarks[tip_idx][2],  # z 포함
+                                    )
                             )
 
                     # Handedness 확인 (Right=0, Left=1)
@@ -530,19 +628,31 @@ class LandmarkExtractor:
             elif key == "confidences":
                 normalized[key] = value
             elif isinstance(value, list):
-                # chin_points, *_hand_tips 등
-                normalized[key] = [
-                    (
+                # 손가락 팁은 3D 유지, chin_points는 2D로 변환
+                if key in ['left_hand_tips', 'right_hand_tips']:
+                    normalized[key] = [
+                        (
+                            (
+                                p[0] / frame_width,
+                                p[1] / frame_height,
+                                p[2] if len(p) > 2 else 0,
+                            )
+                            if len(p) >= 2
+                            else p
+                        )
+                        for p in value
+                    ]
+                else:
+                    # chin_points는 2D 유지 (x, y)만
+                    normalized[key] = [
                         (
                             p[0] / frame_width,
                             p[1] / frame_height,
-                            p[2] if len(p) > 2 else 0,
                         )
                         if len(p) >= 2
                         else p
-                    )
-                    for p in value
-                ]
+                        for p in value
+                    ]
             elif isinstance(value, tuple):
                 # 일반 포인트
                 normalized[key] = (value[0] / frame_width, value[1] / frame_height)

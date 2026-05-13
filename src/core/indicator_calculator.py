@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Tuple, Dict, Optional
 from src.utils.helpers import GeometryHelper, NormalizationHelper
 from src.utils.logger import get_logger
+from collections import deque
 
 logger = get_logger(__name__)
 
@@ -34,6 +35,8 @@ class IndicatorCalculator:
         """초기화"""
         self.geometry_helper = GeometryHelper()
         self.normalization_helper = NormalizationHelper()
+        # 어깨 기울기 스무딩 버퍼
+        self._shoulder_tilt_history = deque(maxlen=5)
         logger.info("IndicatorCalculator 초기화 완료")
     
     def calculate_cheek_distance(
@@ -161,10 +164,23 @@ class IndicatorCalculator:
         height_diff = right[1] - left[1]  # y축은 아래로 증가
         width_diff = right[0] - left[0]
         
+        # 방어: x 차이가 거의 0이면 계산 불안정 -> 로그 및 0 반환
+        if abs(width_diff) < 1e-3:
+            logger.warning(
+                f"어깨 x 차이 거의 0 (left={left_shoulder}, right={right_shoulder}), width_diff={width_diff:.6f}; 기울기 계산 불안정"
+            )
+            return 0.0
+
         # 각도 계산 (라디안)
         angle_rad = np.arctan2(-height_diff, width_diff)  # 음수로 변환 (위가 양수가 되도록)
         angle_deg = np.degrees(angle_rad)
-        
+
+        # 극단값이 나오면 경고 로깅
+        if abs(angle_deg) >= 85.0:
+            logger.warning(
+                f"어깨 기울기 매우 큼: {angle_deg:.1f}deg (left={left_shoulder}, right={right_shoulder})"
+            )
+
         return float(np.clip(angle_deg, -90.0, 90.0))
     
     def calculate_neck_offset(
@@ -346,6 +362,14 @@ class IndicatorCalculator:
                 landmarks['left_shoulder'],
                 landmarks['right_shoulder']
             )
+            # 스무딩: 최근 값의 중앙값 사용
+            try:
+                self._shoulder_tilt_history.append(shoulder_tilt)
+                if len(self._shoulder_tilt_history) > 0:
+                    smoothed = float(np.median(list(self._shoulder_tilt_history)))
+                    shoulder_tilt = smoothed
+            except Exception:
+                pass
             
             neck_off = self.calculate_neck_offset(
                 landmarks.get('face_center'),

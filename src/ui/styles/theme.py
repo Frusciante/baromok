@@ -3,27 +3,30 @@
 
 PyQt UI의 색상, 폰트, 스타일 정의
 """
+
 from enum import Enum
 from typing import Dict, Tuple
 
 
 class Colors(Enum):
     """색상 팔레트"""
-    PURPLE_PRIMARY = "#7B5BA8"      # 보라 (주요 액션)
-    PINK_PRIMARY = "#E85D75"        # 핑크 (강조/경고)
-    GRAY_LIGHT = "#F5F5F5"          # 배경 (밝음)
-    GRAY_MEDIUM = "#CCCCCC"         # 테두리
-    GRAY_DARK = "#999999"           # 텍스트 (약함)
-    TEXT_BLACK = "#333333"          # 텍스트 (주요)
-    WHITE = "#FFFFFF"               # 흰색
-    GREEN_SUCCESS = "#4CAF50"       # 정상 (초록)
-    YELLOW_WARNING = "#FFC107"      # 경고 (노랑)
-    ORANGE_ALERT = "#FF9800"        # 알림 (주황)
-    RED_DANGER = "#F44336"          # 위험 (빨강)
+
+    PURPLE_PRIMARY = "#4333A6"  # 보라 (주요 액션)
+    PINK_PRIMARY = "#E85D75"  # 핑크 (강조/경고)
+    GRAY_LIGHT = "#F5F5F5"  # 배경 (밝음)
+    GRAY_MEDIUM = "#CCCCCC"  # 테두리
+    GRAY_DARK = "#999999"  # 텍스트 (약함)
+    TEXT_BLACK = "#333333"  # 텍스트 (주요)
+    WHITE = "#FFFFFF"  # 흰색
+    GREEN_SUCCESS = "#4CAF50"  # 정상 (초록)
+    YELLOW_WARNING = "#FFC107"  # 경고 (노랑)
+    ORANGE_ALERT = "#FF9800"  # 알림 (주황)
+    RED_DANGER = "#F44336"  # 위험 (빨강)
 
 
 class FontSize:
     """폰트 크기"""
+
     SMALL = 10
     NORMAL = 12
     MEDIUM = 14
@@ -35,6 +38,7 @@ class FontSize:
 
 class Spacing:
     """간격"""
+
     XS = 4
     SMALL = 8
     NORMAL = 12
@@ -46,10 +50,10 @@ class Spacing:
 def get_stylesheet(dpi_scale: float = 1.0) -> str:
     """
     메인 스타일시트 반환
-    
+
     Args:
         dpi_scale: DPI 스케일 (1.0 = 100%)
-        
+
     Returns:
         QSS 스타일시트 문자열
     """
@@ -58,21 +62,21 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     medium_font = int(FontSize.MEDIUM * dpi_scale)
     large_font = int(FontSize.LARGE * dpi_scale)
     title_font = int(FontSize.TITLE * dpi_scale)
-    
+
     # 간격 스케일
     spacing_normal = int(Spacing.NORMAL * dpi_scale)
     spacing_medium = int(Spacing.MEDIUM * dpi_scale)
     spacing_large = int(Spacing.LARGE * dpi_scale)
-    
+
     # 버튼 크기
     button_height = int(40 * dpi_scale)
     button_radius = int(10 * dpi_scale)
-    
+
     return f"""
     /* 기본 설정 */
     QMainWindow {{
         background-color: {Colors.GRAY_LIGHT.value};
-        font-family: "Segoe UI", "나눔고딕", sans-serif;
+        font-family: "Noto Sans KR", "나눔고딕", sans-serif;
         font-size: {normal_font}pt;
     }}
     
@@ -135,7 +139,6 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     
     QPushButton:hover {{
         background-color: #6A4E91;
-        cursor: pointer;
     }}
     
     QPushButton:pressed {{
@@ -145,7 +148,6 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     QPushButton:disabled {{
         background-color: {Colors.GRAY_DARK.value};
         color: {Colors.GRAY_LIGHT.value};
-        cursor: not-allowed;
     }}
     
     /* 버튼 - 세컨더리 (아웃라인) */
@@ -230,11 +232,6 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     QCheckBox::indicator:checked {{
         background-color: {Colors.PURPLE_PRIMARY.value};
         border: 2px solid {Colors.PURPLE_PRIMARY.value};
-    }}
-    
-    QCheckBox::indicator:checked::after {{
-        content: "✓";
-        color: {Colors.WHITE.value};
     }}
     
     /* 라디오 버튼 */
@@ -383,29 +380,29 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
 
 class ThemeManager:
     """테마 관리자"""
-    
+
     def __init__(self, dpi_scale: float = 1.0):
         """
         초기화
-        
+
         Args:
             dpi_scale: DPI 스케일 (1.0 = 100%)
         """
         self.dpi_scale = dpi_scale
         self.stylesheet = get_stylesheet(dpi_scale)
-    
+
     def get_color(self, color_enum: Colors) -> str:
         """색상 반환"""
         return color_enum.value
-    
+
     def scale_pixel(self, pixel: int) -> int:
         """픽셀을 DPI에 맞춰 스케일링"""
         return int(pixel * self.dpi_scale)
-    
+
     def get_button_size(self) -> Tuple[int, int]:
         """버튼 기본 크기 반환 (너비, 높이)"""
         return (self.scale_pixel(100), self.scale_pixel(40))
-    
+
     def get_font_size(self, size: FontSize) -> int:
         """폰트 크기 반환"""
         return self.scale_pixel(size.value)
