@@ -79,7 +79,7 @@ class HubScreen(QWidget):
             btn.clicked.connect(signal.emit)
             button_layout.addWidget(btn)
 
-        create_btn("카메라 거리 캘리브레이션", self.open_baseline_signal)
+        create_btn("자세 맞춤", self.open_baseline_signal)
         create_btn("환경 설정", self.open_settings_signal)
         create_btn("나의 통계", self.open_statistics_signal)
 

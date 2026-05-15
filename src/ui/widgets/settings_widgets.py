@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QRadioButton,
     QButtonGroup,
     QSizePolicy,
+    QPushButton,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -516,3 +517,186 @@ class AutoStartSettingsWidget(QWidget):
     def set_value(self, config: dict):
         """설정값 설정"""
         self.toggle.setChecked(config.get("auto_start_detection", False))
+
+
+class SensitivitySettingsWidget(QWidget):
+    """민감도 설정 위젯: +/- 버튼으로 세밀 조절"""
+
+    value_changed_signal = pyqtSignal(dict)
+    reset_requested_signal = pyqtSignal()
+
+    def __init__(self, theme_manager: ThemeManager, initial_config: dict = None):
+        super().__init__()
+        self.theme_manager = theme_manager
+        self.config = initial_config or {}
+        
+        # 현재 값 (설정 파일에서 로드)
+        self.fwd_val = self.config.get("forward_head_sensitivity", 0.10)
+        self.rec_val = self.config.get("recline_sensitivity", 0.04)
+        
+        self.setup_ui()
+
+    def setup_ui(self):
+        """UI 구성"""
+        layout = QVBoxLayout()
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(15)
+        
+        self.setObjectName("settings_card")
+        self.setStyleSheet(
+            f"#settings_card {{ background-color: {Colors.WHITE.value}; border: 1px solid #E3E0F2; border-radius: 12px; }}"
+        )
+
+        # 상단 헤더 (제목 + 초기화 버튼)
+        header_layout = QHBoxLayout()
+        title_main = QLabel("정밀 감지 설정")
+        title_main.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
+        title_main.setStyleSheet(f"color: {Colors.PURPLE_PRIMARY.value};")
+        
+        self.reset_btn = QPushButton("감도 초기화")
+        self.reset_btn.setFixedSize(self.theme_manager.scale_pixel(120), self.theme_manager.scale_pixel(40))
+        self.reset_btn.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10), QFont.Weight.Bold))
+        self.reset_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Colors.WHITE.value};
+                color: {Colors.RED_DANGER.value};
+                border: 1px solid {Colors.RED_DANGER.value};
+                border-radius: 6px;
+            }}
+            QPushButton:hover {{
+                background-color: #FFF0F0;
+            }}
+        """)
+        self.reset_btn.clicked.connect(self.reset_requested_signal.emit)
+        
+        header_layout.addWidget(title_main)
+        header_layout.addStretch()
+        header_layout.addWidget(self.reset_btn)
+        layout.addLayout(header_layout)
+
+        # 거북목 민감도
+        fwd_layout = self._create_adjuster_row(
+            "거북목 감도 (낮을수록 민감)", 
+            self.fwd_val, 
+            self._on_fwd_minus, 
+            self._on_fwd_plus,
+            "fwd_label"
+        )
+        layout.addLayout(fwd_layout)
+
+        # 기댄 자세 민감도
+        rec_layout = self._create_adjuster_row(
+            "기댄 자세 감도 (낮을수록 민감)", 
+            self.rec_val, 
+            self._on_rec_minus, 
+            self._on_rec_plus,
+            "rec_label"
+        )
+        layout.addLayout(rec_layout)
+
+        # 설명
+        description = QLabel(
+            "값이 낮을수록 작은 변화에도 알림이 발생하며,\n높을수록 확실한 변화가 있을 때만 알림이 발생합니다."
+        )
+        description.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
+        description.setStyleSheet(f"color: {Colors.GRAY_DARK.value};") # 기본 GRAY_DARK가 흐릴 수 있으므로 확인 필요
+        layout.addWidget(description)
+
+        self.setLayout(layout)
+
+    def _create_adjuster_row(self, title, initial_val, minus_callback, plus_callback, label_attr):
+        """조절 행 생성 유틸리티"""
+        row_layout = QVBoxLayout()
+        row_layout.setSpacing(8)
+
+        title_label = QLabel(title)
+        title_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12), QFont.Weight.Bold))
+        title_label.setStyleSheet(f"color: #1A1A1A;") # 아주 진한 회색(거의 검정)으로 변경
+        row_layout.addWidget(title_label)
+
+        ctrl_layout = QHBoxLayout()
+        
+        minus_btn = QPushButton("-")
+        minus_btn.setFixedSize(self.theme_manager.scale_pixel(40), self.theme_manager.scale_pixel(40)) # 크기 약간 키움
+        minus_btn.clicked.connect(minus_callback)
+        self._apply_button_style(minus_btn)
+        
+        val_label = QLabel(f"{initial_val:.3f}")
+        val_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(16), QFont.Weight.Bold)) # 폰트 키움
+        val_label.setFixedWidth(self.theme_manager.scale_pixel(100))
+        val_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        val_label.setStyleSheet("color: #4333A6; background-color: #F0EDFF; border-radius: 6px; padding: 4px;") # 배경색 추가하여 강조
+        setattr(self, label_attr, val_label)
+        
+        plus_btn = QPushButton("+")
+        plus_btn.setFixedSize(self.theme_manager.scale_pixel(40), self.theme_manager.scale_pixel(40))
+        plus_btn.clicked.connect(plus_callback)
+        self._apply_button_style(plus_btn)
+
+        ctrl_layout.addWidget(minus_btn)
+        ctrl_layout.addStretch()
+        ctrl_layout.addWidget(val_label)
+        ctrl_layout.addStretch()
+        ctrl_layout.addWidget(plus_btn)
+        
+        row_layout.addLayout(ctrl_layout)
+        return row_layout
+
+    def _apply_button_style(self, button: QPushButton):
+        """버튼 스타일 적용 (고대비 및 선명도 강화)"""
+        button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #F8F7FF;
+                border: 2px solid #4333A6;
+                border-radius: 8px;
+                color: #4333A6;
+                font-weight: bold;
+                font-size: 22px;
+            }}
+            QPushButton:hover {{
+                background-color: #4333A6;
+                color: white;
+            }}
+            QPushButton:pressed {{
+                background-color: #2D2570;
+                border-color: #2D2570;
+            }}
+        """)
+
+    def _on_fwd_minus(self):
+        self.fwd_val = max(0.01, self.fwd_val - 0.002)
+        self.fwd_label.setText(f"{self.fwd_val:.3f}")
+        self._emit_value_changed()
+
+    def _on_fwd_plus(self):
+        self.fwd_val = min(0.30, self.fwd_val + 0.002)
+        self.fwd_label.setText(f"{self.fwd_val:.3f}")
+        self._emit_value_changed()
+
+    def _on_rec_minus(self):
+        self.rec_val = max(0.01, self.rec_val - 0.002)
+        self.rec_label.setText(f"{self.rec_val:.3f}")
+        self._emit_value_changed()
+
+    def _on_rec_plus(self):
+        self.rec_val = min(0.30, self.rec_val + 0.002)
+        self.rec_label.setText(f"{self.rec_val:.3f}")
+        self._emit_value_changed()
+
+    def _emit_value_changed(self):
+        self.value_changed_signal.emit({
+            "forward_head_sensitivity": self.fwd_val,
+            "recline_sensitivity": self.rec_val
+        })
+
+    def get_value(self) -> dict:
+        return {
+            "forward_head_sensitivity": self.fwd_val,
+            "recline_sensitivity": self.rec_val
+        }
+
+    def set_value(self, config: dict):
+        self.fwd_val = config.get("forward_head_sensitivity", 0.10)
+        self.rec_val = config.get("recline_sensitivity", 0.04)
+        self.fwd_label.setText(f"{self.fwd_val:.3f}")
+        self.rec_label.setText(f"{self.rec_val:.3f}")

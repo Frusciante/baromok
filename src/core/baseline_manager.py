@@ -57,6 +57,8 @@ class BaselineManager:
         self.minimum_valid_frame_count = baseline_config.get("minimum_valid_frames", 120)
 
         self.ransac_model = RansacQuadraticModel(min_samples=10, residual_threshold=0.01)
+        self.max_inlier_deviation = 0.05
+        self.mean_inlier_deviation = 0.02
         logger.info(f"BaselineManager 초기화 완료 (data_dir: {self.data_dir})")
 
     def start_baseline_collection(self):
@@ -131,10 +133,32 @@ class BaselineManager:
                 s_data.append(getattr(frame, 'step_index', 0))
 
         if self.ransac_model.fit(x_data, y_data):
-            logger.info(f"RANSAC 캘리브레이션 완료 (샘플 수: {len(x_data)})")
+            logger.info(f"자세 맞춤 완료 (샘플 수: {len(x_data)})")
+            
+            # 오차 측정 (최대 편차 계산)
+            y_pred = [self.ransac_model.predict(x) for x in x_data]
+            deviations = [abs(actual - pred) / max(1e-6, pred) for actual, pred in zip(y_data, y_pred)]
+            
+            # RANSAC 인라이어(Inliers)에 대해서만 오차 계산 (이상치 제외한 노이즈 수준 파악)
+            try:
+                ransac = self.ransac_model.model.named_steps['ransacregressor']
+                inlier_mask = ransac.inlier_mask_
+                inlier_deviations = [d for d, is_inlier in zip(deviations, inlier_mask) if is_inlier]
+                
+                if inlier_deviations:
+                    self.max_inlier_deviation = float(np.max(inlier_deviations))
+                    self.mean_inlier_deviation = float(np.mean(inlier_deviations))
+                    logger.info(f"자세 맞춤 노이즈 수준: Max Dev={self.max_inlier_deviation:.4f}, Mean Dev={self.mean_inlier_deviation:.4f}")
+                else:
+                    self.max_inlier_deviation = 0.05 # 기본값
+            except Exception as e:
+                logger.warning(f"오차 분석 실패: {e}")
+                self.max_inlier_deviation = 0.05
+
             self._save_debug_plot(x_data, y_data, step_indices=s_data)
         else:
-            logger.warning(f"RANSAC 캘리브레이션 실패 (샘플 수 부족 또는 분산 부족: {len(x_data)})")
+            logger.warning(f"자세 맞춤 실패 (샘플 수 부족 또는 분산 부족: {len(x_data)})")
+            self.max_inlier_deviation = 0.05
 
         try:
             self.baseline_metrics = self._compute_baseline_metrics(

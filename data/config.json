@@ -2,9 +2,13 @@
   "notification_enabled": true,
   "notification_interval": 30,
   "sound_enabled": true,
-  "sound_volume": 70,
+  "sound_volume": 66,
   "popup_position": "center",
   "popup_auto_close": true,
-  "popup_auto_close_time": 5,
-  "auto_start_detection": false
+  "popup_auto_close_time": 6,
+  "auto_start_detection": false,
+  "forward_head_sensitivity": 0.07983533199564877,
+  "recline_sensitivity": 0.039917665997824384,
+  "recommended_forward_head": 0.07983533199564877,
+  "recommended_recline": 0.039917665997824384
 }

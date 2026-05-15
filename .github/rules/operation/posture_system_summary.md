@@ -19,7 +19,7 @@
 ## 1. 핵심 설계 철학
 - **Depth Proxy**: 단일 RGB 카메라의 불안정한 깊이 추정 대신, **픽셀 상의 어깨 너비(Shoulder Width)**를 거리(깊이)의 독립 변수($x$)로 사용합니다.
 - **Bi-linear/Non-linear Calibration**: 어깨 너비(거리) 변화에 따른 **광대 너비(얼굴 크기)** 변화를 2차 함수($y = ax^2 + bx + c$)로 모델링하여 정상 자세의 기준점(Expected Value)을 동적으로 산출합니다.
-- **Outlier Rejection**: 캘리브레이션 시 발생하는 사용자의 불필요한 움직임을 **RANSACRegressor**로 필터링하여, 어깨 너비에 따른 광대 너비의 순수 상관 관계 신호만 추출합니다.
+- **Outlier Rejection**: 자세 맞춤 시 발생하는 사용자의 불필요한 움직임을 **RANSACRegressor**로 필터링하여, 어깨 너비에 따른 광대 너비의 순수 상관 관계 신호만 추출합니다.
 
 ---
 

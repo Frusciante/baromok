@@ -161,7 +161,7 @@ class DetectionScreen(QWidget):
             logger.error(f"프레임 처리 오류: {e}")
 
     def _update_posture_status(self, state: str, posture_type: str, probability: float):
-        posture_map = {"normal": "바른 자세", "forward_head": "거북목", "recline": "기댄 자세", "crossed_leg_estimated": "다리 꼬기", "chin_rest_estimated": "턱 받침", "baseline": "캘리브레이션 중"}
+        posture_map = {"normal": "바른 자세", "forward_head": "거북목", "recline": "기댄 자세", "chin_rest_estimated": "턱 받침", "baseline": "자세 맞춤 중"}
         self.posture_label.setText(f"{posture_map.get(posture_type, '알 수 없음')} ({probability:.1%})")
         state_text = {"normal": "바른 자세", "warning": "경고", "bad_posture": "나쁜 자세", "NORMAL": "바른 자세", "WARNING": "경고", "BAD_POSTURE": "나쁜 자세"}
         self.status_label.setText(state_text.get(state, "상태 알 수 없음"))

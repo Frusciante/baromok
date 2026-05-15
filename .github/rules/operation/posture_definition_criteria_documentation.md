@@ -108,8 +108,7 @@
 
 - 거북목 감도를 완화하려면
   - `posture_types.forward_head.primary_conditions`의 증가 퍼센트 임계값을 조정한다.
-- 다리 꼰 자세 확정 시간을 늘리려면
-  - `posture_types.crossed_leg_estimated.sustain_seconds`를 조정한다.
+- 턱 괸 자세 확정 시간을 늘리려면
 
 ## 7. 운영 규칙 키 범위
 

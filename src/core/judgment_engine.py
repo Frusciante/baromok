@@ -1,7 +1,7 @@
 """
 판정 엔진
 
-자세 판정 로직 구현 (4가지 자세)
+자세 판정 로직 구현 (3가지 자세)
 """
 
 import numpy as np
@@ -23,7 +23,6 @@ class PostureType(Enum):
 
     FORWARD_HEAD = "forward_head"  # 거북목
     RECLINE = "recline"  # 기댄 자세
-    CROSSED_LEG = "crossed_leg_estimated"  # 다리 꼰 자세
     CHIN_REST = "chin_rest_estimated"  # 턱 괸 자세
 
 
@@ -35,8 +34,6 @@ class PostureJudgmentResult:
     forward_head_triggered: bool
     recline_likelihood: float
     recline_triggered: bool
-    crossed_leg_likelihood: float
-    crossed_leg_triggered: bool
     chin_rest_likelihood: float
     chin_rest_triggered: bool
     dominant_posture: Optional[str]  # triggered된 자세 중 가장 확률이 높은 자세
@@ -63,7 +60,6 @@ class JudgmentEngine:
         self.weights = scoring_config.get("likelihood_weights", {
             "forward_head": {"face_near": 1.0},
             "recline": {"face_far": 1.0},
-            "crossed_leg": {"tilt": 0.7, "neck_offset": 0.3},
             "chin_rest": {"eye": 0.35, "shoulder": 0.2, "neck": 0.15, "hand": 0.3}
         })
         
@@ -79,7 +75,6 @@ class JudgmentEngine:
         self.posture_history: Dict[str, int] = {
             PostureType.FORWARD_HEAD.value: 0,
             PostureType.RECLINE.value: 0,
-            PostureType.CROSSED_LEG.value: 0,
             PostureType.CHIN_REST.value: 0,
         }
 
@@ -87,14 +82,12 @@ class JudgmentEngine:
         self.posture_start_times: Dict[str, Optional[float]] = {
             PostureType.FORWARD_HEAD.value: None,
             PostureType.RECLINE.value: None,
-            PostureType.CROSSED_LEG.value: None,
             PostureType.CHIN_REST.value: None,
         }
 
         self.posture_active_durations: Dict[str, float] = {
             PostureType.FORWARD_HEAD.value: 0.0,
             PostureType.RECLINE.value: 0.0,
-            PostureType.CROSSED_LEG.value: 0.0,
             PostureType.CHIN_REST.value: 0.0,
         }
 
@@ -105,11 +98,16 @@ class JudgmentEngine:
         self.likes_filters = {
             PostureType.FORWARD_HEAD.value: EMAFilter(alpha=ema_alpha),
             PostureType.RECLINE.value: EMAFilter(alpha=ema_alpha),
-            PostureType.CROSSED_LEG.value: EMAFilter(alpha=ema_alpha),
             PostureType.CHIN_REST.value: EMAFilter(alpha=ema_alpha),
         }
 
         logger.info("JudgmentEngine 초기화 완료")
+
+    def update_sensitivities(self, forward_head: float, recline: float):
+        """사용자 정의 감도 업데이트"""
+        self.forward_head_sensitivity = forward_head
+        self.recline_sensitivity = recline
+        logger.info(f"판정 엔진 감도 업데이트: 거북목={forward_head:.3f}, 기댄자세={recline:.3f}")
 
     def judge_single_frame(
         self, indicators: PostureIndicators
@@ -120,7 +118,7 @@ class JudgmentEngine:
         # Baseline 정보
         baseline = self.baseline_manager.get_baseline_metrics()
         if not baseline or not baseline.metrics:
-            return PostureJudgmentResult(0, False, 0, False, 0, False, 0, False, None, indicators.timestamp)
+            return PostureJudgmentResult(0, False, 0, False, 0, False, None, indicators.timestamp)
 
         # RANSAC 모델을 통한 기대 광대 거리 산출
         expected_cheek = max(1e-6, self.baseline_manager.get_expected_cheek(indicators.shoulder_width))
@@ -133,13 +131,11 @@ class JudgmentEngine:
         # 각 자세별 판정
         forward_head_raw = self._judge_forward_head(indicators, deviation)
         recline_raw = self._judge_recline(indicators, deviation)
-        crossed_leg_raw = self._judge_crossed_leg(indicators)
         chin_rest_raw = self._judge_chin_rest(indicators)
         
         # Likelihood Smoothing
         forward_head_like = self.likes_filters[PostureType.FORWARD_HEAD.value].process(forward_head_raw["likelihood"])
         recline_like = self.likes_filters[PostureType.RECLINE.value].process(recline_raw["likelihood"])
-        crossed_leg_like = self.likes_filters[PostureType.CROSSED_LEG.value].process(crossed_leg_raw["likelihood"])
         chin_rest_like = self.likes_filters[PostureType.CHIN_REST.value].process(chin_rest_raw["likelihood"])
 
         warning_threshold = self.config.get_state_machine_config().get("thresholds", {}).get("warning", 0.45)
@@ -147,7 +143,6 @@ class JudgmentEngine:
         candidates = {
             PostureType.FORWARD_HEAD.value: {"likelihood": forward_head_like, "triggered": forward_head_like >= warning_threshold},
             PostureType.RECLINE.value: {"likelihood": recline_like, "triggered": recline_like >= warning_threshold},
-            PostureType.CROSSED_LEG.value: {"likelihood": crossed_leg_like, "triggered": crossed_leg_like >= warning_threshold},
             PostureType.CHIN_REST.value: {"likelihood": chin_rest_like, "triggered": chin_rest_like >= warning_threshold},
         }
 
@@ -166,8 +161,6 @@ class JudgmentEngine:
             forward_head_triggered=candidates[PostureType.FORWARD_HEAD.value]["triggered"],
             recline_likelihood=recline_like,
             recline_triggered=candidates[PostureType.RECLINE.value]["triggered"],
-            crossed_leg_likelihood=crossed_leg_like,
-            crossed_leg_triggered=candidates[PostureType.CROSSED_LEG.value]["triggered"],
             chin_rest_likelihood=chin_rest_like,
             chin_rest_triggered=candidates[PostureType.CHIN_REST.value]["triggered"],
             dominant_posture=dominant_posture,
@@ -205,32 +198,6 @@ class JudgmentEngine:
 
         except Exception as e:
             logger.error(f"기댄 자세 판정 실패: {e}")
-            return {"likelihood": 0.0, "triggered": False}
-
-    def _judge_crossed_leg(self, indicators: PostureIndicators) -> Dict[str, Any]:
-        """다리 꼰 자세 판정"""
-        try:
-            criteria = self.config.get_posture_type_config(PostureType.CROSSED_LEG.value)
-            threshold = criteria["primary_conditions"]["abs_shoulder_tilt_deg"]["threshold"]
-
-            baseline = self.baseline_manager.get_baseline_metrics()
-            baseline_tilt = baseline.metrics.get("shoulder_tilt_deg", 0.0) if baseline and baseline.metrics else 0.0
-            shoulder_tilt = abs(indicators.shoulder_tilt_deg - baseline_tilt)
-            
-            tilt_score = self._normalize_score(shoulder_tilt / threshold, min_val=0.0, max_val=2.0)
-
-            neck_offset_change = 0.0
-            if baseline and baseline.metrics and baseline.metrics.get("neck_offset", 0.0) not in (0, None):
-                neck_offset_change = self.baseline_manager.calculate_change_percentage(indicators.neck_offset, "neck_offset")
-            neck_offset_score = self._normalize_score(neck_offset_change / self.neck_offset_sensitivity, min_val=0.0, max_val=2.0) if neck_offset_change > 0 else 0.0
-
-            w = self.weights.get("crossed_leg", {})
-            likelihood = w.get("tilt", 0.7) * tilt_score + w.get("neck_offset", 0.3) * neck_offset_score
-
-            return {"likelihood": likelihood, "triggered": False}
-
-        except Exception as e:
-            logger.error(f"다리 꼰 자세 판정 실패: {e}")
             return {"likelihood": 0.0, "triggered": False}
 
     def _judge_chin_rest(self, indicators: PostureIndicators) -> Dict[str, Any]:
@@ -271,7 +238,6 @@ class JudgmentEngine:
         triggered_map = {
             PostureType.FORWARD_HEAD.value: judgment.forward_head_triggered,
             PostureType.RECLINE.value: judgment.recline_triggered,
-            PostureType.CROSSED_LEG.value: judgment.crossed_leg_triggered,
             PostureType.CHIN_REST.value: judgment.chin_rest_triggered,
         }
 

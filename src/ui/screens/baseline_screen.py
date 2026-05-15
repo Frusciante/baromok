@@ -14,6 +14,7 @@ class BaselineScreen(QWidget):
     """초기 바른자세 촬영 화면 (20단계 Move-Burst 모델)"""
 
     baseline_captured_signal = pyqtSignal()
+    baseline_recommended_signal = pyqtSignal(float, float) # (forward_head, recline)
 
     def __init__(
         self,
@@ -33,7 +34,7 @@ class BaselineScreen(QWidget):
         self.wait_seconds = 5.0
         self.collect_seconds = 1.0
         
-        # 설정에서 캘리브레이션 파라미터 로드
+        # 설정에서 자세 맞춤 파라미터 로드
         if self.baseline_manager and self.baseline_manager.config:
             baseline_config = self.baseline_manager.config.get_baseline_config()
             capture_config = baseline_config.get("capture", {})
@@ -48,6 +49,7 @@ class BaselineScreen(QWidget):
         self.received_frame_count = 0
         self.valid_baseline_frame_count = 0
         self.is_capturing_baseline = False
+        self.current_remaining_sec = 0.0
 
         self.setup_ui()
 
@@ -61,7 +63,7 @@ class BaselineScreen(QWidget):
         layout.setContentsMargins(30, 20, 30, 20)
         layout.setSpacing(15)
 
-        title = QLabel("카메라 거리 캘리브레이션")
+        title = QLabel("자세 맞춤 (신체 측정)")
         title.setFont(
             QFont("Noto Sans KR", self.theme_manager.scale_pixel(24), QFont.Weight.Bold)
         )
@@ -112,7 +114,7 @@ class BaselineScreen(QWidget):
         self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value};")
         layout.addWidget(self.main_status_label)
 
-        self.sub_status_label = QLabel("캘리브레이션 시작 버튼을 눌러주세요")
+        self.sub_status_label = QLabel("자세 맞춤 시작 버튼을 눌러주세요")
         self.sub_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.sub_status_label.setFont(
             QFont("Noto Sans KR", self.theme_manager.scale_pixel(16))
@@ -164,7 +166,7 @@ class BaselineScreen(QWidget):
         layout.addWidget(self.recognition_label)
 
         # 시작 버튼
-        self.capture_btn = QPushButton("캘리브레이션 시작")
+        self.capture_btn = QPushButton("자세 맞춤 시작")
         self.capture_btn.setFixedHeight(self.theme_manager.scale_pixel(60))
         self.capture_btn.setFont(
             QFont("Noto Sans KR", self.theme_manager.scale_pixel(18), QFont.Weight.Bold)
@@ -217,7 +219,7 @@ class BaselineScreen(QWidget):
             self.camera_worker.start()
 
         self.capture_timer.start(100)
-        logger.info("캘리브레이션 캡처 시작")
+        logger.info("자세 맞춤 캡처 시작")
 
     def _update_progress(self):
         """진행 상태 업데이트 (대기 ↔ 수집)"""
@@ -229,14 +231,16 @@ class BaselineScreen(QWidget):
 
         if self.step_state == "WAIT":
             remaining = max(0.0, self.wait_seconds - (self.step_ticks / 10.0))
+            self.current_remaining_sec = remaining
             progress = int((self.step_ticks / (self.wait_seconds * 10)) * 100)
             
             self.main_status_label.setText("이동 하세요")
             self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value};")
             self.sub_status_label.setText(f"다음 거리로 이동해 주세요... ({remaining:.1f}초)")
+            self.sub_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value};")
             self.detail_label.setText(f"현재 단계({self.current_step}) 이동 대기 중")
             self.step_progress_bar.setValue(min(progress, 100))
-            self.step_progress_bar.setStyleSheet(f"QProgressBar::chunk {{ background-color: {Colors.GRAY_MEDIUM.value}; }}")
+            self.step_progress_bar.setStyleSheet(f"QProgressBar::chunk {{ background-color: {Colors.PRIMARY.value}; }}")
             
             if self.step_ticks >= int(self.wait_seconds * 10):
                 self.step_state = "COLLECT"
@@ -248,14 +252,16 @@ class BaselineScreen(QWidget):
                 
         elif self.step_state == "COLLECT":
             remaining = max(0.0, self.collect_seconds - (self.step_ticks / 10.0))
+            self.current_remaining_sec = remaining
             progress = int((self.step_ticks / (self.collect_seconds * 10)) * 100)
             
             self.main_status_label.setText("정지 하세요")
             self.main_status_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
             self.sub_status_label.setText(f"가만히 자세를 유지해 주세요... ({remaining:.1f}초)")
+            self.sub_status_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
             self.detail_label.setText(f"현재 단계({self.current_step}) 데이터 수집 중")
             self.step_progress_bar.setValue(min(progress, 100))
-            self.step_progress_bar.setStyleSheet(f"QProgressBar::chunk {{ background-color: {Colors.SECONDARY.value}; }}")
+            self.step_progress_bar.setStyleSheet(f"QProgressBar::chunk {{ background-color: {Colors.RED_DANGER.value}; }}")
             
             if self.step_ticks >= int(self.collect_seconds * 10):
                 self.total_progress_bar.setValue(self.current_step)
@@ -294,11 +300,6 @@ class BaselineScreen(QWidget):
 
             indicators = frame_data.get("indicators")
             
-            if self.step_state == "WAIT":
-                set_recognition_message(self.recognition_label, indicators is None)
-                return
-
-            self.received_frame_count += 1
             if indicators is None:
                 set_recognition_message(self.recognition_label, True)
                 return
@@ -342,19 +343,29 @@ class BaselineScreen(QWidget):
             self.camera_worker.set_baseline_mode(False)
             
         self.capture_btn.setEnabled(True)
-        self.capture_btn.setText("캘리브레이션 시작")
+        self.capture_btn.setText("자세 맞춤 시작")
         
         if success:
             self.total_progress_bar.setValue(self.total_steps)
             self.main_status_label.setText("분석 완료")
             self.main_status_label.setStyleSheet(f"color: {Colors.SECONDARY.value};")
             self.sub_status_label.setText(f"총 {self.valid_baseline_frame_count}개 유효 데이터 수집됨")
+            
+            # 추천 감도 계산 및 신호 발생
+            if self.baseline_manager:
+                noise = self.baseline_manager.max_inlier_deviation
+                # 노이즈의 약 3배(거북목), 1.5배(기댄자세) 수준으로 초기 권장값 설정
+                rec_fwd = max(0.05, min(0.20, noise * 3.0))
+                rec_rec = max(0.02, min(0.10, noise * 1.5))
+                logger.info(f"자세 맞춤 기반 권장 감도: 거북목={rec_fwd:.3f}, 기댄자세={rec_rec:.3f}")
+                self.baseline_recommended_signal.emit(rec_fwd, rec_rec)
+
             self.baseline_captured_signal.emit()
         else:
             self.main_status_label.setText("학습 실패")
             self.main_status_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
             self.sub_status_label.setText("데이터가 부족합니다.")
-            self.preview_label.setText("캘리브레이션에 실패했습니다.\n더 다양한 거리에서 정확한 자세를 유지하며 다시 시도해 주세요.")
+            self.preview_label.setText("자세 맞춤에 실패했습니다.\n더 다양한 거리에서 정확한 자세를 유지하며 다시 시도해 주세요.")
 
     def _fail_capture(self, message: str):
         """캡처 실패 처리"""

@@ -76,7 +76,7 @@ class CameraWorker(QThread):
         # True일 때는 랜드마크 추출과 지표 계산까지만 수행하고,
         # JudgmentEngine / StateMachine은 실행하지 않는다.
         self.is_baseline_mode = False
-        self.current_step = 0  # 캘리브레이션 단계 (0=대기, 1~6=수집)
+        self.current_step = 0  # 자세 맞춤 단계 (0=대기, 1~20=수집)
 
         # 프레임 카운터
         self.frame_count = 0
@@ -254,7 +254,7 @@ class CameraWorker(QThread):
                 low_latency=True # 속도 향상을 위해 항상 low_latency 적용
             )
             
-            # 캘리브레이션 단계 정보 주입 (디버그용)
+            # 자세 맞춤 단계 정보 주입 (디버그용)
             if indicators:
                 indicators.step_index = self.current_step
 
@@ -319,9 +319,6 @@ class CameraWorker(QThread):
                     likelihood_map = {
                         "forward_head": judgment_result.forward_head_likelihood,
                         "recline": judgment_result.recline_likelihood,
-                        "crossed_leg_estimated": (
-                            judgment_result.crossed_leg_likelihood
-                        ),
                         "chin_rest_estimated": judgment_result.chin_rest_likelihood,
                     }
                     probability = float(likelihood_map.get(posture_type, 0.0))
