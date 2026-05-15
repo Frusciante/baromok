@@ -33,7 +33,7 @@ MediaPipe 기반 실시간 상체 자세 분석 및 PyQt UI를 활용한 데스�
 
 ### 저장소 클론
 ```bash
-git clone <repository-url>
+git clone https://github.com/Frusciante/baromok.git
 cd baromok
 ```
 
