@@ -124,6 +124,79 @@ class FilterHelper:
         return float(alpha * current_value + (1 - alpha) * previous_value)
 
 
+class OneEuroFilter:
+    """One Euro 필터 (상태 저장, 벡터 지원)"""
+    
+    def __init__(self, min_cutoff: float = 0.05, beta: float = 0.005, d_cutoff: float = 1.0):
+        self.min_cutoff = min_cutoff
+        self.beta = beta
+        self.d_cutoff = d_cutoff
+        self.x_prev = None
+        self.dx_prev = None
+        self.t_prev = None
+
+    def _smoothing_factor(self, t_e: float, cutoff) -> np.ndarray:
+        r = 2 * math.pi * cutoff * t_e
+        return r / (r + 1.0)
+
+    def process(self, t: float, x: np.ndarray) -> np.ndarray:
+        # 입력 x가 리스트라면 np.array로 변환
+        x_arr = np.array(x, dtype=float)
+
+        if self.t_prev is None:
+            self.x_prev = x_arr
+            self.dx_prev = np.zeros_like(self.x_prev)
+            self.t_prev = t
+            return self.x_prev
+
+        t_e = t - self.t_prev
+        if t_e <= 0:
+            return self.x_prev
+        
+        # 1. 속도 계산
+        dx = (x_arr - self.x_prev) / t_e
+
+        # 2. 속도 스무딩
+        alpha_d = self._smoothing_factor(t_e, self.d_cutoff)
+        dx_hat = alpha_d * dx + (1.0 - alpha_d) * self.dx_prev
+
+        # 3. 컷오프 계산 (가변 컷오프)
+        cutoff = self.min_cutoff + self.beta * np.abs(dx_hat)
+
+        # 4. 값 스무딩
+        alpha = self._smoothing_factor(t_e, cutoff)
+        x_hat = alpha * x_arr + (1.0 - alpha) * self.x_prev
+
+        self.x_prev = x_hat
+        self.dx_prev = dx_hat
+        self.t_prev = t
+
+        return x_hat
+
+    def reset(self):
+        self.x_prev = None
+        self.dx_prev = None
+        self.t_prev = None
+
+
+class EMAFilter:
+    """EMA (Exponential Moving Average) 필터 (상태 저장)"""
+    
+    def __init__(self, alpha: float = 0.15):
+        self.alpha = alpha
+        self.value = None
+
+    def process(self, x: float) -> float:
+        if self.value is None:
+            self.value = float(x)
+        else:
+            self.value = self.alpha * float(x) + (1.0 - self.alpha) * self.value
+        return self.value
+
+    def reset(self):
+        self.value = None
+
+
 class NormalizationHelper:
     """정규화 헬퍼"""
     
@@ -229,3 +302,60 @@ class TimeHelper:
             프레임 수
         """
         return int(seconds * fps)
+
+
+class RansacQuadraticModel:
+    """RANSAC 기반 2차 곡선 적합 모델"""
+    
+    def __init__(self, min_samples: int = 10, residual_threshold: float = 0.01):
+        self.min_samples = min_samples
+        self.residual_threshold = residual_threshold
+        self.is_fitted = False
+        self.model = None
+
+    def fit(self, x_data: List[float], y_data: List[float]) -> bool:
+        """2차 곡선 모델 생성 (X: 어깨 너비 등, y: 예상 비율 등)"""
+        if len(x_data) < self.min_samples:
+            self.is_fitted = False
+            return False
+
+        try:
+            from sklearn.linear_model import RANSACRegressor
+            from sklearn.preprocessing import PolynomialFeatures
+            from sklearn.pipeline import make_pipeline
+
+            X = np.array(x_data).reshape(-1, 1)
+            y = np.array(y_data)
+
+            # PolynomialFeatures(degree=2, include_bias=True) -> [1, x, x^2]
+            # RANSACRegressor(fit_intercept=False) -> bias는 PolynomialFeatures에서 처리
+            self.model = make_pipeline(
+                PolynomialFeatures(degree=2, include_bias=True),
+                RANSACRegressor(
+                    residual_threshold=self.residual_threshold,
+                    random_state=42,
+                    max_trials=200
+                )
+            )
+            self.model.fit(X, y)
+            self.is_fitted = True
+            return True
+        except Exception:
+            self.is_fitted = False
+            return False
+
+    def predict(self, x: float) -> float:
+        """적합된 모델을 통한 예측값 반환"""
+        if not self.is_fitted or self.model is None:
+            return 0.0
+        
+        X = np.array([[x]])
+        try:
+            y_pred = self.model.predict(X)
+            return float(y_pred[0])
+        except Exception:
+            return 0.0
+            
+    def reset(self):
+        self.is_fitted = False
+        self.model = None

@@ -81,8 +81,14 @@ class baromokApp:
         # 엔진 컴포넌트 초기화 (Phase 2)
         logger.info("엔진 컴포넌트 초기화...")
         self.landmark_extractor = LandmarkExtractor("assets/models")
-        self.indicator_calculator = IndicatorCalculator()
+        self.indicator_calculator = IndicatorCalculator(self.config)
         self.baseline_manager = BaselineManager(self.config)
+        # ⬇ [추가] 앱 시작 시 기존 베이스라인 로드 시도
+        if self.baseline_manager.load_baseline_from_file():
+            logger.info("기존 베이스라인 로드 성공")
+        else:
+            logger.info("기존 베이스라인 없음 또는 로드 실패")
+
         self.judgment_engine = JudgmentEngine(self.config, self.baseline_manager)
         self.state_machine = StateMachine(self.config)
         self.state_machine.register_state_change_callback(self._handle_state_transition)
@@ -134,7 +140,7 @@ class baromokApp:
 
         # 의존성 주입과 함께 화면 생성
         self.baseline_screen = BaselineScreen(
-            self.theme_manager, self.camera_worker, self.baseline_manager
+            self.theme_manager, self.camera_worker, self.baseline_manager, self.sound_manager
         )
         self.hub_screen = HubScreen(self.theme_manager)
         self.settings_screen = SettingsScreen(
@@ -144,7 +150,7 @@ class baromokApp:
             self.theme_manager, self.session_manager
         )
         self.detection_screen = DetectionScreen(
-            self.theme_manager, self.camera_worker, self.session_manager
+            self.theme_manager, self.camera_worker, self.session_manager, self.baseline_manager
         )
 
         # 화면 등록
@@ -170,6 +176,9 @@ class baromokApp:
         )
         self.detection_screen.open_settings_signal.connect(
             lambda: self.switch_screen(2)  # Settings
+        )
+        self.detection_screen.open_baseline_signal.connect(
+            lambda: self.switch_screen(0)  # Baseline (재측정)
         )
         self.settings_screen.settings_saved_signal.connect(self._save_settings)
         self.settings_screen.back_to_hub_signal.connect(self._return_from_settings)

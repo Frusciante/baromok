@@ -13,6 +13,11 @@ class Colors(Enum):
 
     PURPLE_PRIMARY = "#4333A6"  # 보라 (주요 액션)
     PINK_PRIMARY = "#E85D75"  # 핑크 (강조/경고)
+    
+    # 별칭 (사용 편의성 및 코드 안정성 목적)
+    PRIMARY = PURPLE_PRIMARY
+    SECONDARY = PINK_PRIMARY
+    
     GRAY_LIGHT = "#F5F5F5"  # 배경 (밝음)
     GRAY_MEDIUM = "#CCCCCC"  # 테두리
     GRAY_DARK = "#999999"  # 텍스트 (약함)

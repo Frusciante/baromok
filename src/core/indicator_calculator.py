@@ -6,9 +6,11 @@
 import numpy as np
 from dataclasses import dataclass
 from typing import Tuple, Dict, Optional
-from src.utils.helpers import GeometryHelper, NormalizationHelper
+from src.utils.helpers import GeometryHelper, NormalizationHelper, EMAFilter
 from src.utils.logger import get_logger
 from collections import deque
+
+from src.config import ConfigManager
 
 logger = get_logger(__name__)
 
@@ -16,28 +18,46 @@ logger = get_logger(__name__)
 @dataclass
 class PostureIndicators:
     """자세 지표 데이터"""
-    cheek_distance: float  # 양쪽 광대 거리
+    cheek_distance: float  # 양쪽 광대 거리 (얼굴 길이/크기 척도로 사용)
     eye_distance: float  # 양쪽 눈 거리
-    face_shoulder_ratio: float  # cheek_distance / shoulder_width
     shoulder_width: float  # 양쪽 어깨 거리
     shoulder_tilt_deg: float  # 어깨 기울기 (도)
     neck_offset: float  # 목-어깨 정렬 오차
     eye_line_tilt: float  # 눈 수평선 기울기 (도)
     chin_occlusion: float  # 턱 가림 정도 (0~1)
     hand_near_face: bool  # 손이 얼굴 근처인가
+    hand_face_score: float # 손-얼굴 상호작용 점수 (신규)
     timestamp: float  # 타임스탬프
+    step_index: int = 0 # 캘리브레이션 단계 (디버그용)
 
 
 class IndicatorCalculator:
     """자세 지표 계산기"""
     
-    def __init__(self):
+    def __init__(self, config: Optional[ConfigManager] = None):
         """초기화"""
+        self.config = config
         self.geometry_helper = GeometryHelper()
         self.normalization_helper = NormalizationHelper()
         # 어깨 기울기 스무딩 버퍼
         self._shoulder_tilt_history = deque(maxlen=5)
-        logger.info("IndicatorCalculator 초기화 완료")
+        
+        # 설정에서 alpha 값 로드 (기본값 0.15)
+        alpha = 0.15
+        if self.config:
+            alpha = self.config.get_posture_criteria().get("filters", {}).get("indicator_ema", {}).get("alpha", 0.15)
+            
+        self.ema_filters = {
+            'cheek_distance': EMAFilter(alpha=alpha),
+            'eye_distance': EMAFilter(alpha=alpha),
+            'shoulder_width': EMAFilter(alpha=alpha),
+            'shoulder_tilt_deg': EMAFilter(alpha=alpha),
+            'neck_offset': EMAFilter(alpha=alpha),
+            'eye_line_tilt': EMAFilter(alpha=alpha),
+            'chin_occlusion': EMAFilter(alpha=alpha),
+            'hand_face_score': EMAFilter(alpha=alpha),
+        }
+        logger.info(f"IndicatorCalculator 초기화 완료 (alpha={alpha})")
     
     def calculate_cheek_distance(
         self, 
@@ -46,13 +66,6 @@ class IndicatorCalculator:
     ) -> float:
         """
         양쪽 광대뼈 간 거리 계산
-        
-        Args:
-            left_cheek: 왼쪽 광대 (정규화 좌표)
-            right_cheek: 오른쪽 광대 (정규화 좌표)
-            
-        Returns:
-            정규화된 거리 (0~1)
         """
         if left_cheek is None or right_cheek is None:
             return 0.0
@@ -70,13 +83,6 @@ class IndicatorCalculator:
     ) -> float:
         """
         양쪽 눈 간 거리 계산
-        
-        Args:
-            left_eye: 왼쪽 눈 (정규화 좌표)
-            right_eye: 오른쪽 눈 (정규화 좌표)
-            
-        Returns:
-            정규화된 거리 (0~1)
         """
         if left_eye is None or right_eye is None:
             return 0.0
@@ -94,13 +100,6 @@ class IndicatorCalculator:
     ) -> float:
         """
         양쪽 어깨 간 거리 계산
-        
-        Args:
-            left_shoulder: 왼쪽 어깨 (정규화 좌표)
-            right_shoulder: 오른쪽 어깨 (정규화 좌표)
-            
-        Returns:
-            정규화된 거리 (0~1)
         """
         if left_shoulder is None or right_shoulder is None:
             return 0.0
@@ -111,30 +110,6 @@ class IndicatorCalculator:
         distance = self.geometry_helper.calculate_distance(left, right)
         return float(np.clip(distance, 0.0, 1.0))
     
-    def calculate_face_shoulder_ratio(
-        self, 
-        cheek_distance: float, 
-        shoulder_width: float
-    ) -> float:
-        """
-        얼굴-어깨 비율 계산
-        
-        비율 증가: 머리가 카메라에 가까워짐 (거북목)
-        비율 감소: 머리가 카메라에서 멀어짐 (누운 자세)
-        
-        Args:
-            cheek_distance: 광대 거리
-            shoulder_width: 어깨 너비
-            
-        Returns:
-            비율 (0~2)
-        """
-        if shoulder_width == 0 or shoulder_width < 0.01:
-            return 0.0
-        
-        ratio = cheek_distance / shoulder_width
-        return float(np.clip(ratio, 0.0, 2.0))
-    
     def calculate_shoulder_tilt_degree(
         self, 
         left_shoulder: Tuple[float, float], 
@@ -142,17 +117,6 @@ class IndicatorCalculator:
     ) -> float:
         """
         좌우 어깨 기울기 계산 (도 단위)
-        
-        양수: 오른쪽 어깨가 높음
-        음수: 왼쪽 어깨가 높음
-        절댓값이 클수록 다리 꼬기 또는 비대칭 자세
-        
-        Args:
-            left_shoulder: 왼쪽 어깨 (정규화 좌표)
-            right_shoulder: 오른쪽 어깨 (정규화 좌표)
-            
-        Returns:
-            각도 (-90~90도)
         """
         if left_shoulder is None or right_shoulder is None:
             return 0.0
@@ -160,26 +124,14 @@ class IndicatorCalculator:
         left = np.array(left_shoulder)
         right = np.array(right_shoulder)
         
-        # 높이 차이 계산 (y축)
-        height_diff = right[1] - left[1]  # y축은 아래로 증가
+        height_diff = right[1] - left[1]
         width_diff = right[0] - left[0]
         
-        # 방어: x 차이가 거의 0이면 계산 불안정 -> 로그 및 0 반환
         if abs(width_diff) < 1e-3:
-            logger.warning(
-                f"어깨 x 차이 거의 0 (left={left_shoulder}, right={right_shoulder}), width_diff={width_diff:.6f}; 기울기 계산 불안정"
-            )
             return 0.0
 
-        # 각도 계산 (라디안)
-        angle_rad = np.arctan2(-height_diff, width_diff)  # 음수로 변환 (위가 양수가 되도록)
+        angle_rad = np.arctan2(-height_diff, width_diff)
         angle_deg = np.degrees(angle_rad)
-
-        # 극단값이 나오면 경고 로깅
-        if abs(angle_deg) >= 85.0:
-            logger.warning(
-                f"어깨 기울기 매우 큼: {angle_deg:.1f}deg (left={left_shoulder}, right={right_shoulder})"
-            )
 
         return float(np.clip(angle_deg, -90.0, 90.0))
     
@@ -191,21 +143,10 @@ class IndicatorCalculator:
     ) -> float:
         """
         목-어깨 정렬 오차 계산
-        
-        코와 어깨 중심의 수평 거리
-        
-        Args:
-            face_center: 얼굴 중심 (코)
-            left_shoulder: 왼쪽 어깨
-            right_shoulder: 오른쪽 어깨
-            
-        Returns:
-            정규화된 거리 (0~1)
         """
         if face_center is None or left_shoulder is None or right_shoulder is None:
             return 0.0
         
-        # 어깨 중심 계산
         shoulder_center_x = (left_shoulder[0] + right_shoulder[0]) / 2.0
         shoulder_center_y = (left_shoulder[1] + right_shoulder[1]) / 2.0
         
@@ -221,16 +162,7 @@ class IndicatorCalculator:
         right_eye: Tuple[float, float]
     ) -> float:
         """
-        눈 수평선과 프레임 수평선의 각도 차이
-        
-        큰 값: 머리가 기울어짐 (턱 괸 자세 가능성)
-        
-        Args:
-            left_eye: 왼쪽 눈 (정규화 좌표)
-            right_eye: 오른쪽 눈 (정규화 좌표)
-            
-        Returns:
-            각도 (-90~90도)
+        눈 수평선 기울기 계산
         """
         if left_eye is None or right_eye is None:
             return 0.0
@@ -248,39 +180,28 @@ class IndicatorCalculator:
     ) -> float:
         """
         손과 턱의 겹침 정도 계산
-        
-        Args:
-            chin_points: 턱 포인트 리스트
-            hand_tips: 손가락 팁 딕셔너리
-                      {'right_hand_tips': [...], 'left_hand_tips': [...]}
-            
-        Returns:
-            겹침 정도 (0~1)
         """
         if not chin_points or not hand_tips:
             return 0.0
         
-        occlusion_score = 0.0
-        total_hand_points = 0
+        threshold = 0.1
+        if self.config:
+            # 설정에서 임계값 로드 시도
+            try:
+                threshold = self.config.get_posture_criteria().get("chin_rest_estimated", {}).get("primary_conditions", {}).get("chin_occlusion", {}).get("threshold", 0.1)
+            except Exception:
+                pass
         
+        occlusion_score = 0.0
         for hand_key in ['right_hand_tips', 'left_hand_tips']:
             hand_points = hand_tips.get(hand_key, [])
-            if not hand_points:
-                continue
-            
             for hand_point in hand_points:
-                hand = np.array(hand_point[:2])  # (x, y) 만 사용
-                total_hand_points += 1
-                
-                # 턱 포인트와의 거리
+                hand = np.array(hand_point[:2])
                 for chin_point in chin_points:
                     chin = np.array(chin_point)
                     distance = self.geometry_helper.calculate_distance(chin, hand)
-                    
-                    # 거리가 가까울수록 겹침 점수 증가
-                    # threshold: 0.1 (얼굴 크기의 10%)
-                    if distance < 0.1:
-                        occlusion_score += (1.0 - distance / 0.1) * 0.1
+                    if distance < threshold:
+                        occlusion_score += (1.0 - distance / threshold) * 0.1
         
         return float(np.clip(occlusion_score, 0.0, 1.0))
     
@@ -288,135 +209,153 @@ class IndicatorCalculator:
         self, 
         hand_tips: dict, 
         face_center: Tuple[float, float],
-        threshold: float = 0.15
+        threshold: Optional[float] = None
     ) -> bool:
         """
         손이 얼굴 근처에 있는지 판단
-        
-        Args:
-            hand_tips: 손가락 팁 딕셔너리
-            face_center: 얼굴 중심 (코)
-            threshold: 거리 임계값 (얼굴 크기 대비 비율)
-            
-        Returns:
-            True if 손이 얼굴 근처, False otherwise
         """
         if face_center is None or not hand_tips:
             return False
         
-        face = np.array(face_center)
+        if threshold is None:
+            threshold = 0.15
+            if self.config:
+                try:
+                    threshold = self.config.get_posture_criteria().get("chin_rest_estimated", {}).get("primary_conditions", {}).get("hand_near_face", {}).get("threshold", 0.15)
+                except Exception:
+                    pass
         
+        face = np.array(face_center)
         for hand_key in ['right_hand_tips', 'left_hand_tips']:
             hand_points = hand_tips.get(hand_key, [])
             for hand_point in hand_points:
-                hand = np.array(hand_point[:2])  # (x, y) 만 사용
+                hand = np.array(hand_point[:2])
                 distance = self.geometry_helper.calculate_distance(hand, face)
-                
                 if distance < threshold:
                     return True
-        
         return False
     
-    def calculate_all_indicators(
+    def calculate_hand_near_score(
         self, 
+        hand_tips: dict, 
+        face_center: Tuple[float, float]
+    ) -> float:
+        """
+        손이 얼굴 근처에 있는 정도를 점수로 계산
+        """
+        if face_center is None or not hand_tips:
+            return 0.0
+            
+        min_distance = 1.0
+        face = np.array(face_center)
+        for hand_key in ['right_hand_tips', 'left_hand_tips']:
+            hand_points = hand_tips.get(hand_key, [])
+            for hand_point in hand_points:
+                hand = np.array(hand_point[:2])
+                distance = self.geometry_helper.calculate_distance(hand, face)
+                if distance < min_distance:
+                    min_distance = distance
+                    
+        min_d = 0.1
+        max_d = 0.3
+        score = 1.0 - (min_distance - min_d) / (max_d - min_d)
+        return float(np.clip(score, 0.0, 1.0))
+    
+    def calculate_all_indicators(
+        self,
         landmarks: Dict[str, any],
-        timestamp: float = 0.0
+        timestamp: float = 0.0,
+        low_latency: bool = False
     ) -> Optional[PostureIndicators]:
         """
         모든 자세 지표 계산
-        
-        Args:
-            landmarks: get_relevant_landmarks()의 반환값
-            timestamp: 타임스탬프
-            
-        Returns:
-            PostureIndicators 또는 None (필수 랜드마크 없을 때)
         """
-        # 필수 랜드마크 확인
-        if (landmarks.get('left_cheek') is None or 
+        if (landmarks.get('left_cheek') is None or
             landmarks.get('right_cheek') is None or
             landmarks.get('left_shoulder') is None or
             landmarks.get('right_shoulder') is None):
-            logger.debug("필수 랜드마크 부재")
             return None
-        
-        try:
-            cheek_dist = self.calculate_cheek_distance(
-                landmarks['left_cheek'], 
-                landmarks['right_cheek']
-            )
-            
-            eye_dist = self.calculate_eye_distance(
-                landmarks.get('left_eye'),
-                landmarks.get('right_eye')
-            )
-            
-            shoulder_w = self.calculate_shoulder_width(
-                landmarks['left_shoulder'],
-                landmarks['right_shoulder']
-            )
-            
-            face_ratio = self.calculate_face_shoulder_ratio(cheek_dist, shoulder_w)
-            
-            shoulder_tilt = self.calculate_shoulder_tilt_degree(
-                landmarks['left_shoulder'],
-                landmarks['right_shoulder']
-            )
-            # 스무딩: 최근 값의 중앙값 사용
+
+        # 필터 계수 조정
+        base_alpha = 0.15
+        if self.config:
             try:
-                self._shoulder_tilt_history.append(shoulder_tilt)
-                if len(self._shoulder_tilt_history) > 0:
-                    smoothed = float(np.median(list(self._shoulder_tilt_history)))
-                    shoulder_tilt = smoothed
+                base_alpha = self.config.get_posture_criteria().get("filters", {}).get("indicator_ema", {}).get("alpha", 0.15)
             except Exception:
                 pass
             
-            neck_off = self.calculate_neck_offset(
-                landmarks.get('face_center'),
-                landmarks['left_shoulder'],
-                landmarks['right_shoulder']
+        current_alpha = 0.5 if low_latency else base_alpha
+        for filter_obj in self.ema_filters.values():
+            filter_obj.alpha = current_alpha
+
+        try:
+            cheek_dist_raw = self.calculate_cheek_distance(landmarks['left_cheek'], landmarks['right_cheek'])            
+            eye_dist_raw = self.calculate_eye_distance(landmarks.get('left_eye'), landmarks.get('right_eye'))
+            shoulder_w_raw = self.calculate_shoulder_width(landmarks['left_shoulder'], landmarks['right_shoulder'])
+            
+            cheek_dist = self.ema_filters['cheek_distance'].process(cheek_dist_raw)
+            shoulder_w = self.ema_filters['shoulder_width'].process(shoulder_w_raw)
+            eye_dist = self.ema_filters['eye_distance'].process(eye_dist_raw)
+            
+            shoulder_tilt = self.calculate_shoulder_tilt_degree(landmarks['left_shoulder'], landmarks['right_shoulder'])
+            try:
+                self._shoulder_tilt_history.append(shoulder_tilt)
+                if len(self._shoulder_tilt_history) > 0:
+                    shoulder_tilt = float(np.median(list(self._shoulder_tilt_history)))
+            except Exception:
+                pass
+            
+            neck_off = self.calculate_neck_offset(landmarks.get('face_center'), landmarks['left_shoulder'], landmarks['right_shoulder'])
+            eye_tilt = self.calculate_eye_line_tilt(landmarks.get('left_eye'), landmarks.get('right_eye'))
+            chin_occ = self.calculate_chin_occlusion(landmarks.get('chin_points', []), {
+                'right_hand_tips': landmarks.get('right_hand_tips', []),
+                'left_hand_tips': landmarks.get('left_hand_tips', [])
+            })
+            
+            hand_near = self.calculate_hand_near_face({
+                'right_hand_tips': landmarks.get('right_hand_tips', []),
+                'left_hand_tips': landmarks.get('left_hand_tips', [])
+            }, landmarks.get('face_center'))
+            
+            near_score = self.calculate_hand_near_score({
+                'right_hand_tips': landmarks.get('right_hand_tips', []),
+                'left_hand_tips': landmarks.get('left_hand_tips', [])
+            }, landmarks.get('face_center'))
+            
+            # 설정에서 손-얼굴 가중치 로드
+            hf_weights = {"near_score": 0.5, "occlusion_score": 0.5}
+            if self.config:
+                scoring_config = self.config.get_frame_scoring_config()
+                hf_weights = scoring_config.get("hand_face_weights", hf_weights)
+            
+            hand_face_score_raw = (
+                hf_weights.get("near_score", 0.5) * near_score + 
+                hf_weights.get("occlusion_score", 0.5) * chin_occ
             )
             
-            eye_tilt = self.calculate_eye_line_tilt(
-                landmarks.get('left_eye'),
-                landmarks.get('right_eye')
-            )
-            
-            chin_occ = self.calculate_chin_occlusion(
-                landmarks.get('chin_points', []),
-                {
-                    'right_hand_tips': landmarks.get('right_hand_tips', []),
-                    'left_hand_tips': landmarks.get('left_hand_tips', [])
-                }
-            )
-            
-            hand_near = self.calculate_hand_near_face(
-                {
-                    'right_hand_tips': landmarks.get('right_hand_tips', []),
-                    'left_hand_tips': landmarks.get('left_hand_tips', [])
-                },
-                landmarks.get('face_center'),
-                threshold=0.15
-            )
+            shoulder_tilt = self.ema_filters['shoulder_tilt_deg'].process(shoulder_tilt)
+            neck_off = self.ema_filters['neck_offset'].process(neck_off)
+            eye_tilt = self.ema_filters['eye_line_tilt'].process(eye_tilt)
+            chin_occ = self.ema_filters['chin_occlusion'].process(chin_occ)
+            hand_face_score = self.ema_filters['hand_face_score'].process(hand_face_score_raw)
             
             return PostureIndicators(
                 cheek_distance=cheek_dist,
                 eye_distance=eye_dist,
-                face_shoulder_ratio=face_ratio,
                 shoulder_width=shoulder_w,
                 shoulder_tilt_deg=shoulder_tilt,
                 neck_offset=neck_off,
                 eye_line_tilt=eye_tilt,
                 chin_occlusion=chin_occ,
                 hand_near_face=hand_near,
+                hand_face_score=hand_face_score,
                 timestamp=timestamp
             )
-        
         except Exception as e:
             logger.error(f"지표 계산 실패: {e}")
             return None
 
 
-def create_indicator_calculator() -> IndicatorCalculator:
+def create_indicator_calculator(config: Optional[ConfigManager] = None) -> IndicatorCalculator:
     """지표 계산기 생성 (팩토리 함수)"""
-    return IndicatorCalculator()
+    return IndicatorCalculator(config)
