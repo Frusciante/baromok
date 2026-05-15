@@ -68,7 +68,6 @@ class JudgmentEngine:
         })
         
         # 기본 감도 및 보정 계수
-        self.drift_gate_k = scoring_config.get("drift_gate_k", 3.0)
         sensitivities = scoring_config.get("sensitivities", {})
         
         # 기술 사양서 기준: Recline 4% (0.04), Forward Head 10% (0.10)
@@ -130,14 +129,10 @@ class JudgmentEngine:
         # 편차 계산 (Deviation)
         # expected_cheek 대비 얼마나 커졌거나 작아졌는가
         deviation = (measured_cheek - expected_cheek) / expected_cheek
-        
-        # Drift-Gate: 거리 이동 시 발생하는 오탐 방지
-        # 급격한 이동 시(deviation의 절대값이 클 때) 절대값 신호의 영향력을 줄인다.
-        drift_gate = float(np.clip(1.0 - self.drift_gate_k * abs(deviation), 0.0, 1.0))
 
         # 각 자세별 판정
-        forward_head_raw = self._judge_forward_head(indicators, deviation, drift_gate)
-        recline_raw = self._judge_recline(indicators, deviation, drift_gate)
+        forward_head_raw = self._judge_forward_head(indicators, deviation)
+        recline_raw = self._judge_recline(indicators, deviation)
         crossed_leg_raw = self._judge_crossed_leg(indicators)
         chin_rest_raw = self._judge_chin_rest(indicators)
         
@@ -179,15 +174,16 @@ class JudgmentEngine:
             timestamp=indicators.timestamp,
         )
 
-    def _judge_forward_head(self, indicators: PostureIndicators, deviation: float, drift_gate: float) -> Dict[str, Any]:
+    def _judge_forward_head(self, indicators: PostureIndicators, deviation: float) -> Dict[str, Any]:
         """거북목 자세 판정 (Technical Summary 준수)"""
         try:
             # Forward Head: deviation > 0 (얼굴이 커짐)
             # 허용 오차: self.forward_head_sensitivity (예: 0.10)
-            score = self._normalize_score(deviation / self.forward_head_sensitivity, min_val=0.0, max_val=2.0) if deviation > 0 else 0.0
-            
-            # Drift-Gate 적용
-            score *= drift_gate
+            if deviation <= 0:
+                return {"likelihood": 0.0, "triggered": False}
+                
+            # deviation이 sensitivity(0.10)에 도달하면 0.5, 그 이상이면 선형 증가
+            score = (deviation / self.forward_head_sensitivity) * 0.5
             
             return {"likelihood": float(np.clip(score, 0.0, 1.0)), "triggered": False}
 
@@ -195,15 +191,15 @@ class JudgmentEngine:
             logger.error(f"거북목 판정 실패: {e}")
             return {"likelihood": 0.0, "triggered": False}
 
-    def _judge_recline(self, indicators: PostureIndicators, deviation: float, drift_gate: float) -> Dict[str, Any]:
+    def _judge_recline(self, indicators: PostureIndicators, deviation: float) -> Dict[str, Any]:
         """기댄 자세 판정 (Technical Summary 준수)"""
         try:
             # Recline: deviation < 0 (얼굴이 작아짐)
             # 허용 오차: self.recline_sensitivity (예: 0.04)
-            score = self._normalize_score(abs(deviation) / self.recline_sensitivity, min_val=0.0, max_val=2.0) if deviation < 0 else 0.0
-
-            # Drift-Gate 적용
-            score *= drift_gate
+            if deviation >= 0:
+                return {"likelihood": 0.0, "triggered": False}
+                
+            score = (abs(deviation) / self.recline_sensitivity) * 0.5
             
             return {"likelihood": float(np.clip(score, 0.0, 1.0)), "triggered": False}
 

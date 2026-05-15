@@ -169,7 +169,6 @@
       }
     },
     "ratio_scale_k": 1.5,
-    "drift_gate_k": 3.0,
     "score_normalization_max": 2.0,
     "hand_face_weights": {
       "near_score": 0.5,

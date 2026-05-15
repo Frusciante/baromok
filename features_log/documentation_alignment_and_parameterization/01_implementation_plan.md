@@ -27,7 +27,7 @@
 
 ### Step 2: JSON 스키마 확장
 - `baseline.capture` 하위 키 확장 (`wait_seconds`, `collect_seconds`, `expected_samples`, `minimum_valid_frames`)
-- `frame_scoring` 하위 키 확장 (`likelihood_weights`, `ratio_scale_k`, `drift_gate_k`, `score_normalization_max`, `hand_face_weights`)
+- `frame_scoring` 하위 키 확장 (`likelihood_weights`, `ratio_scale_k`, `score_normalization_max`, `hand_face_weights`)
 
 ### Step 3: 코드 반영
 - `BaselineScreen.py`: JSON 기반 동적 UI 로직 구현

@@ -83,9 +83,7 @@ def test_2_judgment_logic():
         assert res_norm.forward_head_likelihood < 0.1
         
         # 2. 거북목 유도 (편차 +15% -> 10% 기준 초과)
-        # deviation = 0.15. score = 0.15 / 0.10 = 1.5. normalize(1.5, 0, 2.0) = 0.75.
-        # drift_gate = max(0, 1 - 3.0 * 0.15) = 0.55.
-        # final = 0.75 * 0.55 = 0.4125
+        # score = (0.15 / 0.10) * 0.5 = 0.75
         forward_ind = PostureIndicators(
             cheek_distance=0.115, shoulder_width=0.3,
             eye_distance=0.05, shoulder_tilt_deg=0.0,
@@ -94,13 +92,10 @@ def test_2_judgment_logic():
         )
         res_fwd = je.judge_single_frame(forward_ind)
         logger.info(f"Forward (+15%): Like={res_fwd.forward_head_likelihood:.4f}")
-        # 0.4125 근처여야 함.
-        assert res_fwd.forward_head_likelihood > 0.3, f"거북목 감지 실패: {res_fwd.forward_head_likelihood}"
+        assert res_fwd.forward_head_likelihood >= 0.75, f"거북목 감지 실패: {res_fwd.forward_head_likelihood}"
         
         # 3. 기댄 자세 유도 (편차 -6% -> 4% 기준 초과)
-        # deviation = -0.06. abs_dev = 0.06. score = 0.06 / 0.04 = 1.5. normalize = 0.75.
-        # drift_gate = max(0, 1 - 3.0 * 0.06) = 0.82.
-        # final = 0.75 * 0.82 = 0.615
+        # abs_dev = 0.06. score = (0.06 / 0.04) * 0.5 = 0.75
         recline_ind = PostureIndicators(
             cheek_distance=0.094, shoulder_width=0.3,
             eye_distance=0.05, shoulder_tilt_deg=0.0,
