@@ -52,18 +52,18 @@
       "primary_conditions": {
         "cheek_distance_baseline_change_percent": {
           "operator": ">=",
-          "threshold_percent": 8,
+          "threshold_percent": 2,
           "tuning_range_percent": {
-            "min": 8,
-            "max": 12
+            "min": 2,
+            "max": 6
           }
         },
         "face_shoulder_ratio_baseline_change_percent": {
           "operator": ">=",
-          "threshold_percent": 15
+          "threshold_percent": 6
         }
       },
-      "sustain_seconds": 2
+      "sustain_seconds": 0.5
     },
     "crossed_leg_estimated": {
       "display_label": "다리 꼰 자세 추정",
