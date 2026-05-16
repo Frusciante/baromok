@@ -4,6 +4,7 @@
 """
 
 import matplotlib
+import matplotlib.cm as cm
 from datetime import datetime
 from typing import Any
 
@@ -23,6 +24,122 @@ import logging
 from src.ui.styles.theme import ThemeManager, Colors
 
 logger = logging.getLogger(__name__)
+
+
+class CalibrationScatterChart(QWidget):
+    """자세 맞춤 실시간 산점도 차트"""
+
+    def __init__(self, theme_manager: ThemeManager):
+        super().__init__()
+        self.theme_manager = theme_manager
+
+        # Figure 생성
+        dpi_scale = theme_manager.dpi_scale
+        figsize = (6 * dpi_scale, 4 * dpi_scale)
+        self.figure = Figure(figsize=figsize, dpi=100)
+        self.figure.patch.set_facecolor(Colors.WHITE.value)
+
+        self.canvas = FigureCanvas(self.figure)
+        
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.canvas)
+        self.setLayout(layout)
+
+        self.ax = self.figure.add_subplot(111)
+        
+        self.points_x = []
+        self.points_y = []
+        self.points_colors = []
+        
+        self._init_axes()
+        logger.info("자세 맞춤 차트 초기화 완료")
+
+    def _init_axes(self):
+        self.ax.clear()
+        self.ax.set_title("어깨 너비 vs 광대 거리 분포", fontsize=12, fontweight="bold")
+        self.ax.set_xlabel("어깨 너비 (Normalized)", fontsize=10)
+        self.ax.set_ylabel("광대 거리 (Normalized)", fontsize=10)
+        self.ax.set_xlim(0.1, 0.7) # 대략적인 범위 설정
+        self.ax.set_ylim(0.05, 0.3)
+        self.ax.grid(True, linestyle="--", alpha=0.3)
+        self.figure.tight_layout()
+
+    def update_live_point(self, x: float, y: float, is_collecting: bool = False, step: int = 0, total_steps: int = 20):
+        """실시간 포인트 및 수집된 포인트 업데이트"""
+        if x <= 0 or y <= 0:
+            # 좌표가 없으면 그리지 않음 (오버레이가 제거되었으므로 갱신 불필요)
+            return
+
+        # 1. 수집 중인 경우 포인트 저장
+        if is_collecting and step > 0:
+            self.points_x.append(x)
+            self.points_y.append(y)
+            # 무지개색 계산
+            color = cm.rainbow((step - 1) / max(1, total_steps - 1) * 0.8)
+            self.points_colors.append(color)
+
+        # 2. 화면 갱신
+        self.ax.clear()
+        self._init_axes()
+        
+        # 기존 포인트들 그리기
+        if self.points_x:
+            self.ax.scatter(self.points_x, self.points_y, c=self.points_colors, s=20, alpha=0.5, edgecolors='none')
+
+        # 현재 커서
+        cursor_color = Colors.RED_DANGER.value if is_collecting else Colors.PRIMARY.value
+        cursor_size = 120 if not is_collecting else 60
+        self.ax.scatter([x], [y], color=cursor_color, s=cursor_size, marker='x', linewidths=2.5, label="현재 위치")
+        
+        # 동적 범위 조절
+        if self.points_x:
+            all_x = self.points_x + [x]
+            all_y = self.points_y + [y]
+            self.ax.set_xlim(min(all_x) * 0.9, max(all_x) * 1.1)
+            self.ax.set_ylim(min(all_y) * 0.9, max(all_y) * 1.1)
+
+        self.canvas.draw_idle()
+
+        # 1. 수집 중인 경우 포인트 저장
+        if is_collecting and step > 0:
+            self.points_x.append(x)
+            self.points_y.append(y)
+            # 무지개색 계산
+            color = cm.rainbow((step - 1) / max(1, total_steps - 1) * 0.8)
+            self.points_colors.append(color)
+
+        # 2. 화면 갱신
+        self.ax.clear()
+        self._init_axes()
+        
+        # 기존 포인트들 그리기
+        if self.points_x:
+            self.ax.scatter(self.points_x, self.points_y, c=self.points_colors, s=20, alpha=0.5, edgecolors='none')
+
+        # 현재 커서 (이동 중일 때 더 강조)
+        # Colors 클래스에 PRIMARY, SECONDARY, RED_DANGER, PURPLE_PRIMARY 멤버가 있는지 확인됨
+        cursor_color = Colors.RED_DANGER.value if is_collecting else Colors.PRIMARY.value
+        cursor_size = 120 if not is_collecting else 60
+        self.ax.scatter([x], [y], color=cursor_color, s=cursor_size, marker='x', linewidths=2.5, label="현재 위치")
+        
+        # 동적 범위 조절
+        if self.points_x:
+            all_x = self.points_x + [x]
+            all_y = self.points_y + [y]
+            self.ax.set_xlim(min(all_x) * 0.9, max(all_x) * 1.1)
+            self.ax.set_ylim(min(all_y) * 0.9, max(all_y) * 1.1)
+
+        self.canvas.draw_idle()
+
+    def clear(self):
+        """데이터 초기화"""
+        self.points_x = []
+        self.points_y = []
+        self.points_colors = []
+        self.ax.clear()
+        self._init_axes()
+        self.canvas.draw()
 
 
 class StatisticsLineChart(QWidget):

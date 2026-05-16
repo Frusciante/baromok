@@ -27,7 +27,6 @@ class PostureIndicators:
     chin_occlusion: float  # 턱 가림 정도 (0~1)
     hand_near_face: bool  # 손이 얼굴 근처인가
     hand_face_score: float # 손-얼굴 상호작용 점수 (신규)
-    face_shoulder_ratio: float  # 얼굴 크기 / 어깨 너비 비율
     timestamp: float  # 타임스탬프
     step_index: int = 0 # 캘리브레이션 단계 (디버그용)
 
@@ -57,7 +56,6 @@ class IndicatorCalculator:
             'eye_line_tilt': EMAFilter(alpha=alpha),
             'chin_occlusion': EMAFilter(alpha=alpha),
             'hand_face_score': EMAFilter(alpha=alpha),
-            'face_shoulder_ratio': EMAFilter(alpha=alpha),
         }
         logger.info(f"IndicatorCalculator 초기화 완료 (alpha={alpha})")
     
@@ -136,20 +134,6 @@ class IndicatorCalculator:
         angle_deg = np.degrees(angle_rad)
 
         return float(np.clip(angle_deg, -90.0, 90.0))
-    
-    def calculate_face_shoulder_ratio(
-        self,
-        cheek_distance: float,
-        shoulder_width: float
-    ) -> float:
-        """
-        얼굴 크기 대비 어깨 너비 비율 계산 (거리 메트릭)
-        """
-        if shoulder_width < 1e-3:
-            return 0.0
-        
-        ratio = cheek_distance / shoulder_width
-        return float(np.clip(ratio, 0.0, 1.0))
     
     def calculate_neck_offset(
         self, 
@@ -355,10 +339,6 @@ class IndicatorCalculator:
             chin_occ = self.ema_filters['chin_occlusion'].process(chin_occ)
             hand_face_score = self.ema_filters['hand_face_score'].process(hand_face_score_raw)
             
-            # 얼굴-어깨 비율 계산 및 필터링
-            face_shoulder_ratio_raw = self.calculate_face_shoulder_ratio(cheek_dist, shoulder_w)
-            face_shoulder_ratio = self.ema_filters['face_shoulder_ratio'].process(face_shoulder_ratio_raw)
-            
             return PostureIndicators(
                 cheek_distance=cheek_dist,
                 eye_distance=eye_dist,
@@ -369,7 +349,6 @@ class IndicatorCalculator:
                 chin_occlusion=chin_occ,
                 hand_near_face=hand_near,
                 hand_face_score=hand_face_score,
-                face_shoulder_ratio=face_shoulder_ratio,
                 timestamp=timestamp
             )
         except Exception as e:

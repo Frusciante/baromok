@@ -27,7 +27,7 @@ class PostureSettings(BaseSettings):
             판정 기준 딕셔너리
 
         Raises:
-            FileNotFoundError: JSON 파일을 찾을 수 없음
+            FileNotFoundError: JSON 파일을 찾을 수 없습니다
             json.JSONDecodeError: JSON 파싱 실패
             ValueError: 스키마 검증 실패
         """
@@ -227,18 +227,51 @@ class SettingsConfig:
     # 자동 시작
     auto_start_detection: bool = False
 
+    # 감도 설정 (기본값은 None이며 로드 시 JSON에서 가져옴)
+    forward_head_sensitivity: Optional[float] = None
+    recline_sensitivity: Optional[float] = None
+
+    # 자세 맞춤 기반 권장(최신 오차 기반) 감도 저장 (초기화 시 사용)
+    recommended_forward_head: Optional[float] = None
+    recommended_recline: Optional[float] = None
+
     @classmethod
-    def load_from_json(cls, file_path: str) -> "SettingsConfig":
+    def load_from_json(cls, file_path: str, config_manager: Optional[ConfigManager] = None) -> "SettingsConfig":
         """JSON 파일에서 설정 로드"""
         try:
+            instance = cls()
+            
+            # JSON 파일 로드
+            data = {}
             if Path(file_path).exists():
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                # 유효한 필드만 필터링
-                field_names = {f.name for f in fields(cls)}
-                filtered_data = {k: v for k, v in data.items() if k in field_names}
-                return cls(**filtered_data)
-            return cls()
+            
+            # 필드 채우기
+            field_names = {f.name for f in fields(cls)}
+            for k, v in data.items():
+                if k in field_names:
+                    setattr(instance, k, v)
+            
+            # 민감도 기본값 적용 (JSON 기준 파일에서 로드)
+            if config_manager:
+                scoring_config = config_manager.get_frame_scoring_config()
+                sensitivities = scoring_config.get("sensitivities", {})
+                
+                # 현재 설정값이 없으면 기본값(Factory Default) 사용
+                if instance.forward_head_sensitivity is None:
+                    instance.forward_head_sensitivity = sensitivities.get("forward_head", 0.10)
+                if instance.recline_sensitivity is None:
+                    instance.recline_sensitivity = sensitivities.get("recline", 0.04)
+                
+                # 권장값이 없으면 역시 기본값으로 초기화
+                if instance.recommended_forward_head is None:
+                    instance.recommended_forward_head = sensitivities.get("forward_head", 0.10)
+                if instance.recommended_recline is None:
+                    instance.recommended_recline = sensitivities.get("recline", 0.04)
+                    
+            return instance
+            
         except Exception as e:
             logger.warning("설정 파일 로드 실패, 기본값 사용: %s", e)
             return cls()
@@ -252,3 +285,12 @@ class SettingsConfig:
             logger.info("설정 저장 완료: %s", file_path)
         except Exception as e:
             logger.error("설정 저장 실패: %s", e)
+
+    def reset_to_defaults(self, config_manager: ConfigManager):
+        """기본값으로 초기화 (최신 자세 맞춤 권장값 사용)"""
+        if self.recommended_forward_head is not None:
+            self.forward_head_sensitivity = self.recommended_forward_head
+        if self.recommended_recline is not None:
+            self.recline_sensitivity = self.recommended_recline
+            
+        logger.info(f"민감도 설정이 권장값으로 초기화되었습니다: Fwd={self.forward_head_sensitivity:.3f}, Rec={self.recline_sensitivity:.3f}")

@@ -223,7 +223,7 @@ criteria_path = Path(__file__).parent.parent / ".github" / ...
 
 ## 5. 문서
 
-- 구현 계획서: `.github/rules/features_log/posture_measurement_system/01_implementation_plan.md`
+- 구현 계획서: `features_log/posture_measurement_system/01_implementation_plan.md`
 - 판정 기준 문서: `.github/rules/posture_definition.md`
 - 운영 규칙: `.github/rules/operation/posture_operation.md`
 - 판정 기준 JSON: `.github/rules/operation/posture_definition_criteria.json`

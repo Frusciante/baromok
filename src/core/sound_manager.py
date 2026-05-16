@@ -49,3 +49,10 @@ class SoundManager:
             logger.info(f"알림음 재생 완료: 음량={volume_percent}%")
         except Exception as e:
             logger.error(f"알림음 재생 실패: {type(e).__name__}: {e}")
+
+    def play_beep(self, frequency: int, duration_ms: int):
+        """커스텀 주파수와 길이로 비프음 재생"""
+        try:
+            winsound.Beep(frequency, duration_ms)
+        except Exception as e:
+            logger.error(f"비프음 재생 실패: {e}")

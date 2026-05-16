@@ -86,21 +86,26 @@ class StateMachine:
         
         try:
             state_machine_config = self.config.get_state_machine_config()
+            temporal_validation = state_machine_config.get("temporal_validation", {})
+            min_duration = temporal_validation.get("min_duration_sec", 1.5)
+            min_hold = temporal_validation.get("min_state_hold_sec", 1.8)
+            
+            # Hysteresis 방어 로직: 상태를 변경한 지 일정 시간이 지나지 않았으면 상태 유지 (깜빡임 방지)
+            if time_in_previous_state < min_hold and self.current_state != PostureState.NORMAL:
+                return self.current_state
             
             if self.current_state == PostureState.NORMAL:
                 if confirmed_posture is not None:
-                    # 나쁜 자세 감지됨
                     self._transition_to(PostureState.WARNING, confirmed_posture)
                     logger.info(f"상태 전이: NORMAL → WARNING (자세: {confirmed_posture})")
             
             elif self.current_state == PostureState.WARNING:
                 if confirmed_posture is None:
-                    # 나쁜 자세 해제
                     self._transition_to(PostureState.NORMAL, None)
                     logger.info("상태 전이: WARNING → NORMAL (자세 정상화)")
                 else:
-                    # 나쁜 자세 지속 (3초 이상이면 BAD_POSTURE로)
-                    if time_in_previous_state >= 3.0:
+                    # 나쁜 자세 지정된 시간(min_duration) 이상 지속 시 BAD_POSTURE로 전이
+                    if time_in_previous_state >= min_duration:
                         self._transition_to(PostureState.BAD_POSTURE, confirmed_posture)
                         logger.warning(
                             f"상태 전이: WARNING → BAD_POSTURE (자세: {confirmed_posture}, "
@@ -109,12 +114,11 @@ class StateMachine:
             
             elif self.current_state == PostureState.BAD_POSTURE:
                 if confirmed_posture is None:
-                    # 나쁜 자세 완화 (1초 이상 지속되면)
-                    if time_in_previous_state >= 1.0:
+                    # 나쁜 자세 완화 (min_duration 시간 동안 완전히 정상 유지 시 WARNING으로 강등)
+                    if time_in_previous_state >= min_duration:
                         self._transition_to(PostureState.WARNING, None)
                         logger.info(f"상태 전이: BAD_POSTURE → WARNING (자세 개선, {time_in_previous_state:.1f}초)")
                 else:
-                    # 나쁜 자세 지속
                     self._transition_to(PostureState.BAD_POSTURE, confirmed_posture)
         
         except Exception as e:

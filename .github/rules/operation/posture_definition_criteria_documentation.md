@@ -44,7 +44,16 @@
 ### baseline.capture 하위 키
 
 - `method`: baseline 수집 방식
-- `duration_seconds`: baseline 수집 고정 시간(초)
+- `wait_seconds`: 단계별 이동 대기 시간(초)
+- `collect_seconds`: 단계별 데이터 수집 시간(초)
+- `expected_samples`: 총 수집 단계 수
+
+### frame_scoring 하위 키
+
+- `score_range`: 점수 범위 [min, max]
+- `likelihood_weights`: 자세별 지표 가중치
+- `ratio_scale_k`: 거리 변화에 따른 감도 보정 계수
+- `sensitivities`: 자세별 기본 감도 임계값
 
 ## 3. posture_types 키 설명
 
@@ -99,8 +108,7 @@
 
 - 거북목 감도를 완화하려면
   - `posture_types.forward_head.primary_conditions`의 증가 퍼센트 임계값을 조정한다.
-- 다리 꼰 자세 확정 시간을 늘리려면
-  - `posture_types.crossed_leg_estimated.sustain_seconds`를 조정한다.
+- 턱 괸 자세 확정 시간을 늘리려면
 
 ## 7. 운영 규칙 키 범위
 

@@ -13,156 +13,89 @@ MediaPipe 기반 실시간 상체 자세 분석 및 PyQt UI를 활용한 데스�
 - **다양한 자세 감지**:
   - 의자에 누운 자세(기댄 자세)
   - 거북목 자세
-  - 다리 꼰 자세(어깨 비대칭)
   - 턱 괸 자세(추정)
 - **사용자 친화적 UI**: 초기 촬영, 메인 허브, 설정, 통계, 감지 진행과 경고 팝업으로 구성된 화면 흐름
 - **상태 머신**: NORMAL → WARNING → BAD_POSTURE 상태 전이
 - **경고 및 알림**: 소리, 팝업 알림 (사용자 커스터마이징 가능)
+- **세밀한 감도 조절**: 거북목 및 기댄 자세에 대해 사용자가 직접 민감도를 +/- 버튼으로 조절 가능
 
 ## 기술 스택
 
 | 항목 | 버전 |
 |-----|-----|
-| Python | 3.9+ |
-| MediaPipe | 0.10.33 |
-| OpenCV | 4.8.1.78 |
-| PyQt | 6.7.0 |
-| NumPy | 1.24.3 |
+| Python | 최신 권장 버전 |
+| MediaPipe | 설정 파일 참조 |
+| OpenCV | 설정 파일 참조 |
+| PyQt | 설정 파일 참조 |
+| NumPy | 설정 파일 참조 |
 
 ## 설치
 
-### 1. 저장소 클론
+### 저장소 클론
 ```bash
-git clone <repository-url>
+git clone https://github.com/Frusciante/baromok.git
 cd baromok
 ```
 
-### 2. Python 가상 환경 생성 (권장)
+### 가상 환경 생성 (권장)
 ```bash
 python -m venv venv
 venv\Scripts\activate  # Windows
-# source venv/bin/activate  # macOS/Linux
 ```
 
-### 3. 의존성 설치
+### 의존성 설치
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. MediaPipe 모델 파일 다운로드 (선택)
-필요한 모델 파일(`.task`)을 `assets/models/` 디렉토리에 다운로드하세요.
-- `pose_landmarker.task` - 포즈 감지
-- `face_landmarker.task` - 얼굴 랜드마크
-- `hand_landmarker.task` - 손 랜드마크
+### 모델 파일 다운로드
+필요한 모델 파일(`.task`)을 지정된 디렉토리에 배치하십시오. 상세 목록은 프로젝트 구조를 참조하십시오.
 
 ## 사용 방법
 
-### 1. 애플리케이션 실행
+### 애플리케이션 실행
 ```bash
 python main.py
 ```
 
-### 2. 기본 자세 촬영
-- 애플리케이션 시작 후 "초기 바른자세 촬영" 화면에서 바른 자세로 앉아 있습니다.
-- "촬영" 버튼을 누르고 5초간 기준 자세를 유지합니다.
-- 기준 자세가 저장되면 메인 허브 화면으로 전환됩니다.
+## 프로토타입 통합 정보
 
-### 3. 감지 시작
-- "바로목 감지 시작" 버튼을 누르면 실시간 자세 분석이 시작됩니다.
-- 사용 시간, 현재 자세 상태, 웹캠 프리뷰가 화면에 표시됩니다.
+이 저장소에는 프로토타입 알고리즘이 통합되어 있습니다.
 
-### 4. 설정 조정
-- "환경 설정"에서 알림 방식, 소리 크기, 팝업 위치를 커스터마이징할 수 있습니다.
+- **자세 맞춤**: 다단계 거리 분할 수집을 통해 지표 간 관계를 회귀 모델로 보정합니다. 설정은 <a href=".github/rules/operation/posture_definition_criteria.json">baseline.capture</a>를 참조하십시오.
+- **필터링**: 지표 수준의 필터를 사용하여 노이즈를 억제합니다. 설정은 <a href=".github/rules/operation/posture_definition_criteria.json">filters</a>를 참조하십시오.
+- **판단 로직**: 스코어링 및 시간 기반 상태 확인 로직이 통합되어 있습니다.
 
-### 5. 통계 확인
-- "나의 통계"에서 최근 세션의 자세 유지율 추이를 확인할 수 있습니다.
+## 사용 흐름
+
+### 자세 맞춤 (신체 측정)
+- 애플리케이션 시작 후 자세 맞춤 화면이 나타납니다.
+- "자세 맞춤 시작" 버튼을 누르면 다단계 데이터 수집이 진행됩니다.
+- 단계별 대기 시간과 수집 횟수는 설정 파일을 따릅니다.
+- 아주 가까운 거리부터 먼 거리까지 앞뒤로 움직이며 데이터를 제공해 주세요.
+- 수집 중에는 자세를 유지해야 정확한 기준점이 생성됩니다.
+- 성공적으로 완료되면 메인 화면으로 전환됩니다.
+
+### 감지 시작 및 알림
+- 감지 시작 버튼을 누르면 실시간 분석이 수행됩니다.
+- 설정에서 알림 방식 및 감도를 조정할 수 있습니다.
 
 ## 프로젝트 구조
 
-```
-baromok/
-├── src/
-│   ├── core/                    # 자세 분석 엔진
-│   │   ├── baseline_manager.py
-│   │   ├── camera_worker.py
-│   │   ├── indicator_calculator.py
-│   │   ├── judgment_engine.py
-│   │   ├── landmark_extractor.py
-│   │   ├── session_manager.py
-│   │   └── state_machine.py
-│   ├── ui/                      # PyQt UI
-│   │   ├── app.py
-│   │   ├── main_window.py
-│   │   ├── screens/
-│   │   ├── styles/
-│   │   └── widgets/
-│   ├── utils/                   # 유틸리티
-│   │   ├── helpers.py
-│   │   └── logger.py
-│   └── config.py                # 설정 관리
-├── assets/
-│   ├── models/                  # MediaPipe .task 파일
-│   ├── images/                  # 아이콘/일러스트
-│   └── sounds/                  # 경고음 (선택)
-├── .github/
-│   └── rules/                   # 자세 정의 및 규칙
-├── features_log/                # 구현 계획 및 결과 기록
-├── requirements.txt             # 의존성
-├── main.py                      # 진입점
-└── README.md
-```
+지정된 디렉토리 구조에 따라 핵심 엔진, UI, 유틸리티, 모델 및 규칙 파일이 관리됩니다.
 
 ## 설정 파일
 
-### `posture_definition_criteria.json`
-자세 판정 기준, 임계값, 가중치는 `.github/rules/operation/posture_definition_criteria.json`에서 관리됩니다.
-
-### `.env` (선택)
-애플리케이션 설정을 `.env` 파일로 커스터마이징할 수 있습니다:
-```
-CAMERA_INDEX=0
-CAMERA_FPS=30
-ENABLE_SOUND_ALERT=true
-ENABLE_POPUP_ALERT=true
-ALERT_SOUND_VOLUME=70
-```
+자세 판정 기준 및 임계값은 아래 경로에서 관리됩니다.
+- <a href=".github/rules/operation/posture_definition_criteria.json">.github/rules/operation/posture_definition_criteria.json</a>
 
 ## 개발 및 기여
 
-### 문서
-- [자세 정의서](.github/rules/posture_definition.md)
-- [자세 측정 운영 규칙](.github/rules/operation/posture_operation.md)
-- [UI 규칙](.github/rules/ui/posture_ui.md)
-- [구현 계획서](features_log/posture_measurement_system/07_phase4_plan.md)
-
-### 개발 지침
-- Python 버전: 3.9 이상
-- 코드 스타일: PEP 8
-- 로깅: `src/utils/logger.py` 사용
-- 설정: `src/config.py`에서 관리
-
-## 알려진 문제 및 제한사항
-
-- 현재 정면 카메라 전용 (측면 카메라 미지원)
-- Windows 10+ 환경에서 테스트됨
-- 웹캠 권한이 필요합니다
-
-## 향후 계획
-
-- [ ] 모바일 버전 (Android/iOS)
-- [ ] 클라우드 기반 통계 저장
-- [ ] AI 기반 자세 교정 피드백
-- [ ] 다중 사용자 지원
+### 관련 문서
+- <a href=".github/rules/posture_definition.md">자세 정의서</a>
+- <a href=".github/rules/operation/posture_operation.md">자세 측정 운영 규칙</a>
+- <a href=".github/rules/operation/posture_system_summary.md">기술 설계 요약</a>
 
 ## 라이센스
 
 [라이센스 정보 추가 예정]
-
-## 문의 및 피드백
-
-이슈 및 피드백은 GitHub Issues에 등록해주세요.
-
----
-
-**버전**: 0.1.0  
-**최종 업데이트**: 2026-05-04

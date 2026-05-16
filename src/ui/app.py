@@ -81,8 +81,14 @@ class baromokApp:
         # 엔진 컴포넌트 초기화 (Phase 2)
         logger.info("엔진 컴포넌트 초기화...")
         self.landmark_extractor = LandmarkExtractor("assets/models")
-        self.indicator_calculator = IndicatorCalculator()
+        self.indicator_calculator = IndicatorCalculator(self.config)
         self.baseline_manager = BaselineManager(self.config)
+        # ⬇ [추가] 앱 시작 시 기존 베이스라인 로드 시도
+        if self.baseline_manager.load_baseline_from_file():
+            logger.info("기존 베이스라인 로드 성공")
+        else:
+            logger.info("기존 베이스라인 없음 또는 로드 실패")
+
         self.judgment_engine = JudgmentEngine(self.config, self.baseline_manager)
         self.state_machine = StateMachine(self.config)
         self.state_machine.register_state_change_callback(self._handle_state_transition)
@@ -104,9 +110,16 @@ class baromokApp:
         )
         logger.info("✓ 카메라 워커 준비 완료")
 
-        # 설정 로드
-        self.settings_config = SettingsConfig.load_from_json("data/config.json")
+        # 설정 로드 (ConfigManager를 전달하여 기본값 처리)
+        self.settings_config = SettingsConfig.load_from_json("data/config.json", self.config)
         logger.info("사용자 설정 로드 완료")
+        
+        # 로드된 감도를 판정 엔진에 적용
+        self.judgment_engine.update_sensitivities(
+            self.settings_config.forward_head_sensitivity,
+            self.settings_config.recline_sensitivity
+        )
+
         # 알림음 관리자
         self.sound_manager = SoundManager()
         self._sound_playing = False
@@ -134,7 +147,7 @@ class baromokApp:
 
         # 의존성 주입과 함께 화면 생성
         self.baseline_screen = BaselineScreen(
-            self.theme_manager, self.camera_worker, self.baseline_manager
+            self.theme_manager, self.camera_worker, self.baseline_manager, self.sound_manager
         )
         self.hub_screen = HubScreen(self.theme_manager)
         self.settings_screen = SettingsScreen(
@@ -144,7 +157,7 @@ class baromokApp:
             self.theme_manager, self.session_manager
         )
         self.detection_screen = DetectionScreen(
-            self.theme_manager, self.camera_worker, self.session_manager
+            self.theme_manager, self.camera_worker, self.session_manager, self.baseline_manager
         )
 
         # 화면 등록
@@ -157,6 +170,9 @@ class baromokApp:
         # 신호 연결
         self.baseline_screen.baseline_captured_signal.connect(
             self._handle_baseline_captured
+        )
+        self.baseline_screen.baseline_recommended_signal.connect(
+            self._apply_recommended_sensitivities
         )
         self.hub_screen.open_baseline_signal.connect(
             lambda: self.switch_screen(0)  # Baseline
@@ -171,7 +187,11 @@ class baromokApp:
         self.detection_screen.open_settings_signal.connect(
             lambda: self.switch_screen(2)  # Settings
         )
+        self.detection_screen.open_baseline_signal.connect(
+            lambda: self.switch_screen(0)  # Baseline (재측정)
+        )
         self.settings_screen.settings_saved_signal.connect(self._save_settings)
+        self.settings_screen.settings_reset_signal.connect(self._reset_settings)
         self.settings_screen.back_to_hub_signal.connect(self._return_from_settings)
         self.statistics_screen.back_to_hub_signal.connect(
             lambda: self.switch_screen(1)  # Hub
@@ -272,6 +292,26 @@ class baromokApp:
             self._start_detection()
         else:
             self.switch_screen(1)  # HubScreen으로 이동
+
+    def _apply_recommended_sensitivities(self, fwd: float, rec: float):
+        """자세 맞춤 결과에 따른 권장 감도 자동 적용"""
+        logger.info(f"권장 감도 자동 적용: 거북목={fwd:.3f}, 기댄자세={rec:.3f}")
+        
+        # 설정값 업데이트
+        self.settings_config.forward_head_sensitivity = fwd
+        self.settings_config.recline_sensitivity = rec
+        
+        # [추가] 초기화 시 돌아갈 권장값으로도 저장
+        self.settings_config.recommended_forward_head = fwd
+        self.settings_config.recommended_recline = rec
+        
+        # 엔진 및 UI 즉시 반영
+        self._apply_settings()
+        for widget in self.settings_screen.category_widgets:
+            widget.set_value(vars(self.settings_config))
+            
+        # 파일 저장
+        self.settings_config.save_to_json("data/config.json")
 
     def _stop_detection(self):
         """감지 중지"""
@@ -398,6 +438,23 @@ class baromokApp:
         except Exception as e:
             logger.error(f"설정 저장 실패: {e}")
 
+    def _reset_settings(self):
+        """설정 초기화 (기본값으로)"""
+        try:
+            self.settings_config.reset_to_defaults(self.config)
+            # UI 위젯들에 반영
+            for widget in self.settings_screen.category_widgets:
+                widget.set_value(vars(self.settings_config))
+            
+            # 엔진 즉시 반영
+            self.judgment_engine.update_sensitivities(
+                self.settings_config.forward_head_sensitivity,
+                self.settings_config.recline_sensitivity
+            )
+            logger.info("설정이 기본값으로 초기화되었습니다.")
+        except Exception as e:
+            logger.error(f"설정 초기화 실패: {e}")
+
     def _apply_settings(self):
         """설정값 즉시 적용"""
         logger.info("설정값 적용:")
@@ -408,6 +465,14 @@ class baromokApp:
             f"  - 팝업 자동 닫기: {self.settings_config.popup_auto_close} "
             f"({self.settings_config.popup_auto_close_time}초)"
         )
+        logger.info(f"  - 거북목 감도: {self.settings_config.forward_head_sensitivity:.3f}")
+        logger.info(f"  - 기댄자세 감도: {self.settings_config.recline_sensitivity:.3f}")
+
+        # 판정 엔진에 감도 업데이트
+        self.judgment_engine.update_sensitivities(
+            self.settings_config.forward_head_sensitivity,
+            self.settings_config.recline_sensitivity
+        )
 
         if not self.settings_config.notification_enabled:
             self.alert_hide_timer.stop()
@@ -417,7 +482,16 @@ class baromokApp:
         """애플리케이션 실행"""
         logger.info("애플리케이션 실행")
         self.main_window.show()
-        return self.qt_app.exec()
+        
+        # 앱 실행 중에는 주기적으로 저장하거나 종료 시 저장
+        # PyQt 종료 시점 처리를 위해 exec_ 호출 후 저장
+        exit_code = self.qt_app.exec()
+        
+        # 종료 전 설정 최종 저장
+        self.settings_config.save_to_json("data/config.json")
+        logger.info("애플리케이션 종료 전 설정 저장 완료")
+        
+        return exit_code
 
 
 def main():
