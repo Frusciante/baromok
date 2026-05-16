@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 
 from src.utils.logger import get_logger
 

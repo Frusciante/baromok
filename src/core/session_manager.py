@@ -35,6 +35,7 @@ class FrameRecord:
     eye_line_tilt: float
     chin_occlusion: float
     hand_near_face: float
+    face_shoulder_ratio: float
 
 
 @dataclass
@@ -141,6 +142,7 @@ class SessionManager:
                     "eye_line_tilt": float(indicators.eye_line_tilt or 0.0),
                     "chin_occlusion": float(indicators.chin_occlusion or 0.0),
                     "hand_near_face": float(indicators.hand_near_face or 0.0),
+                    "face_shoulder_ratio": float(indicators.face_shoulder_ratio or 0.0),
                 }
 
             # 프레임 레코드 생성
@@ -163,6 +165,7 @@ class SessionManager:
                 eye_line_tilt=indicator_dict.get("eye_line_tilt", 0.0),
                 chin_occlusion=indicator_dict.get("chin_occlusion", 0.0),
                 hand_near_face=indicator_dict.get("hand_near_face", 0.0),
+                face_shoulder_ratio=indicator_dict.get("face_shoulder_ratio", 0.0),
             )
 
             self.current_session.frame_records.append(record)

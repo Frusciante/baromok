@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-05-16T20:56:43.540643",
+  "collection_duration_seconds": 11.209481716156006,
+  "frame_count": 90,
+  "metrics": {
+    "cheek_distance": 0.16676248692302803,
+    "eye_distance": 0.11490498309828817,
+    "face_shoulder_ratio": 0.5059386475676357,
+    "shoulder_width": 0.3311217833746528,
+    "shoulder_tilt_deg": 2.4180210090693004,
+    "neck_offset": 0.35878021653258674,
+    "eye_line_tilt": 6.384163939512466,
+    "chin_occlusion": 0.0
+  }
+}
