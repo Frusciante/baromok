@@ -202,6 +202,7 @@ class CameraWorker(QThread):
         """
         timestamp = datetime.now()
         current_timestamp_seconds = timestamp.timestamp()
+        normalized_landmarks = None  # 시각화 안정성을 위해 초기화
 
         # 1. 랜드마크 추출
         landmarks = ExtractedLandmarks(
