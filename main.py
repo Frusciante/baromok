@@ -6,14 +6,24 @@
 """
 
 import sys
+import os
 from pathlib import Path
 
 # 프로젝트 루트 추가
-sys.path.insert(0, str(Path(__file__).parent))
+PROJECT_ROOT = Path(__file__).resolve().parent
+VENV_PYTHON = PROJECT_ROOT / "venv" / "Scripts" / "python.exe"
+
+if sys.prefix == sys.base_prefix and VENV_PYTHON.exists():
+    os.execv(
+        str(VENV_PYTHON),
+        [str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]],
+    )
+
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import ConfigManager
 from src.utils.logger import get_logger
-from src.ui.app import BarorokApp
+from src.ui.app import baromokApp
 
 logger = get_logger(__name__, "DEBUG")
 
@@ -48,7 +58,7 @@ def main():
 
         # PyQt 애플리케이션 실행
         logger.info("PyQt 애플리케이션 시작...")
-        app = BarorokApp()
+        app = baromokApp()
         return app.run()
 
     except Exception as e:
