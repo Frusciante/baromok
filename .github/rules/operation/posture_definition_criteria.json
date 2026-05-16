@@ -19,12 +19,12 @@
       "method": "distance_movement_ransac",
       "wait_seconds": 5.0,
       "collect_seconds": 1.0,
-      "expected_samples": 10,
+      "expected_samples": 20,
       "minimum_valid_frames": 120
     },
     "metrics": [
       "shoulder_width",
-      "face_shoulder_ratio"
+      "cheek_distance"
     ]
   },
   "global_rules": {
@@ -54,57 +54,19 @@
     "recline": {
       "display_label": "기댄 자세 의심",
       "primary_conditions": {
-        "face_far_score": {
-          "operator": ">",
-          "threshold": 0.0
-        },
-        "ratio_down_score": {
-          "operator": ">",
+        "deviation_negative": {
+          "operator": "<",
           "threshold": 0.0
         }
       },
-      "secondary_signals": [
-        "face_shoulder_ratio_change",
-        "shoulder_tilt_deg_change"
-      ],
       "sustain_seconds": 1.5
     },
     "forward_head": {
       "display_label": "거북목 경향",
       "primary_conditions": {
-<<<<<<< HEAD
-        "face_near_score": {
-=======
-        "cheek_distance_baseline_change_percent": {
-          "operator": ">=",
-          "threshold_percent": 2,
-          "tuning_range_percent": {
-            "min": 2,
-            "max": 6
-          }
-        },
-        "face_shoulder_ratio_baseline_change_percent": {
-          "operator": ">=",
-          "threshold_percent": 6
-        }
-      },
-      "sustain_seconds": 0.5
-    },
-    "crossed_leg_estimated": {
-      "display_label": "다리 꼰 자세 추정",
-      "primary_conditions": {
-        "abs_shoulder_tilt_deg": {
->>>>>>> eunsu
+        "deviation_positive": {
           "operator": ">",
           "threshold": 0.0
-        },
-        "ratio_up_score": {
-          "operator": ">=",
-          "threshold": 0.08,
-          "tuning_range": {
-            "min": 0.08,
-            "max": 0.10
-          }
         }
       },
       "sustain_seconds": 1.5
@@ -158,12 +120,10 @@
     ],
     "likelihood_weights": {
       "forward_head": {
-        "face_near": 0.3,
-        "ratio_up": 0.7
+        "deviation": 1.0
       },
       "recline": {
-        "face_far": 0.3,
-        "ratio_down": 0.7
+        "deviation": 1.0
       },
       "chin_rest": {
         "eye": 0.35,
