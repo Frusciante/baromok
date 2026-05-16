@@ -72,7 +72,29 @@
     "forward_head": {
       "display_label": "거북목 경향",
       "primary_conditions": {
+<<<<<<< HEAD
         "face_near_score": {
+=======
+        "cheek_distance_baseline_change_percent": {
+          "operator": ">=",
+          "threshold_percent": 2,
+          "tuning_range_percent": {
+            "min": 2,
+            "max": 6
+          }
+        },
+        "face_shoulder_ratio_baseline_change_percent": {
+          "operator": ">=",
+          "threshold_percent": 6
+        }
+      },
+      "sustain_seconds": 0.5
+    },
+    "crossed_leg_estimated": {
+      "display_label": "다리 꼰 자세 추정",
+      "primary_conditions": {
+        "abs_shoulder_tilt_deg": {
+>>>>>>> eunsu
           "operator": ">",
           "threshold": 0.0
         },

@@ -170,15 +170,83 @@ class JudgmentEngine:
     def _judge_forward_head(self, indicators: PostureIndicators, deviation: float) -> Dict[str, Any]:
         """거북목 자세 판정 (Technical Summary 준수)"""
         try:
-            # Forward Head: deviation > 0 (얼굴이 커짐)
-            # 허용 오차: self.forward_head_sensitivity (예: 0.10)
-            if deviation <= 0:
-                return {"likelihood": 0.0, "triggered": False}
-                
-            # deviation이 sensitivity(0.10)에 도달하면 0.5, 그 이상이면 선형 증가
-            score = (deviation / self.forward_head_sensitivity) * 0.5
-            
-            return {"likelihood": float(np.clip(score, 0.0, 1.0)), "triggered": False}
+            criteria = self.config.get_posture_type_config(
+                PostureType.FORWARD_HEAD.value
+            )
+
+            cheek_change = self.baseline_manager.calculate_change_percentage(
+                indicators.cheek_distance,
+                "cheek_distance",
+            )
+
+            ratio_change = self.baseline_manager.calculate_change_percentage(
+                indicators.face_shoulder_ratio,
+                "face_shoulder_ratio",
+            )
+
+            # 임계값
+            cheek_threshold = criteria["primary_conditions"][
+                "cheek_distance_baseline_change_percent"
+            ]["threshold_percent"]
+            ratio_threshold = criteria["primary_conditions"][
+                "face_shoulder_ratio_baseline_change_percent"
+            ]["threshold_percent"]
+
+            # 조건 확인
+            cheek_triggered = cheek_change >= cheek_threshold
+            ratio_triggered = ratio_change >= ratio_threshold
+
+            # 점수 계산 (0~1)
+            cheek_score = self._normalize_score(
+                cheek_change / cheek_threshold,
+                min_val=0,
+                max_val=2.0,
+            )
+            ratio_score = self._normalize_score(
+                ratio_change / ratio_threshold,
+                min_val=0,
+                max_val=2.0,
+            )
+
+            likelihood = 0.7 * cheek_score + 0.3 * ratio_score
+
+            side_tilt_excessive = abs(indicators.eye_line_tilt) > 12  # 눈이 12° 이상 기울어지면 좌우 기울임
+            shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > 10  # 어깨가 10° 이상 기울어지면 거부
+            eye_distance_change = self.baseline_manager.calculate_change_percentage(
+                indicators.eye_distance,
+                "eye_distance",
+            )
+            eye_distance_ok = eye_distance_change >= -7  # 측면 회전 시 눈 간 거리 감소를 걸러냄
+
+            triggered = (
+                cheek_triggered
+                and ratio_triggered
+                and eye_distance_ok
+                and not side_tilt_excessive  # 과도한 눈 기울임 없음
+                and not shoulder_tilt_excessive  # 과도한 어깨 기울임 없음
+            )
+
+            logger.debug(
+                f"[거북목] cheek_change={cheek_change:.1f}% "
+                f"(threshold={cheek_threshold}%), "
+                f"ratio_change={ratio_change:.1f}% "
+                f"(threshold={ratio_threshold}%), "
+                f"eye_distance_change={eye_distance_change:.1f}% (ok={eye_distance_ok}), "
+                f"eye_line_tilt={indicators.eye_line_tilt:.1f}° (excessive={side_tilt_excessive}), "
+                f"shoulder_tilt={indicators.shoulder_tilt_deg:.1f}° (excessive={shoulder_tilt_excessive}), "
+                f"triggered={triggered}, likelihood={likelihood:.2f}"
+            )
+
+            return {
+                "likelihood": likelihood,
+                "triggered": triggered,
+                "details": {
+                    "cheek_change_percent": cheek_change,
+                    "ratio_change_percent": ratio_change,
+                    "cheek_threshold": cheek_threshold,
+                    "ratio_threshold": ratio_threshold,
+                },
+            }
 
         except Exception as e:
             logger.error(f"거북목 판정 실패: {e}")
@@ -187,18 +255,170 @@ class JudgmentEngine:
     def _judge_recline(self, indicators: PostureIndicators, deviation: float) -> Dict[str, Any]:
         """기댄 자세 판정 (Technical Summary 준수)"""
         try:
-            # Recline: deviation < 0 (얼굴이 작아짐)
-            # 허용 오차: self.recline_sensitivity (예: 0.04)
-            if deviation >= 0:
-                return {"likelihood": 0.0, "triggered": False}
-                
-            score = (abs(deviation) / self.recline_sensitivity) * 0.5
-            
-            return {"likelihood": float(np.clip(score, 0.0, 1.0)), "triggered": False}
+            criteria = self.config.get_posture_type_config(PostureType.RECLINE.value)
+
+            cheek_change = self.baseline_manager.calculate_change_percentage(
+                indicators.cheek_distance,
+                "cheek_distance",
+            )
+
+            # 임계값 (음수)
+            cheek_threshold = criteria["primary_conditions"][
+                "cheek_distance_baseline_change_percent"
+            ]["threshold_percent"]
+
+            ratio_change = self.baseline_manager.calculate_change_percentage(
+                indicators.face_shoulder_ratio,
+                "face_shoulder_ratio",
+            )
+            eye_distance_change = self.baseline_manager.calculate_change_percentage(
+                indicators.eye_distance,
+                "eye_distance",
+            )
+
+            side_tilt_excessive = abs(indicators.eye_line_tilt) > 12
+            shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > 10
+            eye_distance_ok = eye_distance_change >= -8
+
+            # 조건 확인 (음수여야 함)
+            triggered = (
+                cheek_change <= -cheek_threshold
+                and not side_tilt_excessive
+                and not shoulder_tilt_excessive
+                and eye_distance_ok
+            )
+
+            # 점수 계산
+            cheek_score = self._normalize_score(
+                abs(cheek_change) / cheek_threshold,
+                min_val=0,
+                max_val=2.0,
+            )
+
+            likelihood = cheek_score
+
+            logger.debug(
+                f"[기댄자세] cheek_change={cheek_change:.1f}% "
+                f"(threshold=-{cheek_threshold}%), "
+                f"ratio_change={ratio_change:.1f}%, "
+                f"eye_distance_change={eye_distance_change:.1f}% (ok={eye_distance_ok}), "
+                f"eye_line_tilt={indicators.eye_line_tilt:.1f}° (excessive={side_tilt_excessive}), "
+                f"shoulder_tilt={indicators.shoulder_tilt_deg:.1f}° (excessive={shoulder_tilt_excessive}), "
+                f"triggered={triggered}, likelihood={likelihood:.2f}"
+            )
+
+            return {
+                "likelihood": likelihood,
+                "triggered": triggered,
+                "details": {
+                    "cheek_change_percent": cheek_change,
+                    "threshold": cheek_threshold,
+                },
+            }
 
         except Exception as e:
             logger.error(f"기댄 자세 판정 실패: {e}")
-            return {"likelihood": 0.0, "triggered": False}
+            return {"likelihood": 0.0, "triggered": False, "details": {}}
+
+    def _judge_crossed_leg(self, indicators: PostureIndicators) -> Dict[str, Any]:
+        """
+        다리 꼰 자세 추정 판정
+
+        조건:
+        - abs(shoulder_tilt_deg) > 임계값
+        """
+        try:
+            criteria = self.config.get_posture_type_config(
+                PostureType.CROSSED_LEG.value
+            )
+
+            threshold = criteria["primary_conditions"]["abs_shoulder_tilt_deg"][
+                "threshold"
+            ]
+
+            baseline = self.baseline_manager.get_baseline_metrics()
+
+            # baseline이 있으면 현재 어깨 기울기의 절댓값이 아니라,
+            # baseline 대비 어깨 기울기 변화량을 우선 사용한다.
+            if baseline is not None and baseline.metrics:
+                baseline_tilt = baseline.metrics.get("shoulder_tilt_deg", 0.0)
+                shoulder_tilt = abs(indicators.shoulder_tilt_deg - baseline_tilt)
+            else:
+                baseline_tilt = 0.0
+                shoulder_tilt = abs(indicators.shoulder_tilt_deg)
+
+            # 점수 계산
+            tilt_score = self._normalize_score(
+                shoulder_tilt / threshold,
+                min_val=0,
+                max_val=2.0,
+            )
+
+            likelihood = tilt_score
+
+            head_tilt_excessive = abs(indicators.eye_line_tilt) > 12
+            eye_distance_change = self.baseline_manager.calculate_change_percentage(
+                indicators.eye_distance,
+                "eye_distance",
+            )
+            eye_turn_excessive = eye_distance_change < -8
+
+            # neck_offset은 baseline이 있을 때만 보조 조건으로 활용한다.
+            neck_offset_change = 0.0
+            has_valid_neck_offset_baseline = (
+                baseline is not None
+                and baseline.metrics
+                and baseline.metrics.get("neck_offset", 0.0) not in (0, None)
+            )
+
+            if has_valid_neck_offset_baseline:
+                neck_offset_change = self.baseline_manager.calculate_change_percentage(
+                    indicators.neck_offset,
+                    "neck_offset",
+                )
+
+                # 어깨 기울기 변화 + 목/어깨 정렬 변화가 함께 있을 때만 다리 꼬움 추정
+                triggered = (
+                    shoulder_tilt > threshold
+                    and neck_offset_change > 10
+                    and not head_tilt_excessive
+                    and not eye_turn_excessive
+                )
+            else:
+                # neck_offset baseline이 없으면 어깨 기울기 변화만 사용하되,
+                # 단일 프레임 오탐을 줄이기 위해 기존 threshold보다 조금 더 보수적으로 판단한다.
+                triggered = (
+                    shoulder_tilt > max(threshold, 8)
+                    and not head_tilt_excessive
+                    and not eye_turn_excessive
+                )
+
+            logger.debug(
+                f"[다리꼰자세] current_shoulder_tilt="
+                f"{indicators.shoulder_tilt_deg:.1f}°, "
+                f"baseline_shoulder_tilt={baseline_tilt:.1f}°, "
+                f"tilt_delta={shoulder_tilt:.1f}° (threshold={threshold}°), "
+                f"neck_offset_change={neck_offset_change:.1f}%, "
+                f"eye_distance_change={eye_distance_change:.1f}% (turn_excessive={eye_turn_excessive}), "
+                f"eye_line_tilt={indicators.eye_line_tilt:.1f}° (tilt_excessive={head_tilt_excessive}), "
+                f"triggered={triggered}, likelihood={likelihood:.2f}"
+            )
+
+            return {
+                "likelihood": likelihood,
+                "triggered": triggered,
+                "details": {
+                    "shoulder_tilt_deg": indicators.shoulder_tilt_deg,
+                    "baseline_shoulder_tilt_deg": baseline_tilt,
+                    "tilt_delta": shoulder_tilt,
+                    "neck_offset_change_percent": neck_offset_change,
+                    "threshold": threshold,
+                },
+            }
+
+        except Exception as e:
+            logger.error(f"다리 꼰 자세 판정 실패: {e}")
+            return {"likelihood": 0.0, "triggered": False, "details": {}}
 
     def _judge_chin_rest(self, indicators: PostureIndicators) -> Dict[str, Any]:
         """턱 괸 자세 판정"""
