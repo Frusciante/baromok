@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 
 from src.utils.logger import get_logger
 
@@ -76,6 +76,7 @@ class CameraWorker(QThread):
         # True일 때는 랜드마크 추출과 지표 계산까지만 수행하고,
         # JudgmentEngine / StateMachine은 실행하지 않는다.
         self.is_baseline_mode = False
+        self.current_step = 0  # 자세 맞춤 단계 (0=대기, 1~20=수집)
 
         # 프레임 카운터
         self.frame_count = 0
@@ -151,7 +152,14 @@ class CameraWorker(QThread):
                     self.error_signal.emit(f"프레임 처리 오류: {str(e)}")
 
                 # FPS 제어 (지연)
-                self.msleep(self.frame_delay)
+                # v1.1: 캘리브레이션/베이스라인 수집 모드일 때는 대기 시간을 0으로 하여 
+                # 하드웨어가 허용하는 최대 FPS로 데이터를 수집한다.
+                if not self.is_baseline_mode:
+                    self.msleep(self.frame_delay)
+                else:
+                    # 캘리브레이션 시에는 하드웨어가 허용하는 최대 속도로 프레임을 읽기 위해 
+                    # 인위적인 지연(msleep)을 제거한다.
+                    pass
 
             logger.info(f"카메라 캡처 종료 (처리된 프레임: {self.frame_count})")
             self.status_changed_signal.emit("카메라 종료됨")
@@ -235,13 +243,20 @@ class CameraWorker(QThread):
                 relevant_landmarks,
                 frame_width=frame_width,
                 frame_height=frame_height,
+                timestamp_ms=landmarks.frame_timestamp_ms,
+                low_latency=True # 속도 향상을 위해 항상 low_latency 적용
             )
             logger.debug(f"정규화된 랜드마크: {normalized_landmarks}")
 
             indicators = self.indicator_calculator.calculate_all_indicators(
                 normalized_landmarks,
                 timestamp=current_timestamp_seconds,
+                low_latency=True # 속도 향상을 위해 항상 low_latency 적용
             )
+            
+            # 자세 맞춤 단계 정보 주입 (디버그용)
+            if indicators:
+                indicators.step_index = self.current_step
 
             if indicators is None:
                 logger.debug(
@@ -265,6 +280,7 @@ class CameraWorker(QThread):
                 "baseline",
                 0.0,
                 current_state,
+                normalized_landmarks=normalized_landmarks
             )
 
             return {
@@ -303,9 +319,6 @@ class CameraWorker(QThread):
                     likelihood_map = {
                         "forward_head": judgment_result.forward_head_likelihood,
                         "recline": judgment_result.recline_likelihood,
-                        "crossed_leg_estimated": (
-                            judgment_result.crossed_leg_likelihood
-                        ),
                         "chin_rest_estimated": judgment_result.chin_rest_likelihood,
                     }
                     probability = float(likelihood_map.get(posture_type, 0.0))
@@ -328,6 +341,7 @@ class CameraWorker(QThread):
         current_state = self.state_machine.get_current_state()
 
         # 5. 시각화 (주석 달린 프레임)
+        # v1.1: 필터링된 정규화 좌표(normalized_landmarks)를 전달하여 시각적 안정성 확보
         annotated_frame = self._annotate_frame(
             frame,
             landmarks,
@@ -335,6 +349,7 @@ class CameraWorker(QThread):
             posture_type,
             probability,
             current_state,
+            normalized_landmarks=normalized_landmarks
         )
 
         # 결과 반환
@@ -358,6 +373,7 @@ class CameraWorker(QThread):
         posture_type: str,
         probability: float,
         state: PostureState,
+        normalized_landmarks: Optional[Dict[str, any]] = None,
     ) -> np.ndarray:
         """
         프레임에 주석 추가 (랜드마크, 상태 등)
@@ -369,11 +385,13 @@ class CameraWorker(QThread):
             posture_type: 자세 유형
             probability: 확률
             state: 현재 상태
+            normalized_landmarks: 필터링된 정규화 좌표 (제공 시 시각화에 사용)
 
         Returns:
             주석 달린 프레임
         """
         annotated = frame.copy()
+        frame_height, frame_width = annotated.shape[:2]
 
         # 상태에 따른 색상
         state_colors = {
@@ -412,15 +430,65 @@ class CameraWorker(QThread):
             2,
         )
 
-        # 랜드마크 시각화
-        frame_height, frame_width = annotated.shape[:2]
+        # 지표 정보 (상세 버전)
+        if indicators is not None:
+            y_offset = 60
+            
+            # Baseline 정보 (RANSAC 기대값 포함)
+            baseline = self.judgment_engine.baseline_manager.get_baseline_metrics()
+            if baseline and not self.is_baseline_mode:
+                expected_cheek = self.judgment_engine.baseline_manager.get_expected_cheek(indicators.shoulder_width)
+                deviation = (indicators.cheek_distance - expected_cheek) / expected_cheek
+                
+                debug_text = f"Cheek: {indicators.cheek_distance:.3f} (Exp: {expected_cheek:.3f})"
+                cv2.putText(annotated, debug_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                y_offset += 20
+                
+                delta_text = f"Dev: {deviation*100:+.1f}%"
+                cv2.putText(annotated, delta_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+                y_offset += 20
+                
+                detail_text = f"ShldTilt: {indicators.shoulder_tilt_deg:+.1f}deg | EyeTilt: {indicators.eye_line_tilt:+.1f}deg"
+                cv2.putText(annotated, detail_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                y_offset += 20
+                
+                hand_text = f"HandFace: {indicators.hand_face_score:.2f} | ChinOcc: {indicators.chin_occlusion:.2f}"
+                cv2.putText(annotated, hand_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                y_offset += 20
+            else:
+                indicator_text = f"Cheek: {indicators.cheek_distance:.2f} | Sh: {indicators.shoulder_width:.2f}"
+                cv2.putText(
+                    annotated,
+                    indicator_text,
+                    (10, y_offset),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (200, 200, 200),
+                    1,
+                )
 
+        # 랜드마크 시각화
         try:
-            relevant_landmarks = self.landmark_extractor.get_relevant_landmarks(
-                landmarks,
-                frame_width=frame_width,
-                frame_height=frame_height,
-            )
+            # v1.1: 필터링된 정규화 좌표가 있다면 이를 픽셀 좌표로 변환하여 사용
+            if normalized_landmarks:
+                vis_landmarks = {}
+                for key, val in normalized_landmarks.items():
+                    if val is None:
+                        vis_landmarks[key] = None
+                    elif isinstance(val, tuple) and len(val) == 2:
+                        vis_landmarks[key] = (int(val[0] * frame_width), int(val[1] * frame_height))
+                    elif isinstance(val, list):
+                        # chin_points 등 리스트 처리
+                        vis_landmarks[key] = [(int(p[0] * frame_width), int(p[1] * frame_height)) for p in val]
+                    else:
+                        vis_landmarks[key] = val
+                relevant_landmarks = vis_landmarks
+            else:
+                relevant_landmarks = self.landmark_extractor.get_relevant_landmarks(
+                    landmarks,
+                    frame_width=frame_width,
+                    frame_height=frame_height,
+                )
 
             point_styles = {
                 "face_center": ((0, 255, 255), 5, "Nose"),
@@ -428,92 +496,37 @@ class CameraWorker(QThread):
                 "right_eye": ((255, 255, 0), 4, "R Eye"),
                 "left_cheek": ((255, 0, 255), 4, "L Cheek"),
                 "right_cheek": ((255, 0, 255), 4, "R Cheek"),
-                "left_mouth": ((0, 128, 255), 4, "L Mouth"),
-                "right_mouth": ((0, 128, 255), 4, "R Mouth"),
                 "left_shoulder": ((0, 255, 0), 6, "L Shoulder"),
                 "right_shoulder": ((0, 255, 0), 6, "R Shoulder"),
             }
 
             for key, (point_color, radius, label) in point_styles.items():
                 point = relevant_landmarks.get(key)
-                if point is None:
-                    continue
-
+                if point is None: continue
                 x, y = point
                 cv2.circle(annotated, (x, y), radius, point_color, -1)
-                cv2.putText(
-                    annotated,
-                    label,
-                    (x + 6, y - 6),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.4,
-                    point_color,
-                    1,
-                )
+                cv2.putText(annotated, label, (x + 6, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.4, point_color, 1)
 
             # 턱 포인트
             for index, point in enumerate(relevant_landmarks.get("chin_points", [])):
                 x, y = point
                 cv2.circle(annotated, (x, y), 4, (0, 128, 255), -1)
-                cv2.putText(
-                    annotated,
-                    f"Chin {index + 1}",
-                    (x + 6, y - 6),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.4,
-                    (0, 128, 255),
-                    1,
-                )
 
-            # 손가락 팁
-            for hand_key, hand_color in [
-                ("left_hand_tips", (255, 128, 0)),
-                ("right_hand_tips", (128, 0, 255)),
-            ]:
-                for point in relevant_landmarks.get(hand_key, []):
-                    x = int(point[0])
-                    y = int(point[1])
+            # 손가락 팁 (정규화된 값이 있으면 이를 픽셀로 변환해서 표시)
+            for hand_key, hand_color in [("left_hand_tips", (255, 128, 0)), ("right_hand_tips", (128, 0, 255))]:
+                tips = relevant_landmarks.get(hand_key, [])
+                for point in tips:
+                    x, y = int(point[0]), int(point[1])
                     cv2.circle(annotated, (x, y), 4, hand_color, -1)
 
-            # 어깨 연결선
-            left_shoulder = relevant_landmarks.get("left_shoulder")
-            right_shoulder = relevant_landmarks.get("right_shoulder")
-            if left_shoulder is not None and right_shoulder is not None:
-                cv2.line(
-                    annotated,
-                    left_shoulder,
-                    right_shoulder,
-                    (0, 255, 0),
-                    2,
-                )
-
-            # 눈 연결선
-            left_eye = relevant_landmarks.get("left_eye")
-            right_eye = relevant_landmarks.get("right_eye")
-            if left_eye is not None and right_eye is not None:
-                cv2.line(
-                    annotated,
-                    left_eye,
-                    right_eye,
-                    (255, 255, 0),
-                    2,
-                )
+            # 어깨 및 뺨(얼굴 거리) 연결선
+            ls, rs = relevant_landmarks.get("left_shoulder"), relevant_landmarks.get("right_shoulder")
+            if ls and rs: cv2.line(annotated, ls, rs, (0, 255, 0), 2)
+            lc, rc = relevant_landmarks.get("left_cheek"), relevant_landmarks.get("right_cheek")
+            if lc and rc: cv2.line(annotated, lc, rc, (255, 0, 255), 2)
 
         except Exception as e:
             logger.debug(f"랜드마크 시각화 실패: {e}")
-
-        # 지표 정보 (간단한 버전)
-        if indicators is not None:
-            indicator_text = f"Cheek: {indicators.cheek_distance:.2f}"
-            cv2.putText(
-                annotated,
-                indicator_text,
-                (10, 60),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (200, 200, 200),
-                1,
-            )
 
         return annotated
 

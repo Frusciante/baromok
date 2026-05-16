@@ -52,15 +52,15 @@
       "primary_conditions": {
         "cheek_distance_baseline_change_percent": {
           "operator": ">=",
-          "threshold_percent": 2,
+          "threshold_percent": 3,
           "tuning_range_percent": {
-            "min": 2,
-            "max": 6
+            "min": 3,
+            "max": 7
           }
         },
         "face_shoulder_ratio_baseline_change_percent": {
           "operator": ">=",
-          "threshold_percent": 6
+          "threshold_percent": 8
         }
       },
       "sustain_seconds": 0.5
@@ -74,11 +74,13 @@
         }
       },
       "secondary_signals": [
-        "neck_offset_baseline_increase"
+      "neck_offset_baseline_increase",
+      ""
       ],
       "sustain_seconds": 3,
       "repeat_window_seconds": 10
     },
+
     "chin_rest_estimated": {
       "display_label": "턱 괸 자세 의심",
       "primary_conditions": {
