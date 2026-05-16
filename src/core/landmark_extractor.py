@@ -12,6 +12,8 @@ from typing import Dict, Tuple, Optional, List
 from dataclasses import dataclass
 from pathlib import Path
 from src.utils.logger import get_logger
+from src.utils.helpers import OneEuroFilter
+import time
 
 logger = get_logger(__name__)
 
@@ -49,6 +51,7 @@ class LandmarkExtractor:
         self.pose_landmarker = None
         self.face_landmarker = None
         self.hand_landmarker = None
+        self.one_euro_filter = None
 
         self._initialize_models()
         logger.info("LandmarkExtractor 초기화 완료")
@@ -607,7 +610,8 @@ class LandmarkExtractor:
         return landmarks
 
     def normalize_landmarks(
-        self, landmarks: Dict[str, any], frame_width: int, frame_height: int
+        self, landmarks: Dict[str, any], frame_width: int, frame_height: int, timestamp_ms: Optional[int] = None,
+        low_latency: bool = False
     ) -> Dict[str, any]:
         """
         랜드마크를 정규화된 좌표로 변환 (0~1 범위)
@@ -616,6 +620,8 @@ class LandmarkExtractor:
             landmarks: 랜드마크 딕셔너리 (픽셀 좌표)
             frame_width: 프레임 너비
             frame_height: 프레임 높이
+            timestamp_ms: 프레임 타임스탬프 (OneEuro 필터용)
+            low_latency: True이면 필터 지연을 최소화 (Baseline 수집용)
 
         Returns:
             정규화된 랜드마크
@@ -658,6 +664,54 @@ class LandmarkExtractor:
                 normalized[key] = (value[0] / frame_width, value[1] / frame_height)
             else:
                 normalized[key] = value
+
+        # One Euro Filter 및 EMA Filter 적용 (주요 2D 좌표들)
+        # 사용자의 요청에 따라 뺨(cheek)과 어깨(shoulder)의 안정성에 집중한다.
+        filter_keys = [
+            "face_center", "left_eye", "right_eye",
+            "left_cheek", "right_cheek",
+            "left_shoulder", "right_shoulder"
+        ]
+        
+        if self.one_euro_filter is None or not hasattr(self, 'ema_filters_x'):
+            # key별로 독립적인 필터 인스턴스를 관리한다.
+            # 1. One Euro Filter: 잔떨림 억제를 위해 min_cutoff를 더 낮춤 (0.01)
+            self.one_euro_filters: Dict[str, OneEuroFilter] = {
+                key: OneEuroFilter(min_cutoff=0.01, beta=0.005) for key in filter_keys
+            }
+            # 2. EMA Filter: 프로토타입과 동일한 alpha=0.15 적용
+            from src.utils.helpers import EMAFilter
+            self.ema_filters_x = {k: EMAFilter(alpha=0.15) for k in filter_keys}
+            self.ema_filters_y = {k: EMAFilter(alpha=0.15) for k in filter_keys}
+            self.one_euro_filter = True # 초기화 완료 플래그
+        
+        # 타임스탬프 처리 (ms -> s)
+        t_sec = (timestamp_ms / 1000.0) if timestamp_ms is not None else time.time()
+        
+        # 필터 계수 조정 (low_latency 모드)
+        current_min_cutoff = 0.5 if low_latency else 0.01
+        current_beta = 0.01 if low_latency else 0.005
+        current_alpha = 0.5 if low_latency else 0.15
+
+        for key in filter_keys:
+            val = normalized.get(key)
+            if val is not None:
+                # 필터 계수 동적 업데이트
+                filter_obj = self.one_euro_filters[key]
+                filter_obj.min_cutoff = current_min_cutoff
+                filter_obj.beta = current_beta
+                
+                self.ema_filters_x[key].alpha = current_alpha
+                self.ema_filters_y[key].alpha = current_alpha
+
+                # 1. One Euro Filter 적용 (좌표 벡터)
+                one_euro_filtered = filter_obj.process(t_sec, np.array(val))
+                
+                # 2. EMA Filter 적용 (X, Y 각각)
+                fx = self.ema_filters_x[key].process(one_euro_filtered[0])
+                fy = self.ema_filters_y[key].process(one_euro_filtered[1])
+                
+                normalized[key] = (float(fx), float(fy))
 
         return normalized
 

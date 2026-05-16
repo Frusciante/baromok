@@ -29,7 +29,6 @@ class FrameRecord:
     state: str  # "NORMAL", "WARNING", "BAD_POSTURE"
     cheek_distance: float  # 지표값
     eye_distance: float
-    face_shoulder_ratio: float
     shoulder_width: float
     shoulder_tilt_deg: float
     neck_offset: float
@@ -136,7 +135,6 @@ class SessionManager:
                 indicator_dict = {
                     "cheek_distance": float(indicators.cheek_distance or 0.0),
                     "eye_distance": float(indicators.eye_distance or 0.0),
-                    "face_shoulder_ratio": float(indicators.face_shoulder_ratio or 0.0),
                     "shoulder_width": float(indicators.shoulder_width or 0.0),
                     "shoulder_tilt_deg": float(indicators.shoulder_tilt_deg or 0.0),
                     "neck_offset": float(indicators.neck_offset or 0.0),
@@ -159,7 +157,6 @@ class SessionManager:
                 state=frame_data.get("state", "NORMAL"),
                 cheek_distance=indicator_dict.get("cheek_distance", 0.0),
                 eye_distance=indicator_dict.get("eye_distance", 0.0),
-                face_shoulder_ratio=indicator_dict.get("face_shoulder_ratio", 0.0),
                 shoulder_width=indicator_dict.get("shoulder_width", 0.0),
                 shoulder_tilt_deg=indicator_dict.get("shoulder_tilt_deg", 0.0),
                 neck_offset=indicator_dict.get("neck_offset", 0.0),
@@ -246,12 +243,11 @@ class SessionManager:
 
         try:
             # 자세 분포
-            posture_distribution = {
-                "normal": 0,
+            posture_counts = {
                 "forward_head": 0,
                 "recline": 0,
-                "crossed_leg_estimated": 0,
                 "chin_rest_estimated": 0,
+                "normal": 0
             }
 
             state_counts = {"NORMAL": 0, "WARNING": 0, "BAD_POSTURE": 0}
@@ -265,8 +261,8 @@ class SessionManager:
             for record in session.frame_records:
                 # 자세 분포
                 posture = record.posture_type
-                if posture in posture_distribution:
-                    posture_distribution[posture] += 1
+                if posture in posture_counts:
+                    posture_counts[posture] += 1
 
                 # 상태 카운트
                 state = str(record.state).upper()
@@ -327,7 +323,7 @@ class SessionManager:
                     if session.duration_seconds > 0
                     else 0
                 ),
-                "posture_distribution": posture_distribution,
+                "posture_distribution": posture_counts,
                 "state_counts": state_counts,
                 "good_posture_seconds": round(good_posture_seconds, 2),
                 "warning_posture_seconds": round(warning_posture_seconds, 2),

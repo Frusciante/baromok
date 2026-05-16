@@ -18,6 +18,7 @@
 ## 목적
 - 이 파일은 기본 공통 규칙 + 요청 분기 라우터 역할을 한다.
 - 세부 규칙은 `.github/rules` 아래 문서를 우선 참조한다.
+- 시스템 아키텍처 및 알고리즘 상세는 <a href="./rules/operation/posture_system_summary.md">.github/rules/operation/posture_system_summary.md</a>를 참조한다.
 
 ## 요청 분기 규칙
 - UI/화면/스타일/컴포넌트/접근성 요청이면 <a href="./rules/ui/common.md">.github/rules/ui/common.md</a>를 따른다.
