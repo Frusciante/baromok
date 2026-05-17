@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from src.utils.logger import get_logger
 from src.utils.helpers import OneEuroFilter
+from src.config import get_config
 import time
 
 logger = get_logger(__name__)
@@ -53,77 +54,21 @@ class LandmarkExtractor:
         self.hand_landmarker = None
         self.one_euro_filter = None
 
+        # 설정 로드
+        self.config = get_config()
+        self.mp_config = self.config.get_mediapipe_config()
+
         self._initialize_models()
         logger.info("LandmarkExtractor 초기화 완료")
 
-    # def _initialize_models(self):
-    #     """MediaPipe 모델 로드"""
-    #     model_dir = Path(self.model_base_path)
-
-    #     try:
-    #         # Pose Landmarker 로드
-    #         BaseOptions = mp.tasks.BaseOptions
-    #         PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
-    #         VisionRunningMode = mp.tasks.vision.RunningMode
-
-    #         options = PoseLandmarkerOptions(
-    #             base_options=BaseOptions(
-    #                 model_asset_path=str(model_dir / "pose_landmarker.task")
-    #             ),
-    #             running_mode=VisionRunningMode.IMAGE,
-    #             num_poses=1,
-    #         )
-    #         self.pose_landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(
-    #             options
-    #         )
-    #         logger.info("Pose Landmarker 로드 완료")
-
-    #     except Exception as e:
-    #         logger.warning(f"Pose Landmarker 로드 실패: {e}. 대체 모델 사용...")
-    #         self.pose_landmarker = None
-
-    #     try:
-    #         # Face Landmarker 로드
-    #         FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
-
-    #         options = FaceLandmarkerOptions(
-    #             base_options=BaseOptions(
-    #                 model_asset_path=str(model_dir / "face_landmarker.task")
-    #             ),
-    #             running_mode=VisionRunningMode.IMAGE,
-    #             num_faces=1,
-    #         )
-    #         self.face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
-    #             options
-    #         )
-    #         logger.info("Face Landmarker 로드 완료")
-
-    #     except Exception as e:
-    #         logger.warning(f"Face Landmarker 로드 실패: {e}. 대체 모델 사용...")
-    #         self.face_landmarker = None
-
-    #     try:
-    #         # Hand Landmarker 로드
-    #         HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
-
-    #         options = HandLandmarkerOptions(
-    #             base_options=BaseOptions(
-    #                 model_asset_path=str(model_dir / "hand_landmarker.task")
-    #             ),
-    #             running_mode=VisionRunningMode.IMAGE,
-    #             num_hands=2,
-    #         )
-    #         self.hand_landmarker = mp.tasks.vision.HandLandmarker.create_from_options(
-    #             options
-    #         )
-    #         logger.info("Hand Landmarker 로드 완료")
-
-    #     except Exception as e:
-    #         logger.warning(f"Hand Landmarker 로드 실패: {e}. 대체 모델 사용...")
-    #         self.hand_landmarker = None
     def _initialize_models(self):
         """MediaPipe 모델 로드"""
         model_dir = Path(self.model_base_path)
+
+        # 기본 임계값 설정
+        face_cfg = self.mp_config.get("face", {"min_detection_confidence": 0.5, "min_presence_confidence": 0.5, "min_tracking_confidence": 0.5})
+        pose_cfg = self.mp_config.get("pose", {"min_detection_confidence": 0.5, "min_presence_confidence": 0.5, "min_tracking_confidence": 0.5})
+        hand_cfg = self.mp_config.get("hand", {"min_detection_confidence": 0.5, "min_presence_confidence": 0.5, "min_tracking_confidence": 0.5})
 
         try:
             # Pose Landmarker 로드
@@ -135,16 +80,16 @@ class LandmarkExtractor:
                 base_options=BaseOptions(
                     model_asset_path=str(model_dir / "pose_landmarker.task")
                 ),
-                running_mode=VisionRunningMode.IMAGE,
+                running_mode=VisionRunningMode.VIDEO,
                 num_poses=1,
-                # 👇 [추가된 부분] 자세 인식 엄격도 상향 (기본 0.5 -> 0.7)
-                min_pose_detection_confidence=0.7,
-                min_pose_presence_confidence=0.7,
+                min_pose_detection_confidence=pose_cfg.get("min_detection_confidence", 0.5),
+                min_pose_presence_confidence=pose_cfg.get("min_presence_confidence", 0.5),
+                min_tracking_confidence=pose_cfg.get("min_tracking_confidence", 0.5),
             )
             self.pose_landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(
                 options
             )
-            logger.info("Pose Landmarker 로드 완료")
+            logger.info(f"Pose Landmarker 로드 완료 (mode: VIDEO, conf: {pose_cfg.get('min_detection_confidence')})")
 
         except Exception as e:
             logger.warning(f"Pose Landmarker 로드 실패: {e}. 대체 모델 사용...")
@@ -158,16 +103,16 @@ class LandmarkExtractor:
                 base_options=BaseOptions(
                     model_asset_path=str(model_dir / "face_landmarker.task")
                 ),
-                running_mode=VisionRunningMode.IMAGE,
+                running_mode=VisionRunningMode.VIDEO,
                 num_faces=1,
-                # 👇 [추가된 부분] 얼굴 인식 엄격도 상향
-                min_face_detection_confidence=0.7,
-                min_face_presence_confidence=0.7,
+                min_face_detection_confidence=face_cfg.get("min_detection_confidence", 0.5),
+                min_face_presence_confidence=face_cfg.get("min_presence_confidence", 0.5),
+                min_tracking_confidence=face_cfg.get("min_tracking_confidence", 0.5),
             )
             self.face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
                 options
             )
-            logger.info("Face Landmarker 로드 완료")
+            logger.info(f"Face Landmarker 로드 완료 (mode: VIDEO, conf: {face_cfg.get('min_detection_confidence')})")
 
         except Exception as e:
             logger.warning(f"Face Landmarker 로드 실패: {e}. 대체 모델 사용...")
@@ -181,16 +126,16 @@ class LandmarkExtractor:
                 base_options=BaseOptions(
                     model_asset_path=str(model_dir / "hand_landmarker.task")
                 ),
-                running_mode=VisionRunningMode.IMAGE,
+                running_mode=VisionRunningMode.VIDEO,
                 num_hands=2,
-                # 👇 [추가된 부분] 손 인식 엄격도 상향 (가짜 손 모양 오작동 방지)
-                min_hand_detection_confidence=0.7,
-                min_hand_presence_confidence=0.7,
+                min_hand_detection_confidence=hand_cfg.get("min_detection_confidence", 0.5),
+                min_hand_presence_confidence=hand_cfg.get("min_presence_confidence", 0.5),
+                min_tracking_confidence=hand_cfg.get("min_tracking_confidence", 0.5),
             )
             self.hand_landmarker = mp.tasks.vision.HandLandmarker.create_from_options(
                 options
             )
-            logger.info("Hand Landmarker 로드 완료")
+            logger.info(f"Hand Landmarker 로드 완료 (mode: VIDEO, conf: {hand_cfg.get('min_detection_confidence')})")
 
         except Exception as e:
             logger.warning(f"Hand Landmarker 로드 실패: {e}. 대체 모델 사용...")
@@ -214,11 +159,9 @@ class LandmarkExtractor:
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
-        # mp.Image may not provide timestamp_ms in some MediaPipe builds; fall back to current time
-        try:
-            timestamp_ms = int(mp_image.timestamp_ms)
-        except Exception:
-            timestamp_ms = int(time.time() * 1000)
+        # VIDEO 모드에서는 명시적인 타임스탬프가 필요함
+        timestamp_ms = int(time.time() * 1000)
+        
         pose_data = None
         face_data = None
         hands_data = None
@@ -226,14 +169,8 @@ class LandmarkExtractor:
         # Pose 추출
         if self.pose_landmarker is not None:
             try:
-                pose_result = self.pose_landmarker.detect(mp_image)
-                try:
-                    logger.debug(
-                        f"pose_result type={type(pose_result)} attrs={dir(pose_result)}"
-                    )
-                except Exception:
-                    logger.debug(f"pose_result repr: {repr(pose_result)}")
-
+                pose_result = self.pose_landmarker.detect_for_video(mp_image, timestamp_ms)
+                
                 def _extract_list(obj):
                     # try common attribute names that may contain landmark lists
                     for attr in (
@@ -287,23 +224,13 @@ class LandmarkExtractor:
                         confidences=confs,
                         timestamp_ms=timestamp_ms,
                     )
-                else:
-                    logger.debug(
-                        f"Pose 결과에 랜드마크 속성이 없습니다: attrs={dir(pose_result)}"
-                    )
             except Exception as e:
                 logger.debug(f"Pose 추출 실패: {e}")
 
         # Face 추출
         if self.face_landmarker is not None:
             try:
-                face_result = self.face_landmarker.detect(mp_image)
-                try:
-                    logger.debug(
-                        f"face_result type={type(face_result)} attrs={dir(face_result)}"
-                    )
-                except Exception:
-                    logger.debug(f"face_result repr: {repr(face_result)}")
+                face_result = self.face_landmarker.detect_for_video(mp_image, timestamp_ms)
 
                 def _extract_list(obj):
                     for attr in (
@@ -354,23 +281,13 @@ class LandmarkExtractor:
                         confidences=confs,
                         timestamp_ms=timestamp_ms,
                     )
-                else:
-                    logger.debug(
-                        f"Face 결과에 랜드마크 속성이 없습니다: attrs={dir(face_result)}"
-                    )
             except Exception as e:
                 logger.debug(f"Face 추출 실패: {e}")
 
         # Hand 추출
         if self.hand_landmarker is not None:
             try:
-                hand_result = self.hand_landmarker.detect(mp_image)
-                try:
-                    logger.debug(
-                        f"hand_result type={type(hand_result)} attrs={dir(hand_result)}"
-                    )
-                except Exception:
-                    logger.debug(f"hand_result repr: {repr(hand_result)}")
+                hand_result = self.hand_landmarker.detect_for_video(mp_image, timestamp_ms)
 
                 def _extract_list(obj):
                     for attr in (
@@ -420,10 +337,6 @@ class LandmarkExtractor:
                             timestamp_ms=timestamp_ms,
                         )
                         hands_data.append(hand_data)
-                else:
-                    logger.debug(
-                        f"Hand 결과에 랜드마크 속성이 없습니다: attrs={dir(hand_result)}"
-                    )
             except Exception as e:
                 logger.debug(f"Hand 추출 실패: {e}")
 

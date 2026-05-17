@@ -2,6 +2,23 @@
   "version": "1.1.0",
   "domain": "posture_detection",
   "description": "Bad posture decision criteria and thresholds (v1.0 algorithm integrated)",
+  "mediapipe": {
+    "face": {
+      "min_detection_confidence": 0.5,
+      "min_presence_confidence": 0.5,
+      "min_tracking_confidence": 0.5
+    },
+    "pose": {
+      "min_detection_confidence": 0.5,
+      "min_presence_confidence": 0.5,
+      "min_tracking_confidence": 0.5
+    },
+    "hand": {
+      "min_detection_confidence": 0.5,
+      "min_presence_confidence": 0.5,
+      "min_tracking_confidence": 0.5
+    }
+  },
   "filters": {
     "one_euro": {
       "min_cutoff": 0.05,
