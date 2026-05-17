@@ -190,10 +190,10 @@ class BaselineManager:
         Baseline 메트릭 계산
         """
         metrics = {}
-
         indicator_names = [
             "cheek_distance",
             "eye_distance",
+            "face_vertical_length",
             "shoulder_width",
             "shoulder_tilt_deg",
             "neck_offset",
@@ -429,8 +429,6 @@ class BaselineManager:
                 
                 try:
                     ransac = self.ransac_model.model.named_steps['ransacregressor']
-                    # y = intercept + c0*1 + c1*x + c2*x^2 (degree=2 기준)
-                    # 실제 PolynomialFeatures + RANSAC 구조에 따라 계수 인덱스가 다를 수 있음
                     plt.title(f"RANSAC: Shoulder Width vs Cheek Distance")
                 except Exception:
                     plt.title("RANSAC Calibration")

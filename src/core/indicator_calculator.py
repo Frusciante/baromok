@@ -20,6 +20,7 @@ class PostureIndicators:
     """자세 지표 데이터"""
     cheek_distance: float  # 양쪽 광대 거리 (얼굴 길이/크기 척도로 사용)
     eye_distance: float  # 양쪽 눈 거리
+    face_vertical_length: float # 얼굴 세로 길이 (미간-턱 끝)
     shoulder_width: float  # 양쪽 어깨 거리
     shoulder_tilt_deg: float  # 어깨 기울기 (도)
     neck_offset: float  # 목-어깨 정렬 오차
@@ -27,8 +28,14 @@ class PostureIndicators:
     chin_occlusion: float  # 턱 가림 정도 (0~1)
     hand_near_face: bool  # 손이 얼굴 근처인가
     hand_face_score: float # 손-얼굴 상호작용 점수 (신규)
+    
+    # [신규] 중앙 정렬(Symmetry) 지표
+    eye_symmetry_ratio: float   # 눈 중앙 정렬 비율 (0~1, 0에 가까울수록 대칭)
+    cheek_symmetry_ratio: float # 광대 중앙 정렬 비율
+    chin_alignment_offset: float # 턱의 수평 이탈 정도
+    
     timestamp: float  # 타임스탬프
-    step_index: int = 0 # 캘리브레이션 단계 (디버그용)
+    step_index: int = 0 # 자세 맞춤 단계 (디버그용)
 
 
 class IndicatorCalculator:
@@ -50,6 +57,7 @@ class IndicatorCalculator:
         self.ema_filters = {
             'cheek_distance': EMAFilter(alpha=alpha),
             'eye_distance': EMAFilter(alpha=alpha),
+            'face_vertical_length': EMAFilter(alpha=alpha),
             'shoulder_width': EMAFilter(alpha=alpha),
             'shoulder_tilt_deg': EMAFilter(alpha=alpha),
             'neck_offset': EMAFilter(alpha=alpha),
@@ -91,6 +99,25 @@ class IndicatorCalculator:
         right = np.array(right_eye)
         
         distance = self.geometry_helper.calculate_distance(left, right)
+        return float(np.clip(distance, 0.0, 1.0))
+
+    def calculate_face_vertical_length(
+        self, 
+        left_eye: Tuple[float, float], 
+        right_eye: Tuple[float, float],
+        chin: Tuple[float, float]
+    ) -> float:
+        """
+        얼굴 세로 길이 계산 (미간 - 턱 끝)
+        """
+        if left_eye is None or right_eye is None or chin is None:
+            return 0.0
+            
+        eye_midpoint = np.array([(left_eye[0] + right_eye[0]) / 2.0, 
+                                (left_eye[1] + right_eye[1]) / 2.0])
+        chin_point = np.array(chin)
+        
+        distance = self.geometry_helper.calculate_distance(eye_midpoint, chin_point)
         return float(np.clip(distance, 0.0, 1.0))
     
     def calculate_shoulder_width(
@@ -291,11 +318,17 @@ class IndicatorCalculator:
         try:
             cheek_dist_raw = self.calculate_cheek_distance(landmarks['left_cheek'], landmarks['right_cheek'])            
             eye_dist_raw = self.calculate_eye_distance(landmarks.get('left_eye'), landmarks.get('right_eye'))
+            
+            # 얼굴 세로 길이 계산 (눈 미간 - 턱 152번)
+            chin_point = landmarks.get('chin_points')[0] if landmarks.get('chin_points') else None
+            face_v_len_raw = self.calculate_face_vertical_length(landmarks.get('left_eye'), landmarks.get('right_eye'), chin_point)
+            
             shoulder_w_raw = self.calculate_shoulder_width(landmarks['left_shoulder'], landmarks['right_shoulder'])
             
             cheek_dist = self.ema_filters['cheek_distance'].process(cheek_dist_raw)
             shoulder_w = self.ema_filters['shoulder_width'].process(shoulder_w_raw)
             eye_dist = self.ema_filters['eye_distance'].process(eye_dist_raw)
+            face_v_len = self.ema_filters['face_vertical_length'].process(face_v_len_raw)
             
             shoulder_tilt = self.calculate_shoulder_tilt_degree(landmarks['left_shoulder'], landmarks['right_shoulder'])
             try:
@@ -312,6 +345,33 @@ class IndicatorCalculator:
                 'left_hand_tips': landmarks.get('left_hand_tips', [])
             })
             
+            # [신규] 중앙 정렬(Symmetry) 계산
+            eye_sym = 0.0
+            cheek_sym = 0.0
+            chin_offset = 0.0
+            
+            face_center = landmarks.get('face_center')
+            if face_center:
+                # 1. 눈 대칭 (중앙-왼쪽눈 vs 중앙-오른쪽눈 수평 거리)
+                if landmarks.get('left_eye') and landmarks.get('right_eye'):
+                    l_dist = abs(face_center[0] - landmarks['left_eye'][0])
+                    r_dist = abs(face_center[0] - landmarks['right_eye'][0])
+                    total = l_dist + r_dist
+                    if total > 0:
+                        eye_sym = abs(l_dist - r_dist) / total
+                
+                # 2. 광대 대칭
+                if landmarks.get('left_cheek') and landmarks.get('right_cheek'):
+                    l_c_dist = abs(face_center[0] - landmarks['left_cheek'][0])
+                    r_c_dist = abs(face_center[0] - landmarks['right_cheek'][0])
+                    total_c = l_c_dist + r_c_dist
+                    if total_c > 0:
+                        cheek_sym = abs(l_c_dist - r_c_dist) / total_c
+                
+                # 3. 턱 수평 오프셋 (중앙선 대비 턱 위치)
+                if landmarks.get('chin_points'):
+                    chin_offset = abs(face_center[0] - landmarks['chin_points'][0][0])
+
             hand_near = self.calculate_hand_near_face({
                 'right_hand_tips': landmarks.get('right_hand_tips', []),
                 'left_hand_tips': landmarks.get('left_hand_tips', [])
@@ -342,6 +402,7 @@ class IndicatorCalculator:
             return PostureIndicators(
                 cheek_distance=cheek_dist,
                 eye_distance=eye_dist,
+                face_vertical_length=face_v_len,
                 shoulder_width=shoulder_w,
                 shoulder_tilt_deg=shoulder_tilt,
                 neck_offset=neck_off,
@@ -349,6 +410,9 @@ class IndicatorCalculator:
                 chin_occlusion=chin_occ,
                 hand_near_face=hand_near,
                 hand_face_score=hand_face_score,
+                eye_symmetry_ratio=eye_sym,
+                cheek_symmetry_ratio=cheek_sym,
+                chin_alignment_offset=chin_offset,
                 timestamp=timestamp
             )
         except Exception as e:

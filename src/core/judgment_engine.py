@@ -70,6 +70,9 @@ class JudgmentEngine:
         self.forward_head_sensitivity = sensitivities.get("forward_head", 0.10)
         self.recline_sensitivity = sensitivities.get("recline", 0.04)
         self.neck_offset_sensitivity = sensitivities.get("neck_offset", 10.0)
+        
+        # 스코어링 앵커 (감도 도달 시 부여할 점수)
+        self.warning_anchor = scoring_config.get("warning_anchor", 0.5)
 
         # 자세별 프레임 누적 횟수
         self.posture_history: Dict[str, int] = {
@@ -125,7 +128,6 @@ class JudgmentEngine:
         measured_cheek = indicators.cheek_distance
         
         # 편차 계산 (Deviation)
-        # expected_cheek 대비 얼마나 커졌거나 작아졌는가
         deviation = (measured_cheek - expected_cheek) / expected_cheek
 
         # 각 자세별 판정
@@ -168,28 +170,30 @@ class JudgmentEngine:
         )
 
     def _judge_forward_head(self, indicators: PostureIndicators, deviation: float) -> Dict[str, Any]:
-        """거북목 자세 판정 (고개 기울임 및 회전 가드 적용)"""
+        """거북목 자세 판정"""
         try:
-            # 1. 기본 조건: RANSAC 모델 대비 얼굴이 커짐 (deviation > 0)
-            if deviation <= 0:
+            criteria = self.config.get_posture_type_config(PostureType.FORWARD_HEAD.value)
+            primary_th = criteria["primary_conditions"]["deviation"]["threshold"]
+            guards = criteria.get("guards", {})
+
+            # 1. 기본 방향 확인
+            if deviation <= primary_th:
                 return {"likelihood": 0.0, "triggered": False}
                 
-            # 2. 고개 기울임 가드 (옆으로 기우는 동작 오판 방지)
-            side_tilt_excessive = abs(indicators.eye_line_tilt) > 12
-            shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > 10
+            # 2. 고개 기울임 및 중앙 정렬(Symmetry) 가드
+            side_tilt_excessive = abs(indicators.eye_line_tilt) > guards.get("max_eye_tilt", 12.0)
+            shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > guards.get("max_shoulder_tilt", 10.0)
             
-            # 3. 고개 회전 가드 (고개를 돌릴 때 눈 간 거리 감소 이용)
-            eye_distance_change = self.baseline_manager.calculate_change_percentage(
-                indicators.eye_distance, "eye_distance"
-            )
-            eye_turn_excessive = eye_distance_change < -7
+            # 눈/광대 대칭 확인
+            eye_sym_excessive = indicators.eye_symmetry_ratio > guards.get("max_eye_symmetry_ratio", 0.15)
+            cheek_sym_excessive = indicators.cheek_symmetry_ratio > guards.get("max_cheek_symmetry_ratio", 0.15)
+            chin_offset_excessive = indicators.chin_alignment_offset > guards.get("max_chin_alignment_offset", 0.05)
             
-            # 가드 조건 중 하나라도 해당하면 거북목 판정 제외
-            if side_tilt_excessive or shoulder_tilt_excessive or eye_turn_excessive:
+            if side_tilt_excessive or shoulder_tilt_excessive or eye_sym_excessive or cheek_sym_excessive or chin_offset_excessive:
                 return {"likelihood": 0.0, "triggered": False}
 
-            # 4. 점수 계산: sensitivity(0.10) 기준 선형 증가
-            score = (deviation / self.forward_head_sensitivity) * 0.5
+            # 3. 점수 계산
+            score = (deviation / self.forward_head_sensitivity) * self.warning_anchor
             
             return {"likelihood": float(np.clip(score, 0.0, 1.0)), "triggered": False}
 
@@ -198,26 +202,30 @@ class JudgmentEngine:
             return {"likelihood": 0.0, "triggered": False}
 
     def _judge_recline(self, indicators: PostureIndicators, deviation: float) -> Dict[str, Any]:
-        """기댄 자세 판정 (고개 기울임 및 회전 가드 적용)"""
+        """기댄 자세 판정"""
         try:
-            # 1. 기본 조건: RANSAC 모델 대비 얼굴이 작아짐 (deviation < 0)
-            if deviation >= 0:
+            criteria = self.config.get_posture_type_config(PostureType.RECLINE.value)
+            primary_th = criteria["primary_conditions"]["deviation"]["threshold"]
+            guards = criteria.get("guards", {})
+
+            # 1. 기본 방향 확인
+            if deviation >= primary_th:
                 return {"likelihood": 0.0, "triggered": False}
                 
-            # 2. 고개 기울임 및 회전 가드 (거북목과 동일한 원리)
-            side_tilt_excessive = abs(indicators.eye_line_tilt) > 12
-            shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > 10
+            # 2. 고개 기울임 및 중앙 정렬(Symmetry) 가드
+            side_tilt_excessive = abs(indicators.eye_line_tilt) > guards.get("max_eye_tilt", 12.0)
+            shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > guards.get("max_shoulder_tilt", 10.0)
             
-            eye_distance_change = self.baseline_manager.calculate_change_percentage(
-                indicators.eye_distance, "eye_distance"
-            )
-            eye_turn_excessive = eye_distance_change < -8 # 기댄 자세는 약간 더 관대하게 적용
-            
-            if side_tilt_excessive or shoulder_tilt_excessive or eye_turn_excessive:
+            # 눈/광대 대칭 및 턱 정렬 확인
+            eye_sym_excessive = indicators.eye_symmetry_ratio > guards.get("max_eye_symmetry_ratio", 0.15)
+            cheek_sym_excessive = indicators.cheek_symmetry_ratio > guards.get("max_cheek_symmetry_ratio", 0.15)
+            chin_offset_excessive = indicators.chin_alignment_offset > guards.get("max_chin_alignment_offset", 0.05)
+
+            if side_tilt_excessive or shoulder_tilt_excessive or eye_sym_excessive or cheek_sym_excessive or chin_offset_excessive:
                 return {"likelihood": 0.0, "triggered": False}
 
             # 3. 점수 계산
-            score = (abs(deviation) / self.recline_sensitivity) * 0.5
+            score = (abs(deviation) / self.recline_sensitivity) * self.warning_anchor
             
             return {"likelihood": float(np.clip(score, 0.0, 1.0)), "triggered": False}
 
@@ -228,14 +236,11 @@ class JudgmentEngine:
     def _judge_chin_rest(self, indicators: PostureIndicators) -> Dict[str, Any]:
         """턱 괸 자세 판정"""
         try:
-            # 턱 괸 자세 판정 시에도 과도한 고개 기울임(eye_line_tilt)은 가드로 활용 가능하지만,
-            # 턱을 괴면 자연스럽게 고개가 기우는 특성이 있으므로 여기서는 가드를 두지 않거나 완화함.
-            
             criteria = self.config.get_posture_type_config(PostureType.CHIN_REST.value)
             eye_threshold = criteria["primary_conditions"]["eye_line_tilt_deg"]["threshold"]
             shoulder_threshold = criteria["primary_conditions"]["shoulder_tilt_deg"]["threshold"]
 
-            # 손 관련 트리거 (손이 얼굴 근처 + 턱 가림)
+            # 손 관련 트리거
             hand_triggered = (indicators.hand_near_face or indicators.chin_occlusion > 0.25)
             if not hand_triggered:
                 return {"likelihood": 0.0, "triggered": False}

@@ -72,6 +72,7 @@ class DetectionScreen(QWidget):
         """)
         self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(300))
         preview_layout = QVBoxLayout()
+        preview_layout.setContentsMargins(0, 0, 0, 0)
         self.preview_label = QLabel("[카메라 프리뷰]")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview_layout.addWidget(self.preview_label)
@@ -126,10 +127,10 @@ class DetectionScreen(QWidget):
                 pixmap = cv2_to_qpixmap(annotated_frame)
                 # 프레임의 실제 비율을 유지하며 가용한 공간에 맞춤 (밑이 잘리지 않도록)
                 scaled_pixmap = pixmap.scaled(
-                    self.preview_frame.width() - 4,
-                    self.preview_frame.height() - 4,
+                    self.preview_frame.width(),
+                    self.preview_frame.height(),
                     Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
+                    Qt.TransformationMode.FastTransformation,
                 )
                 self.preview_label.setPixmap(scaled_pixmap)
 
