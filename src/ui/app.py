@@ -128,6 +128,11 @@ class baromokApp:
 
         # 메인 윈도우
         self.main_window = create_main_window(self.config)
+        # 뒤로가기 콜백 등록 (MainWindow의 헤더 모드 전환에 사용)
+        try:
+            self.main_window.set_back_callback(self._return_from_settings)
+        except Exception:
+            logger.debug("메인 윈도우에 백 콜백 등록 실패")
 
         # 화면 생성 및 등록
         self._setup_screens()
@@ -258,6 +263,19 @@ class baromokApp:
         """
         if 0 <= screen_index < self.main_window.stacked_widget.count():
             self._previous_screen_index = self.main_window.stacked_widget.currentIndex()
+
+            # Settings 화면으로 이동할 때, 감지 화면(4)에서 온 경우에는 헤더를 뒤로가기 모드로 전환
+            if screen_index == 2 and self._previous_screen_index == 4:
+                try:
+                    self.main_window.show_back_header()
+                except Exception:
+                    logger.debug("헤더를 뒤로가기 모드로 전환하지 못함")
+            else:
+                try:
+                    self.main_window.show_default_header()
+                except Exception:
+                    logger.debug("헤더를 기본 모드로 전환하지 못함")
+
             self.main_window.stacked_widget.setCurrentIndex(screen_index)
             screen_names = ["baseline", "hub", "settings", "statistics", "detection"]
             logger.info("화면 전환: %s", screen_names[screen_index])

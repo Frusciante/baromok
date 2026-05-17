@@ -96,8 +96,9 @@ class SettingsScreen(QWidget):
                 row_frame.setMinimumHeight(self.theme_manager.scale_pixel(360))
                 widget.setMinimumHeight(self.theme_manager.scale_pixel(320))
             elif cat == "감도 설정":
-                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(280))
-                widget.setMinimumHeight(self.theme_manager.scale_pixel(240))
+                # 감도 설정 칸의 높이를 늘려 입력 박스와 설명이 여유 있게 보이도록 조정
+                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(340))
+                widget.setMinimumHeight(self.theme_manager.scale_pixel(300))
                 # 로컬 초기화 신호 연결
                 if hasattr(widget, "reset_requested_signal"):
                     widget.reset_requested_signal.connect(self._reset_settings)

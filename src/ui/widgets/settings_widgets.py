@@ -622,10 +622,12 @@ class SensitivitySettingsWidget(QWidget):
         self._apply_button_style(minus_btn)
         
         val_label = QLabel(f"{initial_val:.3f}")
-        val_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(16), QFont.Weight.Bold)) # 폰트 키움
-        val_label.setFixedWidth(self.theme_manager.scale_pixel(100))
+        val_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(18), QFont.Weight.Bold))
+        val_label.setFixedSize(self.theme_manager.scale_pixel(140), self.theme_manager.scale_pixel(56))
         val_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        val_label.setStyleSheet("color: #4333A6; background-color: #F0EDFF; border-radius: 6px; padding: 4px;") # 배경색 추가하여 강조
+        val_label.setStyleSheet(
+            "color: #4333A6; background-color: #F0EDFF; border-radius: 8px; padding: 6px;"
+        )
         setattr(self, label_attr, val_label)
         
         plus_btn = QPushButton("+")

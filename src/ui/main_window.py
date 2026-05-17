@@ -150,8 +150,63 @@ class MainWindow(QMainWindow):
         close_btn.clicked.connect(self.close)
         layout.addWidget(close_btn)
 
+        # 뒤로가기 버튼 (기본 숨김). 일부 화면에서는 이 버튼을 대신 노출하도록 함
+        back_btn = QPushButton("←")
+        back_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
+        back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {Colors.WHITE.value};
+                border: none;
+                width: {int(40 * self.dpi_scale)}px;
+                height: {int(40 * self.dpi_scale)}px;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(255, 255, 255, 0.15);
+            }}
+        """)
+        back_btn.clicked.connect(self._on_back_clicked)
+        back_btn.setVisible(False)
+        layout.addWidget(back_btn)
+
+        # store references for mode switching
+        self._minimize_btn = minimize_btn
+        self._close_btn = close_btn
+        self._back_btn = back_btn
+        self._back_callback = None
+
         header.setLayout(layout)
         return header
+
+    def _on_back_clicked(self):
+        """헤더의 뒤로가기 버튼 클릭 처리: 등록된 콜백 호출"""
+        if callable(self._back_callback):
+            try:
+                self._back_callback()
+            except Exception:
+                logger.exception("Back callback 실행 중 예외 발생")
+
+    def set_back_callback(self, callback):
+        """뒤로가기 버튼에 콜백 등록"""
+        self._back_callback = callback
+
+    def show_back_header(self):
+        """뒤로가기 모드: 최소화/닫기 숨기고 뒤로가기 버튼 보이기"""
+        if hasattr(self, "_minimize_btn"):
+            self._minimize_btn.setVisible(False)
+        if hasattr(self, "_close_btn"):
+            self._close_btn.setVisible(False)
+        if hasattr(self, "_back_btn"):
+            self._back_btn.setVisible(True)
+
+    def show_default_header(self):
+        """기본 모드: 최소화/닫기 보이고 뒤로가기 버튼 숨기기"""
+        if hasattr(self, "_minimize_btn"):
+            self._minimize_btn.setVisible(True)
+        if hasattr(self, "_close_btn"):
+            self._close_btn.setVisible(True)
+        if hasattr(self, "_back_btn"):
+            self._back_btn.setVisible(False)
 
     def _create_footer(self) -> QWidget:
         """하단 푸터 생성"""
