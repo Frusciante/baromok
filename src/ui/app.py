@@ -277,8 +277,8 @@ class baromokApp:
         if 0 <= screen_index < self.main_window.stacked_widget.count():
             self._previous_screen_index = self.main_window.stacked_widget.currentIndex()
 
-            # 자세 맞춤/설정 화면으로 이동할 때는 뒤로가기 버튼을 노출한다.
-            if screen_index in (0, 2):
+            # 자세 맞춤/설정/통계/감지 화면으로 이동할 때는 뒤로가기 버튼을 노출한다.
+            if screen_index in (0, 2, 3, 4):
                 try:
                     self.main_window.show_back_header()
                 except Exception:
@@ -303,6 +303,10 @@ class baromokApp:
                 self.baseline_screen.cancel_capture()
             except Exception:
                 logger.debug("베이스라인 취소 처리 중 오류")
+
+        if current_index == 3:
+            self.switch_screen(1)
+            return
 
         target_index = self._previous_screen_index
         if target_index == 2:

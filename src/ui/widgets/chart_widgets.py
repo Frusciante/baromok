@@ -242,7 +242,7 @@ class StatisticsLineChart(QWidget):
             )
 
             # 축 레이블
-            ax.set_xlabel("세션 번호", fontsize=11, fontweight="bold")
+            ax.set_xlabel("날짜", fontsize=11, fontweight="bold")
             ax.set_ylabel("유지율 (%)", fontsize=11, fontweight="bold")
             ax.set_ylim(0, 105)
 
