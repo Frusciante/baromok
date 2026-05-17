@@ -221,7 +221,7 @@ class SoundSettingsWidget(QWidget):
 
         self.test_btn = QPushButton("소리 테스트")
         self.test_btn.setFixedHeight(self.theme_manager.scale_pixel(36))
-        self.test_btn.clicked.connect(self.test_requested_signal.emit)
+        self.test_btn.clicked.connect(lambda _checked=False: self.test_requested_signal.emit())
         self.test_btn.setStyleSheet(
             f"""
             QPushButton {{

@@ -40,19 +40,19 @@ class CalibrationScatterChart(QWidget):
         self.figure.patch.set_facecolor(Colors.WHITE.value)
 
         self.canvas = FigureCanvas(self.figure)
-        
+
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.canvas)
         self.setLayout(layout)
 
         self.ax = self.figure.add_subplot(111)
-        
+
         self.points_x = []
         self.points_y = []
         self.points_colors = []
-        self._draw_cnt = 0 # 성능 최적화용 카운터
-        
+        self._draw_cnt = 0  # 성능 최적화용 카운터
+
         self._init_axes()
         logger.info("자세 맞춤 차트 초기화 완료")
 
@@ -61,19 +61,26 @@ class CalibrationScatterChart(QWidget):
         self.ax.set_title("어깨 너비 vs 광대 거리 분포", fontsize=11, fontweight="bold")
         self.ax.set_xlabel("어깨 너비", fontsize=9)
         self.ax.set_ylabel("광대 거리", fontsize=9)
-        
+
         # 범위를 고정하여 축 숫자가 생겼다 없어졌다 하는 현상 방지
-        self.ax.set_xlim(0.1, 0.7) 
+        self.ax.set_xlim(0.1, 0.7)
         self.ax.set_ylim(0.0, 0.4)
-        
+
         # 눈금 고정 (축 숫자가 변하지 않게 함)
         self.ax.set_xticks([0.1, 0.25, 0.4, 0.55, 0.7])
         self.ax.set_yticks([0.0, 0.1, 0.2, 0.3, 0.4])
-        
+
         self.ax.grid(True, linestyle="--", alpha=0.2)
         self.figure.tight_layout()
 
-    def update_live_point(self, x: float, y: float, is_collecting: bool = False, step: int = 0, total_steps: int = 20):
+    def update_live_point(
+        self,
+        x: float,
+        y: float,
+        is_collecting: bool = False,
+        step: int = 0,
+        total_steps: int = 20,
+    ):
         """실시간 포인트 및 수집된 포인트 업데이트 (안정화 버전)"""
         if x <= 0 or y <= 0:
             return
@@ -90,19 +97,28 @@ class CalibrationScatterChart(QWidget):
         if self._draw_cnt % 3 != 0:
             return
 
-        # 3. 화면 갱신 (clear 대신 데이터만 업데이트하는 것이 좋으나, 
-        # 여러 점의 색상이 달라 scatter를 다시 그리는 것이 간편함. 
+        # 3. 화면 갱신 (clear 대신 데이터만 업데이트하는 것이 좋으나,
+        # 여러 점의 색상이 달라 scatter를 다시 그리는 것이 간편함.
         # 대신 축 설정은 유지하여 떨림 방지)
         self.ax.clear()
         self._init_axes()
-        
+
         # 기존 포인트들 그리기
         if self.points_x:
-            self.ax.scatter(self.points_x, self.points_y, c=self.points_colors, s=25, alpha=0.6, edgecolors='none')
+            self.ax.scatter(
+                self.points_x,
+                self.points_y,
+                c=self.points_colors,
+                s=25,
+                alpha=0.6,
+                edgecolors="none",
+            )
 
         # 현재 커서 (X 표시)
-        cursor_color = Colors.RED_DANGER.value if is_collecting else Colors.PRIMARY.value
-        self.ax.scatter([x], [y], color=cursor_color, s=100, marker='x', linewidths=2)
+        cursor_color = (
+            Colors.RED_DANGER.value if is_collecting else Colors.PRIMARY.value
+        )
+        self.ax.scatter([x], [y], color=cursor_color, s=100, marker="x", linewidths=2)
 
         self.canvas.draw_idle()
 

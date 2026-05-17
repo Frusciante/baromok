@@ -111,13 +111,15 @@ class baromokApp:
         logger.info("✓ 카메라 워커 준비 완료")
 
         # 설정 로드 (ConfigManager를 전달하여 기본값 처리)
-        self.settings_config = SettingsConfig.load_from_json("data/config.json", self.config)
+        self.settings_config = SettingsConfig.load_from_json(
+            "data/config.json", self.config
+        )
         logger.info("사용자 설정 로드 완료")
-        
+
         # 로드된 감도를 판정 엔진에 적용
         self.judgment_engine.update_sensitivities(
             self.settings_config.forward_head_sensitivity,
-            self.settings_config.recline_sensitivity
+            self.settings_config.recline_sensitivity,
         )
 
         # 알림음 관리자
@@ -130,6 +132,7 @@ class baromokApp:
         self._sound_playing = False
         self._last_sound_time = 0.0
         self._sound_cooldown_seconds = 3.0
+        self._last_sound_state = ""
 
         # 메인 윈도우
         self.main_window = create_main_window(self.config)
@@ -157,7 +160,10 @@ class baromokApp:
 
         # 의존성 주입과 함께 화면 생성
         self.baseline_screen = BaselineScreen(
-            self.theme_manager, self.camera_worker, self.baseline_manager, self.sound_manager
+            self.theme_manager,
+            self.camera_worker,
+            self.baseline_manager,
+            self.sound_manager,
         )
         self.hub_screen = HubScreen(self.theme_manager)
         self.settings_screen = SettingsScreen(
@@ -167,7 +173,10 @@ class baromokApp:
             self.theme_manager, self.session_manager
         )
         self.detection_screen = DetectionScreen(
-            self.theme_manager, self.camera_worker, self.session_manager, self.baseline_manager
+            self.theme_manager,
+            self.camera_worker,
+            self.session_manager,
+            self.baseline_manager,
         )
 
         # 화면 등록
@@ -314,7 +323,11 @@ class baromokApp:
 
         # 베이스라인 화면에서 뒤로 나갈 때, 감지 화면으로 복귀하는 경우
         # 카메라가 실제로 살아있지 않으면 즉시 다시 시작한다.
-        if target_index == 4 and hasattr(self, "camera_worker") and not self.camera_worker.isRunning():
+        if (
+            target_index == 4
+            and hasattr(self, "camera_worker")
+            and not self.camera_worker.isRunning()
+        ):
             try:
                 self.camera_worker.start()
             except Exception:
@@ -353,20 +366,20 @@ class baromokApp:
     def _apply_recommended_sensitivities(self, fwd: float, rec: float):
         """자세 맞춤 결과에 따른 권장 감도 자동 적용"""
         logger.info(f"권장 감도 자동 적용: 거북목={fwd:.3f}, 기댄자세={rec:.3f}")
-        
+
         # 설정값 업데이트
         self.settings_config.forward_head_sensitivity = fwd
         self.settings_config.recline_sensitivity = rec
-        
+
         # [추가] 초기화 시 돌아갈 권장값으로도 저장
         self.settings_config.recommended_forward_head = fwd
         self.settings_config.recommended_recline = rec
-        
+
         # 엔진 및 UI 즉시 반영
         self._apply_settings()
         for widget in self.settings_screen.category_widgets:
             widget.set_value(vars(self.settings_config))
-            
+
         # 파일 저장
         self.settings_config.save_to_json("data/config.json")
 
@@ -411,6 +424,10 @@ class baromokApp:
         self._last_alert_type = alert_type
         self._last_alert_time = now
         self.alert_bridge.alert_requested.emit(alert_type, message_text)
+
+        # 나쁜 자세로 진입했을 때만 경고음을 별도로 1회 재생한다.
+        if event.to_state.value == "bad_posture":
+            self._play_bad_posture_sound_once()
 
     def _show_alert_popup(self, alert_type: str, message_text: str):
         """메인 스레드에서 알림 팝업 표시"""
@@ -469,7 +486,7 @@ class baromokApp:
         self._last_sound_time = now
         self._sound_playing = True
 
-        if getattr(self.sound_manager, 'supports_volume_control', False):
+        if getattr(self.sound_manager, "supports_volume_control", False):
             try:
                 self.sound_manager.play_alert(self.settings_config.sound_volume)
             except Exception as e:
@@ -477,6 +494,7 @@ class baromokApp:
             finally:
                 self._sound_playing = False
         else:
+
             def _play():
                 try:
                     self.sound_manager.play_alert(self.settings_config.sound_volume)
@@ -487,6 +505,18 @@ class baromokApp:
 
             thread = threading.Thread(target=_play, daemon=True)
             thread.start()
+
+    def _play_bad_posture_sound_once(self):
+        """BAD_POSTURE 진입 시에만 중복 없이 경고음을 재생한다."""
+        if not self.settings_config.sound_enabled:
+            return
+
+        now = time.time()
+        if self._last_sound_state == "bad_posture" and now - self._last_sound_time < self._sound_cooldown_seconds:
+            return
+
+        self._last_sound_state = "bad_posture"
+        self._play_alert_sound_async()
 
     def _save_settings(self, settings_dict: dict):
         """설정 저장"""
@@ -513,11 +543,11 @@ class baromokApp:
             # UI 위젯들에 반영
             for widget in self.settings_screen.category_widgets:
                 widget.set_value(vars(self.settings_config))
-            
+
             # 엔진 즉시 반영
             self.judgment_engine.update_sensitivities(
                 self.settings_config.forward_head_sensitivity,
-                self.settings_config.recline_sensitivity
+                self.settings_config.recline_sensitivity,
             )
             logger.info("설정이 기본값으로 초기화되었습니다.")
         except Exception as e:
@@ -533,13 +563,17 @@ class baromokApp:
             f"  - 팝업 자동 닫기: {self.settings_config.popup_auto_close} "
             f"({self.settings_config.popup_auto_close_time}초)"
         )
-        logger.info(f"  - 거북목 감도: {self.settings_config.forward_head_sensitivity:.3f}")
-        logger.info(f"  - 기댄자세 감도: {self.settings_config.recline_sensitivity:.3f}")
+        logger.info(
+            f"  - 거북목 감도: {self.settings_config.forward_head_sensitivity:.3f}"
+        )
+        logger.info(
+            f"  - 기댄자세 감도: {self.settings_config.recline_sensitivity:.3f}"
+        )
 
         # 판정 엔진에 감도 업데이트
         self.judgment_engine.update_sensitivities(
             self.settings_config.forward_head_sensitivity,
-            self.settings_config.recline_sensitivity
+            self.settings_config.recline_sensitivity,
         )
 
         if not self.settings_config.notification_enabled:
@@ -555,7 +589,7 @@ class baromokApp:
 
         # 사운드 관련 설정 변경 시 SoundManager에 즉시 반영
         try:
-            if hasattr(self, 'sound_manager'):
+            if hasattr(self, "sound_manager"):
                 self.sound_manager.set_volume_percent(self.settings_config.sound_volume)
         except Exception:
             logger.debug("사운드 설정 반영 실패")
@@ -569,13 +603,15 @@ class baromokApp:
                     setattr(self.settings_config, k, v)
 
             # 사운드 관련 변경은 즉시 SoundManager에 반영
-            if 'sound_volume' in value_dict and hasattr(self, 'sound_manager'):
+            if "sound_volume" in value_dict and hasattr(self, "sound_manager"):
                 try:
-                    self.sound_manager.set_volume_percent(self.settings_config.sound_volume)
+                    self.sound_manager.set_volume_percent(
+                        self.settings_config.sound_volume
+                    )
                 except Exception:
-                    logger.debug('사운드 볼륨 실시간 반영 실패')
+                    logger.debug("사운드 볼륨 실시간 반영 실패")
 
-            if 'sound_enabled' in value_dict:
+            if "sound_enabled" in value_dict:
                 # 알림음 비활성화 시 타이머/사운드 정리
                 if not self.settings_config.sound_enabled:
                     self._hide_alert_popup()
@@ -587,15 +623,15 @@ class baromokApp:
         """애플리케이션 실행"""
         logger.info("애플리케이션 실행")
         self.main_window.show()
-        
+
         # 앱 실행 중에는 주기적으로 저장하거나 종료 시 저장
         # PyQt 종료 시점 처리를 위해 exec_ 호출 후 저장
         exit_code = self.qt_app.exec()
-        
+
         # 종료 전 설정 최종 저장
         self.settings_config.save_to_json("data/config.json")
         logger.info("애플리케이션 종료 전 설정 저장 완료")
-        
+
         return exit_code
 
 
