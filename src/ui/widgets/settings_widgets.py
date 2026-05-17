@@ -152,6 +152,7 @@ class SoundSettingsWidget(QWidget):
     """소리 설정 위젯: 토글 + 슬라이더"""
 
     value_changed_signal = pyqtSignal(dict)
+    test_requested_signal = pyqtSignal()
 
     def __init__(self, theme_manager: ThemeManager, initial_config: dict = None):
         super().__init__()
@@ -218,6 +219,24 @@ class SoundSettingsWidget(QWidget):
         range_layout.addWidget(max_label)
         slider_layout.addLayout(range_layout)
 
+        self.test_btn = QPushButton("소리 테스트")
+        self.test_btn.setFixedHeight(self.theme_manager.scale_pixel(36))
+        self.test_btn.clicked.connect(self.test_requested_signal.emit)
+        self.test_btn.setStyleSheet(
+            f"""
+            QPushButton {{
+                background-color: {Colors.WHITE.value};
+                color: {Colors.PURPLE_PRIMARY.value};
+                border: 1px solid {Colors.PURPLE_PRIMARY.value};
+                border-radius: 8px;
+            }}
+            QPushButton:hover {{
+                background-color: #F4F0FF;
+            }}
+        """
+        )
+        slider_layout.addWidget(self.test_btn)
+
         layout.addLayout(slider_layout)
 
         self.setLayout(layout)
@@ -235,9 +254,10 @@ class SoundSettingsWidget(QWidget):
 
     def _sync_slider_state(self):
         """토글 상태에 따라 슬라이더 활성화/비활성화"""
-        is_enabled = self.toggle.isChecked()
-        self.slider.setEnabled(is_enabled)
-        self.volume_label.setEnabled(is_enabled)
+        # 사용자가 소리 활성화를 끄더라도 슬라이더는 조절할 수 있게 둡니다.
+        # 실제 재생 여부는 앱 레이어에서 `sound_enabled`를 확인하여 처리합니다.
+        self.slider.setEnabled(True)
+        self.volume_label.setEnabled(True)
 
     def _emit_value_changed(self):
         """값 변경 신호 발생"""

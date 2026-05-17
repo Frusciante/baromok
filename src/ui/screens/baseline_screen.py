@@ -343,6 +343,36 @@ class BaselineScreen(QWidget):
             self.main_status_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
             self.sub_status_label.setText("데이터가 부족합니다.")
 
+    def cancel_capture(self):
+        """진행 중인 자세 맞춤을 취소하고 초기 상태로 되돌린다."""
+        if self.capture_timer.isActive():
+            self.capture_timer.stop()
+
+        self.is_capturing_baseline = False
+        self.current_step = 1
+        self.step_state = "WAIT"
+        self.step_ticks = 0
+        self.total_elapsed_ticks = 0
+        self.received_frame_count = 0
+        self.valid_baseline_frame_count = 0
+        self.current_remaining_sec = 0.0
+
+        if self.baseline_manager and getattr(self.baseline_manager, "is_collecting", False):
+            self.baseline_manager.reset()
+
+        if self.camera_worker and hasattr(self.camera_worker, "set_baseline_mode"):
+            self.camera_worker.set_baseline_mode(False)
+
+        self.capture_btn.setEnabled(True)
+        self.capture_btn.setText("자세 맞춤 시작")
+        self.total_progress_bar.setValue(0)
+        self.step_progress_bar.setValue(0)
+        self.step_label.setText(f"전체 진행: 0 / {self.total_steps}")
+        self.main_status_label.setText("준비")
+        self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value};")
+        self.sub_status_label.setText("자세 맞춤 시작을 눌러주세요")
+        set_recognition_message(self.recognition_label, False)
+
     def _fail_capture(self, message: str):
         self.is_capturing_baseline = False
         self.capture_timer.stop()

@@ -122,15 +122,20 @@ class baromokApp:
 
         # 알림음 관리자
         self.sound_manager = SoundManager()
+        # 설정에서 로드된 음량을 사운드 매니저에 반영
+        try:
+            self.sound_manager.set_volume_percent(self.settings_config.sound_volume)
+        except Exception:
+            logger.debug("사운드 초기 볼륨 반영 실패")
         self._sound_playing = False
         self._last_sound_time = 0.0
         self._sound_cooldown_seconds = 3.0
 
         # 메인 윈도우
         self.main_window = create_main_window(self.config)
-        # 뒤로가기 콜백 등록 (MainWindow의 헤더 모드 전환에 사용)
+        # 뒤로가기 콜백 등록 (현재 화면에 따라 이전 화면으로 복귀)
         try:
-            self.main_window.set_back_callback(self._return_from_settings)
+            self.main_window.set_back_callback(self._handle_header_back)
         except Exception:
             logger.debug("메인 윈도우에 백 콜백 등록 실패")
 
@@ -197,7 +202,15 @@ class baromokApp:
         )
         self.settings_screen.settings_saved_signal.connect(self._save_settings)
         self.settings_screen.settings_reset_signal.connect(self._reset_settings)
-        self.settings_screen.back_to_hub_signal.connect(self._return_from_settings)
+        self.settings_screen.back_to_hub_signal.connect(self._handle_header_back)
+        # Settings 화면의 위젯 변경 신호를 실시간 적용하도록 연결
+        try:
+            for widget in self.settings_screen.category_widgets:
+                widget.value_changed_signal.connect(self._on_settings_widget_changed)
+                if hasattr(widget, "test_requested_signal"):
+                    widget.test_requested_signal.connect(self._test_sound_now)
+        except Exception:
+            logger.debug("설정 위젯 변경 신호 연결 중 오류 발생")
         self.statistics_screen.back_to_hub_signal.connect(
             lambda: self.switch_screen(1)  # Hub
         )
@@ -264,8 +277,8 @@ class baromokApp:
         if 0 <= screen_index < self.main_window.stacked_widget.count():
             self._previous_screen_index = self.main_window.stacked_widget.currentIndex()
 
-            # Settings 화면으로 이동할 때, 감지 화면(4)에서 온 경우에는 헤더를 뒤로가기 모드로 전환
-            if screen_index == 2 and self._previous_screen_index == 4:
+            # 자세 맞춤/설정 화면으로 이동할 때는 뒤로가기 버튼을 노출한다.
+            if screen_index in (0, 2):
                 try:
                     self.main_window.show_back_header()
                 except Exception:
@@ -282,12 +295,34 @@ class baromokApp:
         else:
             logger.warning("잘못된 화면 인덱스: %s", screen_index)
 
-    def _return_from_settings(self):
-        """설정 화면에서 마지막 화면으로 복귀"""
+    def _handle_header_back(self):
+        """헤더의 뒤로가기 버튼 처리: 직전 화면으로 복귀"""
+        current_index = self.main_window.stacked_widget.currentIndex()
+        if current_index == 0 and hasattr(self, "baseline_screen"):
+            try:
+                self.baseline_screen.cancel_capture()
+            except Exception:
+                logger.debug("베이스라인 취소 처리 중 오류")
+
         target_index = self._previous_screen_index
         if target_index == 2:
             target_index = 1
+
+        # 베이스라인 화면에서 뒤로 나갈 때, 감지 화면으로 복귀하는 경우
+        # 카메라가 실제로 살아있지 않으면 즉시 다시 시작한다.
+        if target_index == 4 and hasattr(self, "camera_worker") and not self.camera_worker.isRunning():
+            try:
+                self.camera_worker.start()
+            except Exception:
+                logger.debug("카메라 재시작 실패")
+
         self.switch_screen(target_index)
+
+        if target_index == 4 and hasattr(self, "detection_screen"):
+            try:
+                self.detection_screen.on_detection_started()
+            except Exception:
+                logger.debug("감지 화면 재개 처리 중 오류")
 
     def _start_detection(self):
         """감지 시작"""
@@ -403,8 +438,8 @@ class baromokApp:
             logger.debug(f"팝업 타이머 시작: {timeout_ms}ms")
         else:
             logger.debug("팝업 타이머 비활성화 (수동 닫기)")
-        # 알림음 재생
-        if self.settings_config.sound_enabled:
+        # 알림음은 나쁜 자세 상태에서만 재생한다.
+        if self.settings_config.sound_enabled and alert_type == "danger":
             self._play_alert_sound_async()
 
     def _hide_alert_popup(self):
@@ -424,19 +459,30 @@ class baromokApp:
         if self._sound_playing:
             return
 
+        # QSoundEffect 기반으로 볼륨 제어가 가능한 경우는 non-blocking이므로
+        # 별도 스레드를 만들지 않고 즉시 재생합니다. 그렇지 않으면 기존과 같이
+        # 백그라운드 스레드에서 winsound.Beep를 호출합니다.
         self._last_sound_time = now
         self._sound_playing = True
 
-        def _play():
+        if getattr(self.sound_manager, 'supports_volume_control', False):
             try:
                 self.sound_manager.play_alert(self.settings_config.sound_volume)
             except Exception as e:
                 logger.error(f"알림음 재생 실패: {e}", exc_info=True)
             finally:
                 self._sound_playing = False
+        else:
+            def _play():
+                try:
+                    self.sound_manager.play_alert(self.settings_config.sound_volume)
+                except Exception as e:
+                    logger.error(f"알림음 재생 실패: {e}", exc_info=True)
+                finally:
+                    self._sound_playing = False
 
-        thread = threading.Thread(target=_play, daemon=True)
-        thread.start()
+            thread = threading.Thread(target=_play, daemon=True)
+            thread.start()
 
     def _save_settings(self, settings_dict: dict):
         """설정 저장"""
@@ -495,6 +541,43 @@ class baromokApp:
         if not self.settings_config.notification_enabled:
             self.alert_hide_timer.stop()
             self._hide_alert_popup()
+
+    def _test_sound_now(self):
+        """설정 화면에서 현재 볼륨으로 알림음을 즉시 테스트한다."""
+        try:
+            self.sound_manager.play_alert(self.settings_config.sound_volume)
+        except Exception as e:
+            logger.error(f"소리 테스트 실패: {e}", exc_info=True)
+
+        # 사운드 관련 설정 변경 시 SoundManager에 즉시 반영
+        try:
+            if hasattr(self, 'sound_manager'):
+                self.sound_manager.set_volume_percent(self.settings_config.sound_volume)
+        except Exception:
+            logger.debug("사운드 설정 반영 실패")
+
+    def _on_settings_widget_changed(self, value_dict: dict):
+        """Settings 위젯의 value_changed_signal을 처리하여 변경을 즉시 반영합니다."""
+        try:
+            # settings_config에 반영 (메모리상의 설정)
+            for k, v in value_dict.items():
+                if hasattr(self.settings_config, k):
+                    setattr(self.settings_config, k, v)
+
+            # 사운드 관련 변경은 즉시 SoundManager에 반영
+            if 'sound_volume' in value_dict and hasattr(self, 'sound_manager'):
+                try:
+                    self.sound_manager.set_volume_percent(self.settings_config.sound_volume)
+                except Exception:
+                    logger.debug('사운드 볼륨 실시간 반영 실패')
+
+            if 'sound_enabled' in value_dict:
+                # 알림음 비활성화 시 타이머/사운드 정리
+                if not self.settings_config.sound_enabled:
+                    self._hide_alert_popup()
+
+        except Exception as e:
+            logger.error(f"설정 위젯 변경 처리 실패: {e}", exc_info=True)
 
     def run(self):
         """애플리케이션 실행"""
