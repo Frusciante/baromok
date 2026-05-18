@@ -12,10 +12,11 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QLabel,
     QPushButton,
+    QToolButton,
     QApplication,
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
-from PyQt6.QtGui import QFont, QGuiApplication
+from PyQt6.QtGui import QFont, QGuiApplication, QIcon
 from PyQt6.QtCore import QTimer
 from pathlib import Path
 import sys
@@ -94,7 +95,7 @@ class MainWindow(QMainWindow):
     def _create_header(self) -> QWidget:
         """상단 헤더 생성"""
         header = QWidget()
-        header.setFixedHeight(int(75 * self.dpi_scale))
+        header.setFixedHeight(int(95 * self.dpi_scale))
         header.setStyleSheet(f"background-color: {Colors.PURPLE_PRIMARY.value};")
 
         layout = QHBoxLayout()
@@ -108,43 +109,60 @@ class MainWindow(QMainWindow):
 
         # 앱 이름
         title = QLabel("바로목")
-        title.setFont(
-            QFont("Noto Sans KR", int(24 * self.dpi_scale), QFont.Weight.Bold)
-        )
+        title_font = QFont("Noto Sans KR", int(54 * self.dpi_scale), QFont.Weight.Bold)
+        title_font.setBold(True)
+        title.setFont(title_font)
         title.setStyleSheet(f"color: {Colors.WHITE.value};")
         layout.addWidget(title)
 
         # 스트래치 (오른쪽 공간)
         layout.addStretch()
 
-        def create_header_button(text: str, callback):
-            btn = QPushButton(text)
-            btn.setFont(QFont("Noto Sans KR", int(14 * self.dpi_scale)))
-            btn.setFixedHeight(int(36 * self.dpi_scale))
-            btn.setFixedWidth(int(110 * self.dpi_scale))
+        icon_dir = Path(__file__).resolve().parents[2] / "assets" / "ui"
+
+        def create_header_button(text: str, icon_name: str, callback):
+            btn = QToolButton()
+            btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+            btn.setIcon(QIcon(str(icon_dir / icon_name)))
+            btn.setIconSize(QSize(int(34 * self.dpi_scale), int(34 * self.dpi_scale)))
+            btn.setText(text)
+            btn.setFont(QFont("Noto Sans KR", int(9 * self.dpi_scale)))
+            base_width = int(96 * self.dpi_scale)
+            base_height = int(72 * self.dpi_scale)
+            pressed_width = int(94 * self.dpi_scale)
+            pressed_height = int(70 * self.dpi_scale)
+            btn.setFixedSize(base_width, base_height)
             btn.setStyleSheet(f"""
-                QPushButton {{
+                QToolButton {{
                     background-color: transparent;
                     color: {Colors.WHITE.value};
                     border: 1px solid rgba(255, 255, 255, 0.35);
-                    border-radius: {int(6 * self.dpi_scale)}px;
+                    border-radius: {int(8 * self.dpi_scale)}px;
+                    padding: {int(6 * self.dpi_scale)}px {int(8 * self.dpi_scale)}px {int(3 * self.dpi_scale)}px {int(8 * self.dpi_scale)}px;
                 }}
-                QPushButton:hover {{
-                    background-color: rgba(255, 255, 255, 0.12);
+                QToolButton:hover {{
+                    background-color: {Colors.WHITE.value};
+                    color: {Colors.PURPLE_PRIMARY.value};
+                }}
+                QToolButton:pressed {{
+                    background-color: #ECEBFC;
+                    color: {Colors.PURPLE_PRIMARY.value};
                 }}
             """)
+            btn.pressed.connect(lambda b=btn: b.setFixedSize(pressed_width, pressed_height))
+            btn.released.connect(lambda b=btn: b.setFixedSize(base_width, base_height))
             btn.clicked.connect(callback)
             layout.addWidget(btn)
             return btn
 
         self._posture_adjust_btn = create_header_button(
-            "자세 맞춤", self.posture_adjust_requested.emit
+            "자세 맞춤", "icon_posture.png", self.posture_adjust_requested.emit
         )
         self._settings_btn = create_header_button(
-            "환경설정", self.settings_requested.emit
+            "환경설정", "icon_settings.png", self.settings_requested.emit
         )
         self._statistics_btn = create_header_button(
-            "나의 통계", self.statistics_requested.emit
+            "나의 통계", "icon_stats.png", self.statistics_requested.emit
         )
 
         # 뒤로가기 버튼 (기본 숨김). 일부 화면에서는 이 버튼을 대신 노출하도록 함
