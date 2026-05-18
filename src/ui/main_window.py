@@ -31,6 +31,9 @@ class MainWindow(QMainWindow):
 
     # 신호
     screen_changed_signal = pyqtSignal(str)
+    posture_adjust_requested = pyqtSignal()
+    settings_requested = pyqtSignal()
+    statistics_requested = pyqtSignal()
 
     def __init__(self, config=None):
         """
@@ -91,7 +94,7 @@ class MainWindow(QMainWindow):
     def _create_header(self) -> QWidget:
         """상단 헤더 생성"""
         header = QWidget()
-        header.setFixedHeight(int(60 * self.dpi_scale))
+        header.setFixedHeight(int(75 * self.dpi_scale))
         header.setStyleSheet(f"background-color: {Colors.PURPLE_PRIMARY.value};")
 
         layout = QHBoxLayout()
@@ -113,6 +116,36 @@ class MainWindow(QMainWindow):
 
         # 스트래치 (오른쪽 공간)
         layout.addStretch()
+
+        def create_header_button(text: str, callback):
+            btn = QPushButton(text)
+            btn.setFont(QFont("Noto Sans KR", int(14 * self.dpi_scale)))
+            btn.setFixedHeight(int(36 * self.dpi_scale))
+            btn.setFixedWidth(int(110 * self.dpi_scale))
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: transparent;
+                    color: {Colors.WHITE.value};
+                    border: 1px solid rgba(255, 255, 255, 0.35);
+                    border-radius: {int(6 * self.dpi_scale)}px;
+                }}
+                QPushButton:hover {{
+                    background-color: rgba(255, 255, 255, 0.12);
+                }}
+            """)
+            btn.clicked.connect(callback)
+            layout.addWidget(btn)
+            return btn
+
+        self._posture_adjust_btn = create_header_button(
+            "자세 맞춤", self.posture_adjust_requested.emit
+        )
+        self._settings_btn = create_header_button(
+            "환경설정", self.settings_requested.emit
+        )
+        self._statistics_btn = create_header_button(
+            "나의 통계", self.statistics_requested.emit
+        )
 
         # 뒤로가기 버튼 (기본 숨김). 일부 화면에서는 이 버튼을 대신 노출하도록 함
         back_btn = QPushButton("←")
@@ -155,11 +188,23 @@ class MainWindow(QMainWindow):
         """뒤로가기 모드: 뒤로가기 버튼 보이기"""
         if hasattr(self, "_back_btn"):
             self._back_btn.setVisible(True)
+        if hasattr(self, "_posture_adjust_btn"):
+            self._posture_adjust_btn.setVisible(False)
+        if hasattr(self, "_settings_btn"):
+            self._settings_btn.setVisible(False)
+        if hasattr(self, "_statistics_btn"):
+            self._statistics_btn.setVisible(False)
 
     def show_default_header(self):
         """기본 모드: 뒤로가기 버튼 숨기기"""
         if hasattr(self, "_back_btn"):
             self._back_btn.setVisible(False)
+        if hasattr(self, "_posture_adjust_btn"):
+            self._posture_adjust_btn.setVisible(True)
+        if hasattr(self, "_settings_btn"):
+            self._settings_btn.setVisible(True)
+        if hasattr(self, "_statistics_btn"):
+            self._statistics_btn.setVisible(True)
 
     def _create_footer(self) -> QWidget:
         """하단 푸터 생성"""

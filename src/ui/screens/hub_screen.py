@@ -64,26 +64,7 @@ class HubScreen(QWidget):
             illust_label.setText("[일러스트]")
 
         illust_layout.addWidget(illust_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        top_layout.addWidget(illust_frame, 0, Qt.AlignmentFlag.AlignCenter)
-
-        # 오른쪽: 버튼 영역 (세로 배치)
-        button_layout = QVBoxLayout()
-        button_layout.setContentsMargins(0, 0, 0, 0)
-        button_layout.setSpacing(12)
-
-        def create_btn(text, signal):
-            btn = QPushButton(text)
-            btn.setFixedHeight(self.theme_manager.scale_pixel(48))
-            btn.setFixedWidth(self.theme_manager.scale_pixel(360))
-            btn.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
-            btn.clicked.connect(signal.emit)
-            button_layout.addWidget(btn)
-
-        create_btn("자세 맞춤", self.open_baseline_signal)
-        create_btn("환경 설정", self.open_settings_signal)
-        create_btn("나의 통계", self.open_statistics_signal)
-
-        top_layout.addLayout(button_layout, 1)
+        top_layout.addWidget(illust_frame, 1, Qt.AlignmentFlag.AlignCenter)
         main_layout.addLayout(top_layout, 1)
         main_layout.addStretch()
 

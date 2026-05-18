@@ -139,8 +139,17 @@ class baromokApp:
         # 뒤로가기 콜백 등록 (현재 화면에 따라 이전 화면으로 복귀)
         try:
             self.main_window.set_back_callback(self._handle_header_back)
+            self.main_window.posture_adjust_requested.connect(
+                lambda: self.switch_screen(0)
+            )
+            self.main_window.settings_requested.connect(
+                lambda: self.switch_screen(2)
+            )
+            self.main_window.statistics_requested.connect(
+                lambda: self.switch_screen(3)
+            )
         except Exception:
-            logger.debug("메인 윈도우에 백 콜백 등록 실패")
+            logger.debug("메인 윈도우 헤더 버튼 시그널 연결 실패")
 
         # 화면 생성 및 등록
         self._setup_screens()
