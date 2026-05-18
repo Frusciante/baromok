@@ -51,8 +51,8 @@ class MainWindow(QMainWindow):
 
         # 기본 설정
         self.setWindowTitle("바로목 - 자세 측정 시스템")
-        self.setGeometry(100, 100, 1280, 800)
-        self.setMinimumSize(800, 600)
+        self.setGeometry(100, 100, 1152, 768)
+        self.setFixedSize(1152, 768)
 
         # 스타일 적용
         self.setStyleSheet(self.theme_manager.stylesheet)
@@ -114,42 +114,6 @@ class MainWindow(QMainWindow):
         # 스트래치 (오른쪽 공간)
         layout.addStretch()
 
-        # 최소화 버튼 (향후 구현)
-        minimize_btn = QPushButton("−")
-        minimize_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
-        minimize_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {Colors.WHITE.value};
-                border: none;
-                width: {int(32 * self.dpi_scale)}px;
-                height: {int(32 * self.dpi_scale)}px;
-            }}
-            QPushButton:hover {{
-                background-color: rgba(255, 255, 255, 0.2);
-            }}
-        """)
-        minimize_btn.clicked.connect(self.showMinimized)
-        layout.addWidget(minimize_btn)
-
-        # 닫기 버튼
-        close_btn = QPushButton("✕")
-        close_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
-        close_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {Colors.WHITE.value};
-                border: none;
-                width: {int(32 * self.dpi_scale)}px;
-                height: {int(32 * self.dpi_scale)}px;
-            }}
-            QPushButton:hover {{
-                background-color: {Colors.RED_DANGER.value};
-            }}
-        """)
-        close_btn.clicked.connect(self.close)
-        layout.addWidget(close_btn)
-
         # 뒤로가기 버튼 (기본 숨김). 일부 화면에서는 이 버튼을 대신 노출하도록 함
         back_btn = QPushButton("←")
         back_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
@@ -169,9 +133,6 @@ class MainWindow(QMainWindow):
         back_btn.setVisible(False)
         layout.addWidget(back_btn)
 
-        # store references for mode switching
-        self._minimize_btn = minimize_btn
-        self._close_btn = close_btn
         self._back_btn = back_btn
         self._back_callback = None
 
@@ -191,20 +152,12 @@ class MainWindow(QMainWindow):
         self._back_callback = callback
 
     def show_back_header(self):
-        """뒤로가기 모드: 최소화/닫기 숨기고 뒤로가기 버튼 보이기"""
-        if hasattr(self, "_minimize_btn"):
-            self._minimize_btn.setVisible(False)
-        if hasattr(self, "_close_btn"):
-            self._close_btn.setVisible(False)
+        """뒤로가기 모드: 뒤로가기 버튼 보이기"""
         if hasattr(self, "_back_btn"):
             self._back_btn.setVisible(True)
 
     def show_default_header(self):
-        """기본 모드: 최소화/닫기 보이고 뒤로가기 버튼 숨기기"""
-        if hasattr(self, "_minimize_btn"):
-            self._minimize_btn.setVisible(True)
-        if hasattr(self, "_close_btn"):
-            self._close_btn.setVisible(True)
+        """기본 모드: 뒤로가기 버튼 숨기기"""
         if hasattr(self, "_back_btn"):
             self._back_btn.setVisible(False)
 
