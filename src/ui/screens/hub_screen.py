@@ -131,15 +131,48 @@ class HubScreen(QWidget):
         """)
 
         # 데이터 유무 분기 처리
-        has_records = False  
+        sessions = []
+        try:
+            if self.session_manager:
+                sessions = self.session_manager.load_recent_sessions(10)
+        except Exception:
+            logger.exception("세션 데이터 로드 실패")
+
+        valid_sessions = [
+            s for s in sessions
+            if isinstance(getattr(s, "statistics", {}), dict)
+            and s.statistics.get("good_posture_percentage") is not None
+        ]
+
         user_name = "사용자"
 
-        if not has_records:
+        if not valid_sessions:
             title_caption.setText("바로목에 오신 걸 환영합니다")
-            sub_caption.setText("아래 버튼으로 첫 측정을 시작해보세요")
+            sub_caption.setText("첫 측정을 마치면\n여기에 점수가 표시됩니다")
         else:
-            title_caption.setText(f"안녕하세요, {user_name}님")
-            sub_caption.setText("오늘도 바른 자세로 시작해볼까요?")
+            recent = valid_sessions[:3]
+            recent_values = [
+                float(s.statistics.get("good_posture_percentage", 0))
+                for s in recent
+                if isinstance(getattr(s, "statistics", {}), dict)
+            ]
+            average_score = int(round(sum(recent_values) / len(recent_values))) if recent_values else 0
+
+            if average_score >= 90:
+                title_caption.setText("최고의 자세 유지율")
+                sub_caption.setText("바른 자세의 정석입니다. 좋은 습관을 잘 유지하고 계시네요.")
+            elif average_score >= 75:
+                title_caption.setText("안정적인 자세 수준")
+                sub_caption.setText("전반적으로 양호한 상태입니다. 흐트러짐 없는 자세를 유지 중입니다.")
+            elif average_score >= 50:
+                title_caption.setText("주의가 필요한 단계")
+                sub_caption.setText("거북목 경계 단계입니다. 의식적으로 고개를 뒤로 당겨주세요.")
+            elif average_score >= 25:
+                title_caption.setText("위험! 거북목 주의보")
+                sub_caption.setText("자세 유지율이 많이 떨어졌습니다. 즉시 정자세로 교정이 필요합니다.")
+            else:
+                title_caption.setText("경고!!! 척추가 위험합니다!")
+                sub_caption.setText("지속적인 불량 자세가 감지되었습니다. 스트레칭 후 재측정을 권장합니다.")
 
         # ----------------------------------------------------------
         # 3. 메인 일러스트 레이아웃에 최종 조립
