@@ -384,20 +384,123 @@ class BaselineManager:
         return float(change_percent)
 
     def is_baseline_valid(self) -> bool:
-        """Baseline이 충분한 데이터로 설정되었는지 확인"""
+        """
+        Baseline이 충분한 데이터로 설정되었는지 검증
+
+        검사 항목:
+        1. baseline_metrics 존재 및 구조 검증
+        2. frame_count 최소 기준
+        3. RANSAC 모델 복원 및 적합 여부
+        4. 메트릭 값 유효성 (NaN/Inf/범위)
+        5. 타임스탬프 신선도 및 편차 임계값
+
+        Returns:
+            유효 여부
+        """
+        import math
+        from datetime import datetime, timedelta
+
+        # 1. baseline_metrics 존재 및 필수 구조 검증
         if self.baseline_metrics is None:
+            logger.warning("Baseline이 로드되지 않음")
             return False
 
+        if (
+            not hasattr(self.baseline_metrics, "metrics")
+            or self.baseline_metrics.metrics is None
+        ):
+            logger.warning("Baseline 메트릭 딕셔너리가 없음")
+            return False
+
+        metrics = self.baseline_metrics.metrics
+
+        # 필수 키 검증
         required_metrics = [
             "cheek_distance",
             "shoulder_width",
         ]
-
         for metric_name in required_metrics:
-            if metric_name not in self.baseline_metrics.metrics:
+            if metric_name not in metrics:
                 logger.warning(f"필수 지표 부재: {metric_name}")
                 return False
 
+        # 2. frame_count 최소 기준 검증
+        frame_count = getattr(self.baseline_metrics, "frame_count", 0)
+        if frame_count < self.minimum_valid_frame_count:
+            logger.warning(
+                f"Baseline 프레임 부족: {frame_count} < {self.minimum_valid_frame_count}"
+            )
+            return False
+
+        # 3. RANSAC 모델 복원 및 적합 여부 검증
+        if not self.ransac_model.is_fitted:
+            # RANSAC 샘플 데이터 존재 확인 후 재복원 시도
+            if (
+                "ransac_x_samples" in metrics
+                and "ransac_y_samples" in metrics
+                and len(metrics.get("ransac_x_samples", [])) > 0
+                and len(metrics.get("ransac_y_samples", [])) > 0
+            ):
+                x_data = metrics["ransac_x_samples"]
+                y_data = metrics["ransac_y_samples"]
+                try:
+                    if not self.ransac_model.fit(x_data, y_data):
+                        logger.warning("RANSAC 모델 재복원 실패")
+                        return False
+                except Exception as e:
+                    logger.warning(f"RANSAC 복원 중 예외: {e}")
+                    return False
+            else:
+                logger.warning("RANSAC 샘플 데이터 부족 또는 없음")
+                return False
+
+        # RANSAC 인라이어 수 최소 검증 (권장: >= 10)
+        try:
+            ransac = self.ransac_model.model.named_steps["ransacregressor"]
+            inlier_mask = ransac.inlier_mask_
+            inlier_count = int(np.sum(inlier_mask)) if inlier_mask is not None else 0
+            if inlier_count < 10:
+                logger.warning(f"RANSAC 인라이어 부족: {inlier_count} < 10")
+                return False
+        except Exception as e:
+            logger.debug(f"RANSAC 인라이어 검증 중 예외 (무시): {e}")
+
+        # 4. 메트릭 값 유효성 검증 (NaN/Inf/범위)
+        for metric_name in required_metrics:
+            value = metrics.get(metric_name, 0)
+            # NaN/Inf 체크
+            if not isinstance(value, (int, float)) or not math.isfinite(value):
+                logger.warning(f"메트릭 값 무효 (NaN/Inf): {metric_name} = {value}")
+                return False
+            # 범위 검증 (0 < value <= 1 가정)
+            if value <= 0 or value > 1:
+                logger.warning(
+                    f"메트릭 범위 초과: {metric_name} = {value} (범위: 0 < x <= 1)"
+                )
+                return False
+
+        # 5. 타임스탬프 신선도 및 편차 임계값 검증
+        timestamp_str = getattr(self.baseline_metrics, "timestamp", None)
+        if timestamp_str:
+            try:
+                baseline_time = datetime.fromisoformat(timestamp_str)
+                age_days = (datetime.now() - baseline_time).days
+                # 신선도: 30일 이내 권장
+                if age_days > 30:
+                    logger.warning(f"Baseline이 오래됨: {age_days}일 (권장: 30일 이내)")
+                    # 경고만 하고 실패하지 않음 (사용자 판단)
+            except Exception as e:
+                logger.debug(f"타임스탬프 파싱 실패 (무시): {e}")
+
+        # 편차 임계값 검증
+        max_deviation = self.max_inlier_deviation
+        if max_deviation > 0.2:
+            logger.warning(
+                f"RANSAC 편차 너무 큼: {max_deviation:.4f} > 0.2 (낮은 신뢰도)"
+            )
+            # 경고만 하고 실패하지 않음
+
+        logger.info("Baseline 유효성 검증 완료: 모든 조건 통과")
         return True
 
     def reset(self):
