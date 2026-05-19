@@ -1,14 +1,14 @@
 {
   "notification_enabled": true,
-  "notification_interval": 33,
+  "notification_interval": 27,
   "sound_enabled": false,
-  "sound_volume": 60,
+  "sound_volume": 44,
   "popup_position": "center",
   "popup_auto_close": true,
-  "popup_auto_close_time": 3,
+  "popup_auto_close_time": 5,
   "auto_start_detection": false,
-  "forward_head_sensitivity": 0.15000000000000002,
-  "recline_sensitivity": 0.07500000000000001,
-  "recommended_forward_head": 0.15000000000000002,
-  "recommended_recline": 0.07500000000000001
+  "forward_head_sensitivity": 0.09777147596546232,
+  "recline_sensitivity": 0.01,
+  "recommended_forward_head": 0.1857714759654624,
+  "recommended_recline": 0.0928857379827312
 }
