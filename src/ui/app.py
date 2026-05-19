@@ -129,7 +129,7 @@ class baromokApp:
             self.sound_manager.set_volume_percent(self.settings_config.sound_volume)
         except Exception:
             logger.debug("사운드 초기 볼륨 반영 실패")
-        self._sound_playing = False
+        
         self._last_sound_time = 0.0
         self._sound_cooldown_seconds = 3.0
         self._last_sound_state = ""
@@ -459,64 +459,37 @@ class baromokApp:
             logger.debug(f"팝업 타이머 시작: {timeout_ms}ms")
         else:
             logger.debug("팝업 타이머 비활성화 (수동 닫기)")
-        # 알림음은 나쁜 자세 상태에서만 재생한다.
-        if self.settings_config.sound_enabled and alert_type == "danger":
-            self._play_alert_sound_async()
 
     def _hide_alert_popup(self):
         """알림 팝업 숨김"""
         if self.alert_popup is not None:
             self.alert_popup.hide()
 
-    def _play_alert_sound_async(self):
-        """알림음을 UI 스레드를 막지 않도록 백그라운드에서 재생"""
-        if not self.settings_config.sound_enabled:
-            return
-
-        now = time.time()
-        if now - self._last_sound_time < self._sound_cooldown_seconds:
-            return
-
-        if self._sound_playing:
-            return
-
-        # QSoundEffect 기반으로 볼륨 제어가 가능한 경우는 non-blocking이므로
-        # 별도 스레드를 만들지 않고 즉시 재생합니다. 그렇지 않으면 기존과 같이
-        # 백그라운드 스레드에서 winsound.Beep를 호출합니다.
-        self._last_sound_time = now
-        self._sound_playing = True
-
-        if getattr(self.sound_manager, "supports_volume_control", False):
-            try:
-                self.sound_manager.play_alert(self.settings_config.sound_volume)
-            except Exception as e:
-                logger.error(f"알림음 재생 실패: {e}", exc_info=True)
-            finally:
-                self._sound_playing = False
-        else:
-
-            def _play():
-                try:
-                    self.sound_manager.play_alert(self.settings_config.sound_volume)
-                except Exception as e:
-                    logger.error(f"알림음 재생 실패: {e}", exc_info=True)
-                finally:
-                    self._sound_playing = False
-
-            thread = threading.Thread(target=_play, daemon=True)
-            thread.start()
-
     def _play_bad_posture_sound_once(self):
         """BAD_POSTURE 진입 시에만 중복 없이 경고음을 재생한다."""
+        logger.info(
+            f"sound check: enabled={self.settings_config.sound_enabled}, "
+            f"volume={self.settings_config.sound_volume}, "
+            f"last_state={self._last_sound_state}"
+        )
+
         if not self.settings_config.sound_enabled:
+            logger.info("sound skipped: sound_enabled=False")
+            return
+
+        if self.settings_config.sound_volume <= 0:
+            logger.info("sound skipped: sound_volume <= 0")
             return
 
         now = time.time()
         if self._last_sound_state == "bad_posture" and now - self._last_sound_time < self._sound_cooldown_seconds:
+            logger.info("sound skipped: cooldown")
             return
 
         self._last_sound_state = "bad_posture"
-        self._play_alert_sound_async()
+        self._last_sound_time = now
+        logger.info("sound play requested")
+        self.sound_manager.play_alert(self.settings_config.sound_volume)
 
     def _save_settings(self, settings_dict: dict):
         """설정 저장"""

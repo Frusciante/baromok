@@ -34,10 +34,10 @@
   "baseline": {
     "capture": {
       "method": "distance_movement_ransac",
-      "wait_seconds": 5.0,
+      "wait_seconds": 3.0,
       "collect_seconds": 1.0,
-      "expected_samples": 20,
-      "minimum_valid_frames": 120
+      "expected_samples": 10,
+      "minimum_valid_frames":100
     },
     "metrics": [
       "shoulder_width",
