@@ -63,13 +63,6 @@ class BaselineScreen(QWidget):
         layout.setContentsMargins(30, 20, 30, 20)
         layout.setSpacing(15)
 
-        title = QLabel("자세 맞춤 (신체 측정)")
-        title.setFont(
-            QFont("Noto Sans KR", self.theme_manager.scale_pixel(24), QFont.Weight.Bold)
-        )
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
-
         # 메인 콘텐츠 영역 (카메라 | 차트+정보)
         content_layout = QHBoxLayout()
         content_layout.setSpacing(20)

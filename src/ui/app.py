@@ -42,6 +42,7 @@ from src.ui.screens import (
     DetectionScreen,
 )
 from src.ui.styles.theme import ThemeManager
+from src.ui.styles.font_loader import load_bundled_fonts, set_app_font, BUNDLED_FAMILY
 
 logger = get_logger(__name__)
 
@@ -62,13 +63,17 @@ class baromokApp:
         # Qt 애플리케이션
         self.qt_app = QApplication(sys.argv)
 
+        # 번들 폰트 로드
+        self.font_family = load_bundled_fonts()
+        set_app_font(self.qt_app, self.font_family)
+
         # 설정
         self.config = ConfigManager()
 
-        # DPI 스케일
+        # DPI 스케일 (logicalDotsPerInch 사용 — Windows 배율 125%/150% 등 정확히 반영)
         screen = self.qt_app.primaryScreen()
-        dpi_scale = screen.devicePixelRatio()
-        logger.info(f"DPI 스케일: {dpi_scale:.2f}")
+        dpi_scale = screen.logicalDotsPerInch() / 96.0
+        logger.info(f"DPI 스케일: {dpi_scale:.2f} (logical DPI: {screen.logicalDotsPerInch()})")
 
         # 테마
         self.theme_manager = ThemeManager(dpi_scale)
@@ -238,6 +243,7 @@ class baromokApp:
 
         # 초기 화면: Hub
         self.main_window.stacked_widget.setCurrentWidget(self.hub_screen)
+        self.main_window.set_header_title(self.SCREEN_TITLES[1])
 
         logger.info("화면 설정 완료 (5개 화면 등록)")
 
@@ -287,6 +293,14 @@ class baromokApp:
 
         return (x, y)
 
+    SCREEN_TITLES = {
+        0: "기준 자세 설정",
+        1: "바로목",
+        2: "환경설정",
+        3: "나의 통계",
+        4: "자세 감지",
+    }
+
     def switch_screen(self, screen_index: int):
         """
         화면 전환
@@ -310,6 +324,7 @@ class baromokApp:
                     logger.debug("헤더를 기본 모드로 전환하지 못함")
 
             self.main_window.stacked_widget.setCurrentIndex(screen_index)
+            self.main_window.set_header_title(self.SCREEN_TITLES.get(screen_index, "바로목"))
             screen_names = ["baseline", "hub", "settings", "statistics", "detection"]
             logger.info("화면 전환: %s", screen_names[screen_index])
         else:

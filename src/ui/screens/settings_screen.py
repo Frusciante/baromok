@@ -34,17 +34,6 @@ class SettingsScreen(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
 
-        title = QLabel("환경 설정")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFont(
-            QFont("Noto Sans KR", self.theme_manager.scale_pixel(30), QFont.Weight.Bold)
-        )
-        title.setStyleSheet(
-            f"color: {Colors.WHITE.value}; background-color: {Colors.PURPLE_PRIMARY.value}; "
-            f"padding: {self.theme_manager.scale_pixel(10)}px; border-radius: 14px;"
-        )
-        layout.addWidget(title)
-
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)

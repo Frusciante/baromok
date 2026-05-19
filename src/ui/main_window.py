@@ -47,8 +47,8 @@ class MainWindow(QMainWindow):
 
         self.config = config
 
-        # DPI 스케일 계산
-        self.dpi_scale = QGuiApplication.primaryScreen().devicePixelRatio()
+        # DPI 스케일 계산 (logicalDotsPerInch로 Windows 배율 정확히 반영)
+        self.dpi_scale = QGuiApplication.primaryScreen().logicalDotsPerInch() / 96.0
         self.theme_manager = ThemeManager(self.dpi_scale)
 
         logger.info(f"MainWindow 초기화 (DPI scale: {self.dpi_scale:.2f})")
@@ -105,8 +105,8 @@ class MainWindow(QMainWindow):
     def _create_header(self) -> QWidget:
         """상단 헤더 생성"""
         header = QWidget()
+        header.setObjectName("app_header")
         header.setFixedHeight(int(95 * self.dpi_scale))
-        header.setStyleSheet(f"background-color: {Colors.PURPLE_PRIMARY.value};")
 
         layout = QHBoxLayout()
         layout.setContentsMargins(
@@ -117,21 +117,10 @@ class MainWindow(QMainWindow):
         )
         layout.setSpacing(int(12 * self.dpi_scale))
 
-        # 뒤로가기 버튼 (오른쪽 위치)
+        # 뒤로가기 버튼 (왼쪽)
         back_btn = QPushButton("←")
         back_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
-        back_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {Colors.WHITE.value};
-                border: none;
-                width: {int(40 * self.dpi_scale)}px;
-                height: {int(40 * self.dpi_scale)}px;
-            }}
-            QPushButton:hover {{
-                background-color: rgba(255, 255, 255, 0.15);
-            }}
-        """)
+        back_btn.setFixedSize(int(40 * self.dpi_scale), int(40 * self.dpi_scale))
         back_btn.clicked.connect(self._on_back_clicked)
         back_btn.setVisible(False)
         layout.addWidget(back_btn)
@@ -139,14 +128,13 @@ class MainWindow(QMainWindow):
         # 스트레치 (왼쪽과 오른쪽으로 타이틀 중앙 정렬용)
         layout.addStretch()
 
-        # 앱 이름 (중앙 배치, 기본보다 2배 큰 폰트)
-        title = QLabel("바로목")
-        title_font = QFont("Noto Sans KR", int(108 * self.dpi_scale), QFont.Weight.Bold)
+        # 앱 이름 (중앙 배치, 화면 전환 시 동적 변경)
+        self.header_title = QLabel("바로목")
+        title_font = QFont("Noto Sans KR", int(28 * self.dpi_scale), QFont.Weight.Bold)
         title_font.setBold(True)
-        title.setFont(title_font)
-        title.setStyleSheet(f"color: {Colors.WHITE.value};")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        self.header_title.setFont(title_font)
+        self.header_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.header_title)
 
         # 스트레치 (오른쪽 공간)
         layout.addStretch()
@@ -156,7 +144,6 @@ class MainWindow(QMainWindow):
         def create_header_button(text: str, icon_name: str, callback):
             btn = QToolButton()
             btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-            # 기본/보라 아이콘 파일 경로
             default_icon = icon_dir / icon_name
             purple_icon = icon_dir / (Path(icon_name).stem + "_purple.png")
             btn.setIcon(QIcon(str(default_icon)))
@@ -188,23 +175,19 @@ class MainWindow(QMainWindow):
             btn.pressed.connect(lambda b=btn: b.setFixedSize(pressed_width, pressed_height))
             btn.released.connect(lambda b=btn: b.setFixedSize(base_width, base_height))
 
-            # 클릭 시 원래 콜백 실행 후, 초기 화면일 때 아이콘을 보라색으로 교체
             def on_click_wrapper():
                 try:
                     callback()
                 except Exception:
                     logger.exception("Header 버튼 콜백 실행 중 예외")
-                # 클릭 시 아이콘을 보라색으로 변경
                 try:
                     self._set_header_icons("purple")
                 except Exception:
                     logger.exception("헤더 아이콘 보라색으로 변경 중 예외")
 
             btn.clicked.connect(on_click_wrapper)
-            # 아이콘 경로 정보 저장
             btn._default_icon = default_icon
             btn._purple_icon = purple_icon
-            # 마우스 오버/리브 처리용 이벤트 필터 등록
             btn.installEventFilter(self)
 
             layout.addWidget(btn)
@@ -220,29 +203,17 @@ class MainWindow(QMainWindow):
             "나의 통계", "icon_stats.png", self.statistics_requested.emit
         )
 
-        # 뒤로가기 버튼 (기본 숨김). 일부 화면에서는 이 버튼을 대신 노출하도록 함
+        # 뒤로가기 버튼 (기본 숨김)
         back_btn = QPushButton("←")
         back_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
-        back_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {Colors.WHITE.value};
-                border: none;
-                width: {int(40 * self.dpi_scale)}px;
-                height: {int(40 * self.dpi_scale)}px;
-            }}
-            QPushButton:hover {{
-                background-color: rgba(255, 255, 255, 0.15);
-            }}
-        """)
+        back_btn.setFixedSize(int(40 * self.dpi_scale), int(40 * self.dpi_scale))
         back_btn.clicked.connect(self._on_back_clicked)
         back_btn.setVisible(False)
         layout.addWidget(back_btn)
 
         self._back_btn = back_btn
         self._back_callback = None
-        # 타이틀 레퍼런스 저장 (페이지 전환 시 표시 제어용)
-        self._title_label = title
+        self._title_label = self.header_title
 
         header.setLayout(layout)
         return header
@@ -380,6 +351,10 @@ class MainWindow(QMainWindow):
         self.stacked_widget.setCurrentWidget(placeholder)
         # 초기 화면 참조 저장 (아이콘 전환 조건으로 사용)
         self._initial_placeholder = placeholder
+
+    def set_header_title(self, title: str):
+        """헤더 타이틀 텍스트 변경"""
+        self.header_title.setText(title)
 
     def switch_to_screen(self, screen_name: str):
         """
