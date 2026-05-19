@@ -47,7 +47,7 @@ class SoundManager:
     def set_volume_percent(self, volume_percent: int):
         """
         볼륨 설정 (0-100)
-        
+
         Args:
             volume_percent: 음량 비율 (0-100%)
         """
@@ -65,7 +65,7 @@ class SoundManager:
     def play_alert(self, volume_percent: int = 70):
         """
         경고 알림음 재생
-        
+
         Args:
             volume_percent: 음량 (0-100%)
         """
@@ -79,8 +79,12 @@ class SoundManager:
             try:
                 self._effect.stop()
                 self._effect.play()
-                logger.info(f"QSoundEffect 알림음 재생: {self._alert_wav} (음량: {self._volume_percent}%)")
+                logger.info(
+                    f"QSoundEffect 알림음 재생: {self._alert_wav} (음량: {self._volume_percent}%)"
+                )
             except Exception as e:
                 logger.error(f"QSoundEffect 재생 실패: {e}")
         else:
-            logger.error(f"알림음 재생 불가: effect={self._effect is not None}, file={self._alert_wav.exists()}")
+            logger.error(
+                f"알림음 재생 불가: effect={self._effect is not None}, file={self._alert_wav.exists()}"
+            )

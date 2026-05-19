@@ -17,6 +17,7 @@ sm = SoundManager()
 # Use _effect which is the internal attribute in SoundManager
 effect = sm._effect
 
+
 def get_status_name(status):
     try:
         # Check integer values for PyQt6 QSoundEffect.Status
@@ -27,6 +28,7 @@ def get_status_name(status):
     except:
         return str(status)
 
+
 current_status = effect.status()
 print(f"1) QSoundEffect status: {get_status_name(current_status)}")
 
@@ -36,7 +38,9 @@ print(f"3) Resolved wav path: {wav_path.absolute()}")
 print(f"4) Current volume: {effect.volume() * 100}%")
 
 default_device = QMediaDevices.defaultAudioOutput()
-print(f"5) Default audio output: {default_device.description() if not default_device.isNull() else 'None'}")
+print(
+    f"5) Default audio output: {default_device.description() if not default_device.isNull() else 'None'}"
+)
 
 if current_status == QSoundEffect.Status.Error:
     print("6) QSoundEffect is in Error status.")
@@ -46,9 +50,11 @@ else:
 print("Calling play_alert(59)...")
 sm.play_alert(59)
 
+
 def finalize():
     print(f"Post-play status: {get_status_name(effect.status())}")
     app.quit()
+
 
 QTimer.singleShot(1500, finalize)
 app.exec()

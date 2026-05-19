@@ -44,6 +44,7 @@ class AlertSignalBridge(QObject):
     """백그라운드 상태 변화를 메인 스레드로 전달하는 브리지"""
 
     alert_requested = pyqtSignal(str, str)
+    sound_requested = pyqtSignal(int)
 
 
 class baromokApp:
@@ -70,6 +71,7 @@ class baromokApp:
         # 경고 UI 브리지
         self.alert_bridge = AlertSignalBridge()
         self.alert_bridge.alert_requested.connect(self._show_alert_popup)
+        self.alert_bridge.sound_requested.connect(self._play_alert_sound)
         self.alert_popup = None
         self.alert_hide_timer = QTimer()
         self.alert_hide_timer.setSingleShot(True)
@@ -291,6 +293,12 @@ class baromokApp:
         if 0 <= screen_index < self.main_window.stacked_widget.count():
             self._previous_screen_index = self.main_window.stacked_widget.currentIndex()
 
+            if screen_index == 0 and hasattr(self, "baseline_screen"):
+                try:
+                    self.baseline_screen.cancel_capture()
+                except Exception:
+                    logger.debug("Baseline 화면 진입 시 상태 초기화 실패")
+
             # 자세 맞춤/설정/통계/감지 화면으로 이동할 때는 뒤로가기 버튼을 노출한다.
             if screen_index in (0, 2, 3, 4):
                 try:
@@ -304,6 +312,19 @@ class baromokApp:
                     logger.debug("헤더를 기본 모드로 전환하지 못함")
 
             self.main_window.stacked_widget.setCurrentIndex(screen_index)
+            # 즉시 UI 갱신을 강제하여 이전 화면 잔류 문제를 완화
+            try:
+                QApplication.processEvents()
+                cur = self.main_window.stacked_widget.currentWidget()
+                if cur is not None:
+                    try:
+                        cur.update()
+                        cur.repaint()
+                        cur.setFocus()
+                    except Exception:
+                        logger.debug("현재 화면 강제 갱신 중 예외")
+            except Exception:
+                logger.debug("화면 전환 후 이벤트 처리 강제 실패")
             screen_names = ["baseline", "hub", "settings", "statistics", "detection"]
             logger.info("화면 전환: %s", screen_names[screen_index])
         else:
@@ -319,6 +340,10 @@ class baromokApp:
                 logger.debug("베이스라인 취소 처리 중 오류")
 
         if current_index == 3:
+            self.switch_screen(1)
+            return
+
+        if current_index in (0, 4):
             self.switch_screen(1)
             return
 
@@ -371,7 +396,9 @@ class baromokApp:
                     if loaded:
                         baseline_ok = self.baseline_manager.is_baseline_valid()
                         if baseline_ok:
-                            logger.info("저장된 Baseline 파일로부터 로드 및 유효성 검증 완료")
+                            logger.info(
+                                "저장된 Baseline 파일로부터 로드 및 유효성 검증 완료"
+                            )
                         else:
                             failure_reason = "저장된 Baseline 파일이 유효하지 않습니다."
                     else:
@@ -396,12 +423,21 @@ class baromokApp:
                 msg.setStandardButtons(
                     QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
                 )
-                ret = msg.exec()
-                if ret == QMessageBox.StandardButton.Ok:
-                    logger.info("사용자가 Baseline 캡처 화면으로 이동하기로 선택")
-                    self.switch_screen(0)
-                else:
-                    logger.info("사용자가 Baseline 캡처 화면 이동을 취소")
+
+                # Non-blocking: connect button click to handler instead of exec()
+                def _on_baseline_dialog_button(button):
+                    try:
+                        std_btn = msg.standardButton(button)
+                        if std_btn == QMessageBox.StandardButton.Ok:
+                            logger.info("사용자가 Baseline 캡처 화면으로 이동하기로 선택")
+                            self.switch_screen(0)
+                        else:
+                            logger.info("사용자가 Baseline 캡처 화면 이동을 취소")
+                    except Exception:
+                        logger.debug("Baseline 대화상자 버튼 처리 중 예외")
+
+                msg.buttonClicked.connect(_on_baseline_dialog_button)
+                msg.show()
                 return
 
             logger.info("Baseline 유효성 확인 완료: 감지 시작 가능")
@@ -473,12 +509,12 @@ class baromokApp:
             self._hide_alert_popup()
             return
 
-        alert_type = "warning" if event.to_state.value == "warning" else "danger"
-        message_map = {
-            "warning": "잘못된 자세가 감지되었습니다. 자세를 바로잡아 주세요.",
-            "danger": "나쁜 자세가 지속되고 있습니다. 즉시 자세를 바르게 해주세요.",
-        }
-        message_text = message_map.get(alert_type, "자세를 확인해 주세요.")
+        if event.to_state.value == "warning":
+            self._hide_alert_popup()
+            return
+
+        alert_type = "danger"
+        message_text = "나쁜 자세가 지속되고 있습니다. 즉시 자세를 바르게 해주세요."
 
         now = time.time()
         if (
@@ -527,6 +563,13 @@ class baromokApp:
         else:
             logger.debug("팝업 타이머 비활성화 (수동 닫기)")
 
+    def _play_alert_sound(self, volume_percent: int):
+        """메인 스레드에서 경고음을 재생한다."""
+        try:
+            self.sound_manager.play_alert(volume_percent)
+        except Exception:
+            logger.error("경고음 재생 실패", exc_info=True)
+
     def _hide_alert_popup(self):
         """알림 팝업 숨김"""
         if self.alert_popup is not None:
@@ -559,7 +602,7 @@ class baromokApp:
         self._last_sound_state = "bad_posture"
         self._last_sound_time = now
         logger.info("sound play requested")
-        self.sound_manager.play_alert(self.settings_config.sound_volume)
+        self.alert_bridge.sound_requested.emit(self.settings_config.sound_volume)
 
     def _save_settings(self, settings_dict: dict):
         """설정 저장"""

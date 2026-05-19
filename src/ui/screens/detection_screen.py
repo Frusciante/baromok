@@ -89,6 +89,7 @@ class DetectionScreen(QWidget):
         self.posture_label = QLabel("감지 중")
         self.posture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.posture_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(16), QFont.Weight.Bold))
+        self.posture_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
         layout.addWidget(self.posture_label)
 
         self.cheek_detail_label = QLabel("광대 거리: - (예상: -)")
@@ -136,10 +137,6 @@ class DetectionScreen(QWidget):
 
             indicators = frame_data.get("indicators")
             if indicators is None:
-                set_recognition_message(self.recognition_label, True)
-                self.status_label.setText(RECOGNITION_DIFFICULT_MESSAGE)
-                self.status_label.setObjectName("status_normal")
-                self.status_label.style().polish(self.status_label)
                 self.posture_label.setText(RECOGNITION_DIFFICULT_MESSAGE)
                 self.cheek_detail_label.setText("광대 거리: - (예상: -)")
                 return

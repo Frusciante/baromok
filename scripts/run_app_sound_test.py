@@ -21,6 +21,6 @@ if __name__ == "__main__":
     print("4. 쿨다운(3초) 이후에 다시 자세가 나빠지면 소리 재생")
     print("5. Ctrl+C로 앱 종료")
     print("=" * 70 + "\n")
-    
+
     app = baromokApp()
     sys.exit(app.run())
