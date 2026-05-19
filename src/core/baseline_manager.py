@@ -521,6 +521,14 @@ class BaselineManager:
             return
 
         try:
+            # Use a non-interactive backend to avoid GUI operations when called
+            # from background threads (prevents blocking or failures).
+            import matplotlib
+            try:
+                matplotlib.use("Agg")
+            except Exception:
+                # If backend switch fails, continue; saving may still work.
+                pass
             import matplotlib.pyplot as plt
 
             plot_dir = Path("debug_plots")

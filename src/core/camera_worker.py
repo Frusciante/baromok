@@ -547,7 +547,11 @@ class CameraWorker(QThread):
         self.is_running = False
         self.is_paused = False
         logger.info("카메라 중지 요청")
-        self.wait()  # 스레드 종료 대기
+        # 대기 시간이 무한정으로 블록되는 것을 방지하기 위해 타임아웃을 설정합니다.
+        # (메인 스레드에서 호출될 수 있으므로 UI 응답없음 방지)
+        waited = self.wait(2000)  # 최대 2초 대기
+        if not waited:
+            logger.warning("카메라 스레드가 지정된 시간 내에 종료되지 않았습니다.")
 
     def get_elapsed_time(self) -> int:
         """경과 시간 반환 (초)"""

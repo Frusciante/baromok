@@ -92,7 +92,7 @@ def test_case_3_corrupted_baseline():
         "metrics": {
             "cheek_distance": 0.5,
             # shoulder_width 부재 (필수 필드)
-        }
+        },
     }
 
     baseline_file = Path("test_baseline_data/baseline.json")
@@ -134,7 +134,7 @@ def test_case_4_invalid_metrics():
             "shoulder_width": 0.5,
             "ransac_x_samples": [0.3, 0.4, 0.5],
             "ransac_y_samples": [0.4, 0.5, 0.6],
-        }
+        },
     }
 
     baseline_file = Path("test_baseline_data/baseline.json")

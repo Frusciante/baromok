@@ -1,5 +1,5 @@
 import logging
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton,
@@ -12,11 +12,35 @@ from .helpers import set_recognition_message, cv2_to_qpixmap
 
 logger = logging.getLogger(__name__)
 
+
+class BaselineFinishWorker(QThread):
+    """QThread worker to finish baseline computation off the main thread."""
+
+    started_signal = pyqtSignal()
+    finished_signal = pyqtSignal(bool)
+
+    def __init__(self, baseline_manager, fps: int = 30):
+        super().__init__()
+        self.baseline_manager = baseline_manager
+        self.fps = fps
+
+    def run(self):
+        self.started_signal.emit()
+        success = False
+        try:
+            if self.baseline_manager:
+                success = self.baseline_manager.finish_baseline_collection(fps=self.fps)
+        except Exception as e:
+            logger.error(f"BaselineFinishWorker 예외: {e}", exc_info=True)
+        self.finished_signal.emit(bool(success))
+
+
+
 class BaselineScreen(QWidget):
     """초기 바른자세 촬영 화면 (20단계 Move-Burst 모델)"""
 
     baseline_captured_signal = pyqtSignal()
-    baseline_recommended_signal = pyqtSignal(float, float) # (forward_head, recline)
+    baseline_recommended_signal = pyqtSignal(float, float)  # (forward_head, recline)
 
     def __init__(
         self,
@@ -35,14 +59,16 @@ class BaselineScreen(QWidget):
         self.total_steps = 20
         self.wait_seconds = 5.0
         self.collect_seconds = 1.0
-        
+
         # 설정에서 자세 맞춤 파라미터 로드
         if self.baseline_manager and self.baseline_manager.config:
             baseline_config = self.baseline_manager.config.get_baseline_config()
             capture_config = baseline_config.get("capture", {})
             self.total_steps = capture_config.get("expected_samples", self.total_steps)
             self.wait_seconds = capture_config.get("wait_seconds", self.wait_seconds)
-            self.collect_seconds = capture_config.get("collect_seconds", self.collect_seconds)
+            self.collect_seconds = capture_config.get(
+                "collect_seconds", self.collect_seconds
+            )
 
         self.current_step = 1
         self.step_state = "WAIT"
@@ -52,6 +78,8 @@ class BaselineScreen(QWidget):
         self.valid_baseline_frame_count = 0
         self.is_capturing_baseline = False
         self.current_remaining_sec = 0.0
+        # UI update watchdog
+        self._baseline_ui_updated = False
 
         self.setup_ui()
 
@@ -89,7 +117,7 @@ class BaselineScreen(QWidget):
         self.preview_label.setStyleSheet("border: none; background-color: transparent;")
         preview_vbox.addWidget(self.preview_label)
         self.preview_frame.setLayout(preview_vbox)
-        content_layout.addWidget(self.preview_frame, 3) # 비율 조절
+        content_layout.addWidget(self.preview_frame, 3)  # 비율 조절
 
         # 2. 오른쪽: 그래프 및 실시간 상태 정보
         self.info_panel = QVBoxLayout()
@@ -234,39 +262,45 @@ class BaselineScreen(QWidget):
             remaining = max(0.0, self.wait_seconds - (self.step_ticks / 10.0))
             self.current_remaining_sec = remaining
             progress = int((self.step_ticks / (self.wait_seconds * 10)) * 100)
-            
+
             self.main_status_label.setText("이동 하세요")
             self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value}; border: none; background-color: transparent;")
             self.sub_status_label.setText(f"다음 거리로 이동해 주세요... ({remaining:.1f}초)")
             self.step_progress_bar.setValue(min(progress, 100))
-            self.step_progress_bar.setStyleSheet(f"QProgressBar::chunk {{ background-color: {Colors.PRIMARY.value}; }}")
-            
+            self.step_progress_bar.setStyleSheet(
+                f"QProgressBar::chunk {{ background-color: {Colors.PRIMARY.value}; }}"
+            )
+
             if self.step_ticks >= int(self.wait_seconds * 10):
                 self.step_state = "COLLECT"
                 self.step_ticks = 0
                 if self.camera_worker:
                     self.camera_worker.current_step = self.current_step
                 # Baseline 촬영 중 단계별 알림음은 제거 (UI 상태 업데이트만)
-                
+
         elif self.step_state == "COLLECT":
             remaining = max(0.0, self.collect_seconds - (self.step_ticks / 10.0))
             self.current_remaining_sec = remaining
             progress = int((self.step_ticks / (self.collect_seconds * 10)) * 100)
-            
+
             self.main_status_label.setText("정지 하세요")
             self.main_status_label.setStyleSheet(f"color: {Colors.RED_DANGER.value}; border: none; background-color: transparent;")
             self.sub_status_label.setText(f"가만히 자세를 유지해 주세요... ({remaining:.1f}초)")
             self.step_progress_bar.setValue(min(progress, 100))
-            self.step_progress_bar.setStyleSheet(f"QProgressBar::chunk {{ background-color: {Colors.RED_DANGER.value}; }}")
-            
+            self.step_progress_bar.setStyleSheet(
+                f"QProgressBar::chunk {{ background-color: {Colors.RED_DANGER.value}; }}"
+            )
+
             if self.step_ticks >= int(self.collect_seconds * 10):
                 self.total_progress_bar.setValue(self.current_step)
-                self.step_label.setText(f"전체 진행: {self.current_step} / {self.total_steps}")
-                
+                self.step_label.setText(
+                    f"전체 진행: {self.current_step} / {self.total_steps}"
+                )
+
                 self.current_step += 1
                 if self.camera_worker:
                     self.camera_worker.current_step = 0
-                
+
                 if self.current_step > self.total_steps:
                     # Baseline 수집 완료 (소리 제거 - 사용자가 직관적으로 알 수 있도록 UI로만 표시)
                     self._finish_capture()
@@ -296,7 +330,11 @@ class BaselineScreen(QWidget):
                 )
                 self.preview_label.setPixmap(scaled_pixmap)
 
-            if not self.is_capturing_baseline or self.baseline_manager is None or not self.baseline_manager.is_collecting:
+            if (
+                not self.is_capturing_baseline
+                or self.baseline_manager is None
+                or not self.baseline_manager.is_collecting
+            ):
                 return
 
             indicators = frame_data.get("indicators")
@@ -306,11 +344,11 @@ class BaselineScreen(QWidget):
 
             set_recognition_message(self.recognition_label, False)
             self.calibration_chart.update_live_point(
-                indicators.shoulder_width, 
-                indicators.cheek_distance, 
+                indicators.shoulder_width,
+                indicators.cheek_distance,
                 is_collecting=(self.step_state == "COLLECT"),
                 step=self.current_step,
-                total_steps=self.total_steps
+                total_steps=self.total_steps,
             )
 
             if self.step_state == "WAIT":
@@ -324,7 +362,8 @@ class BaselineScreen(QWidget):
 
     def _finish_capture(self):
         """캡처 완료 처리"""
-        if not self.is_capturing_baseline: return
+        if not self.is_capturing_baseline:
+            return
         self.is_capturing_baseline = False
         self.capture_timer.stop()
         if self.camera_worker and self.camera_worker.isRunning():
@@ -374,7 +413,9 @@ class BaselineScreen(QWidget):
         self.valid_baseline_frame_count = 0
         self.current_remaining_sec = 0.0
 
-        if self.baseline_manager and getattr(self.baseline_manager, "is_collecting", False):
+        if self.baseline_manager and getattr(
+            self.baseline_manager, "is_collecting", False
+        ):
             self.baseline_manager.reset()
 
         if self.camera_worker and hasattr(self.camera_worker, "set_baseline_mode"):
@@ -382,6 +423,12 @@ class BaselineScreen(QWidget):
 
         self.capture_btn.setEnabled(True)
         self.capture_btn.setText("자세 맞춤 시작")
+        self.preview_label.clear()
+        self.preview_label.setText("카메라 프리뷰")
+        try:
+            self.calibration_chart.clear()
+        except Exception:
+            logger.debug("베이스라인 차트 초기화 실패")
         self.total_progress_bar.setValue(0)
         self.step_progress_bar.setValue(0)
         self.step_label.setText(f"전체 진행: 0 / {self.total_steps}")
@@ -393,8 +440,10 @@ class BaselineScreen(QWidget):
     def _fail_capture(self, message: str):
         self.is_capturing_baseline = False
         self.capture_timer.stop()
-        if self.camera_worker: self.camera_worker.stop_capture()
-        if self.baseline_manager: self.baseline_manager.reset()
+        if self.camera_worker:
+            self.camera_worker.stop_capture()
+        if self.baseline_manager:
+            self.baseline_manager.reset()
         self.capture_btn.setEnabled(True)
         self.capture_btn.setText("다시 시작")
         self.main_status_label.setText("오류 발생")

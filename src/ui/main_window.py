@@ -120,8 +120,8 @@ class MainWindow(QMainWindow):
 
         # 뒤로가기 버튼 (왼쪽)
         back_btn = QPushButton("←")
-        back_btn.setFont(app_font(int(19 * self.dpi_scale)))
-        back_btn.setFixedSize(int(40 * self.dpi_scale), int(40 * self.dpi_scale))
+        back_btn.setFont(app_font(int(48 * self.dpi_scale), QFont.Weight.Bold))
+        back_btn.setFixedSize(int(52 * self.dpi_scale), int(52 * self.dpi_scale))
         back_btn.clicked.connect(self._on_back_clicked)
         back_btn.setVisible(False)
         layout.addWidget(back_btn)
@@ -216,8 +216,8 @@ class MainWindow(QMainWindow):
 
         # 뒤로가기 버튼 (기본 숨김)
         back_btn = QPushButton("←")
-        back_btn.setFont(app_font(int(19 * self.dpi_scale)))
-        back_btn.setFixedSize(int(40 * self.dpi_scale), int(40 * self.dpi_scale))
+        back_btn.setFont(app_font(int(48 * self.dpi_scale), QFont.Weight.Bold))
+        back_btn.setFixedSize(int(52 * self.dpi_scale), int(52 * self.dpi_scale))
         back_btn.clicked.connect(self._on_back_clicked)
         back_btn.setVisible(False)
         layout.addWidget(back_btn)
