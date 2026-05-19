@@ -69,7 +69,7 @@ class HubScreen(QWidget):
                 if pixmap.isNull():
                     continue
                 scaled_pixmap = pixmap.scaledToHeight(
-                    self.theme_manager.scale_pixel(380),
+                    self.theme_manager.scale_pixel(500),
                     Qt.TransformationMode.SmoothTransformation,
                 )
                 illust_label.setPixmap(scaled_pixmap)

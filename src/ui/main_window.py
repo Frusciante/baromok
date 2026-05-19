@@ -84,6 +84,16 @@ class MainWindow(QMainWindow):
         # 화면 스택
         self.stacked_widget = QStackedWidget()
         self._setup_screens()
+        # 스택 변경 시 타이틀 표시를 제어하도록 연결
+        try:
+            self.stacked_widget.currentChanged.connect(lambda idx: self._update_title_visibility())
+        except Exception:
+            logger.exception("스택 변경 연결 중 예외")
+        # 초기 상태 반영
+        try:
+            self._update_title_visibility()
+        except Exception:
+            pass
         main_layout.addWidget(self.stacked_widget, 1)
 
         # 하단 푸터
@@ -107,15 +117,38 @@ class MainWindow(QMainWindow):
         )
         layout.setSpacing(int(12 * self.dpi_scale))
 
-        # 앱 이름
+        # 뒤로가기 버튼 (오른쪽 위치)
+        back_btn = QPushButton("←")
+        back_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
+        back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {Colors.WHITE.value};
+                border: none;
+                width: {int(40 * self.dpi_scale)}px;
+                height: {int(40 * self.dpi_scale)}px;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(255, 255, 255, 0.15);
+            }}
+        """)
+        back_btn.clicked.connect(self._on_back_clicked)
+        back_btn.setVisible(False)
+        layout.addWidget(back_btn)
+
+        # 스트레치 (왼쪽과 오른쪽으로 타이틀 중앙 정렬용)
+        layout.addStretch()
+
+        # 앱 이름 (중앙 배치, 기본보다 2배 큰 폰트)
         title = QLabel("바로목")
-        title_font = QFont("Noto Sans KR", int(54 * self.dpi_scale), QFont.Weight.Bold)
+        title_font = QFont("Noto Sans KR", int(108 * self.dpi_scale), QFont.Weight.Bold)
         title_font.setBold(True)
         title.setFont(title_font)
         title.setStyleSheet(f"color: {Colors.WHITE.value};")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        # 스트래치 (오른쪽 공간)
+        # 스트레치 (오른쪽 공간)
         layout.addStretch()
 
         icon_dir = Path(__file__).resolve().parents[2] / "assets" / "ui"
@@ -178,7 +211,7 @@ class MainWindow(QMainWindow):
             return btn
 
         self._posture_adjust_btn = create_header_button(
-            "자세 맞춤", "icon_posture.png", self.posture_adjust_requested.emit
+            "기준자세설정", "icon_posture.png", self.posture_adjust_requested.emit
         )
         self._settings_btn = create_header_button(
             "환경설정", "icon_settings.png", self.settings_requested.emit
@@ -208,6 +241,8 @@ class MainWindow(QMainWindow):
 
         self._back_btn = back_btn
         self._back_callback = None
+        # 타이틀 레퍼런스 저장 (페이지 전환 시 표시 제어용)
+        self._title_label = title
 
         header.setLayout(layout)
         return header
@@ -251,6 +286,24 @@ class MainWindow(QMainWindow):
                 self._set_header_icons("default")
             except Exception:
                 logger.exception("헤더 아이콘 복원 중 예외")
+
+    def _update_title_visibility(self):
+        """현재 화면에 따라 타이틀(`바로목`)의 표시 여부를 갱신합니다.
+
+        초기(첫) 화면에서만 타이틀을 보이게 하고, 다른 화면에서는 숨깁니다.
+        """
+        try:
+            if not hasattr(self, "_title_label"):
+                return
+            # 초기 화면이 등록되어 있으면, 현재 위젯이 초기 화면일 때만 보이게 함
+            if hasattr(self, "_initial_placeholder") and self.stacked_widget is not None:
+                visible = self.stacked_widget.currentWidget() == self._initial_placeholder
+                self._title_label.setVisible(visible)
+            else:
+                # 초기 화면 참조가 없으면 기본적으로 보이게 함
+                self._title_label.setVisible(True)
+        except Exception:
+            logger.exception("타이틀 표시 업데이트 중 예외")
 
     def _create_footer(self) -> QWidget:
         """하단 푸터 생성"""

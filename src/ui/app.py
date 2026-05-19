@@ -15,6 +15,12 @@ from PyQt6.QtWidgets import (
     QRadioButton,
     QToolButton,
 )
+
+# 앱 진입점 (src/ui/app.py 또는 main.py)에서 QApplication 만들기 전에 DPI 정책 설정
+QApplication.setHighDpiScaleFactorRoundingPolicy(
+      Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+  )
+
 import sys
 
 from src.utils.logger import get_logger
