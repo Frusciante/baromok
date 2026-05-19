@@ -33,8 +33,9 @@ class SettingsScreen(QWidget):
         )
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(9)
+        # 위아래 레이아웃 마진 및 위젯 간 스페이싱 약 15% 축소
+        layout.setContentsMargins(14, 6, 14, 6)
+        layout.setSpacing(6)
 
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -45,7 +46,7 @@ class SettingsScreen(QWidget):
         grid_layout = QGridLayout()
         grid_layout.setContentsMargins(0, 0, 0, 0)
         grid_layout.setHorizontalSpacing(8)
-        grid_layout.setVerticalSpacing(8)
+        grid_layout.setVerticalSpacing(5) # 그리드 세로 간격 축소 (8 -> 5)
         scroll_content.setLayout(grid_layout)
 
         # (카테고리명, 위젯 클래스, grid 위치 (row, col, rowspan, colspan))
@@ -62,9 +63,11 @@ class SettingsScreen(QWidget):
             row_frame.setStyleSheet(
                 f"background-color: {Colors.WHITE.value}; border: 1px solid #E3E0F2; border-radius: {self.theme_manager.scale_pixel(8)}px;"
             )
-            row_frame.setMinimumHeight(self.theme_manager.scale_pixel(126))
+            
+            # 기본 프레임 최소 높이 축소 (126 -> 108)
+            row_frame.setMinimumHeight(self.theme_manager.scale_pixel(108))
             row_layout = QHBoxLayout()
-            row_layout.setContentsMargins(8, 8, 8, 8)
+            row_layout.setContentsMargins(8, 6, 8, 6) # 내부 패딩 위아래 축소
             row_layout.setSpacing(9)
             row_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
@@ -79,19 +82,21 @@ class SettingsScreen(QWidget):
             category_label.setWordWrap(True)
 
             widget = widget_class(self.theme_manager, self.settings_config)
+            
+            # 각 내부 위젯 세로 높이 크기 약 15%씩 축소 적용
             if cat == "팝업 설정":
-                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(232))
-                widget.setMinimumHeight(self.theme_manager.scale_pixel(204))
+                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(198)) # 232 -> 198
+                widget.setMinimumHeight(self.theme_manager.scale_pixel(174))    # 204 -> 174
             elif cat == "감도 설정":
-                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(218))
-                widget.setMinimumHeight(self.theme_manager.scale_pixel(189))
+                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(185)) # 218 -> 185
+                widget.setMinimumHeight(self.theme_manager.scale_pixel(160))    # 189 -> 160
                 if hasattr(widget, "reset_requested_signal"):
                     widget.reset_requested_signal.connect(self._reset_settings)
             elif cat == "소리 설정":
-                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(218))
-                widget.setMinimumHeight(self.theme_manager.scale_pixel(189))
+                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(185)) # 218 -> 185
+                widget.setMinimumHeight(self.theme_manager.scale_pixel(160))    # 189 -> 160
             else:
-                widget.setMinimumHeight(self.theme_manager.scale_pixel(115))
+                widget.setMinimumHeight(self.theme_manager.scale_pixel(98))     # 115 -> 98
 
             widget.value_changed_signal.connect(self._on_widget_value_changed)
             self.category_widgets.append(widget)
@@ -107,30 +112,30 @@ class SettingsScreen(QWidget):
         scroll_area.setWidget(scroll_content)
         layout.addWidget(scroll_area, 1)
 
-        # 하단 버튼 레이아웃
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(20)
+        # 하단 버튼 레이아웃 (기존 주석 코드 유지)
+        # button_layout = QHBoxLayout()
+        # button_layout.setSpacing(20)
 
-        confirm_btn = QPushButton("저장")
-        confirm_btn.setFixedSize(self.theme_manager.scale_pixel(168), self.theme_manager.scale_pixel(43))
-        confirm_btn.setFont(app_font(self.theme_manager.scale_pixel(17), QFont.Weight.Bold))
-        confirm_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Colors.PURPLE_PRIMARY.value};
-                color: {Colors.WHITE.value};
-                border-radius: 10px;
-            }}
-            QPushButton:hover {{
-                background-color: #5343B6;
-            }}
-        """)
-        confirm_btn.clicked.connect(self._save_settings)
+        # confirm_btn = QPushButton("저장")
+        # confirm_btn.setFixedSize(self.theme_manager.scale_pixel(168), self.theme_manager.scale_pixel(43))
+        # confirm_btn.setFont(app_font(self.theme_manager.scale_pixel(17), QFont.Weight.Bold))
+        # confirm_btn.setStyleSheet(f"""
+        #     QPushButton {{
+        #         background-color: {Colors.PURPLE_PRIMARY.value};
+        #         color: {Colors.WHITE.value};
+        #         border-radius: 10px;
+        #     }}
+        #     QPushButton:hover {{
+        #         background-color: #5343B6;
+        #     }}
+        # """)
+        # confirm_btn.clicked.connect(self._save_settings)
         
-        button_layout.addStretch()
-        button_layout.addWidget(confirm_btn)
-        button_layout.addStretch()
+        # button_layout.addStretch()
+        # button_layout.addWidget(confirm_btn)
+        # button_layout.addStretch()
         
-        layout.addLayout(button_layout)
+        # layout.addLayout(button_layout)
         self.setLayout(layout)
 
     def _on_widget_value_changed(self, value_dict: dict):

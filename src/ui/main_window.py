@@ -59,6 +59,10 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 1152, 768)
         self.setFixedSize(1152, 768)
 
+        logo_path = Path(__file__).resolve().parents[2] / "assets" / "ui" / "바로목로고.png"
+        if logo_path.exists():
+            self.setWindowIcon(QIcon(str(logo_path)))
+
         # 스타일 적용
         self.setStyleSheet(self.theme_manager.stylesheet)
 
@@ -161,11 +165,12 @@ class MainWindow(QMainWindow):
             btn.setIconSize(QSize(int(34 * self.dpi_scale), int(34 * self.dpi_scale)))
             btn.setText(text)
             btn.setFont(app_font(int(12 * self.dpi_scale)))
-            base_width = int(96 * self.dpi_scale)
+            base_width = int((104 if text == "기준자세설정" else 96) * self.dpi_scale) # 기준자세설정 버튼만 좌우 길이 조정
             base_height = int(72 * self.dpi_scale)
-            pressed_width = int(94 * self.dpi_scale)
+            pressed_width = int((102 if text == "기준자세설정" else 94) * self.dpi_scale)
             pressed_height = int(70 * self.dpi_scale)
             btn.setFixedSize(base_width, base_height)
+            
             btn.setStyleSheet(f"""
                 QToolButton {{
                     background-color: transparent;
@@ -207,6 +212,7 @@ class MainWindow(QMainWindow):
         self._posture_adjust_btn = create_header_button(
             "기준자세설정", "icon_posture.png", self.posture_adjust_requested.emit
         )
+
         self._settings_btn = create_header_button(
             "환경설정", "icon_settings.png", self.settings_requested.emit
         )
@@ -215,9 +221,9 @@ class MainWindow(QMainWindow):
         )
 
         # 뒤로가기 버튼 (기본 숨김)
-        back_btn = QPushButton("←")
-        back_btn.setFont(app_font(int(48 * self.dpi_scale), QFont.Weight.Bold))
-        back_btn.setFixedSize(int(52 * self.dpi_scale), int(52 * self.dpi_scale))
+        back_btn = QPushButton("← 이전")
+        back_btn.setFont(app_font(int(60 * self.dpi_scale), QFont.Weight.Bold))
+        back_btn.setFixedSize(int(120 * self.dpi_scale), int(52 * self.dpi_scale))
         back_btn.clicked.connect(self._on_back_clicked)
         back_btn.setVisible(False)
         layout.addWidget(back_btn)
@@ -266,6 +272,17 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_set_header_icons"):
             try:
                 self._set_header_icons("default")
+                
+                # [오류 수정 및 버그 해결]
+                # QCursor.pos()를 사용해 마우스 절대 좌표를 정확히 가져옵니다.
+                from PyQt6.QtGui import QCursor
+                cursor_pos = self.mapFromGlobal(QCursor.pos())
+                
+                # 마우스가 버튼들 영역 내에 있는지 검사 후 보라색 아이콘 적용
+                for btn in [self._posture_adjust_btn, self._settings_btn, self._statistics_btn]:
+                    if btn.isVisible() and btn.geometry().contains(cursor_pos):
+                        if hasattr(btn, "_purple_icon") and btn._purple_icon.exists():
+                            btn.setIcon(QIcon(str(btn._purple_icon)))
             except Exception:
                 logger.exception("헤더 아이콘 복원 중 예외")
 
@@ -352,6 +369,7 @@ class MainWindow(QMainWindow):
 
     # 화면 타이틀별 좌측 아이콘
     _HEADER_ICONS = {
+        "바로목": "바로목로고.png",
         "환경설정": "icon_settings.png",
         "기준 자세 설정": "icon_posture.png",
         "나의 통계": "icon_stats.png",

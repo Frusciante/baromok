@@ -153,7 +153,7 @@ class BaselineScreen(QWidget):
         self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value}; border: none; background-color: transparent;")
         status_vbox.addWidget(self.main_status_label)
 
-        self.sub_status_label = QLabel("자세 맞춤 시작을 눌러주세요")
+        self.sub_status_label = QLabel("자세 설정 시작을 눌러주세요")
         self.sub_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.sub_status_label.setFont(app_font(self.theme_manager.scale_pixel(16)))
         self.sub_status_label.setStyleSheet("border: none; background-color: transparent;")
@@ -194,7 +194,7 @@ class BaselineScreen(QWidget):
         set_recognition_message(self.recognition_label, False)
         layout.addWidget(self.recognition_label)
 
-        self.capture_btn = QPushButton("자세 맞춤 시작")
+        self.capture_btn = QPushButton("자세 설정 시작")
         self.capture_btn.setFixedHeight(self.theme_manager.scale_pixel(56))
         self.capture_btn.setFont(app_font(self.theme_manager.scale_pixel(21), QFont.Weight.Bold))
         self.capture_btn.setStyleSheet(f"""

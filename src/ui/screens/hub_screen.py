@@ -54,14 +54,29 @@ class HubScreen(QWidget):
 
         # 왼쪽: 일러스트 영역
         illust_frame = QFrame()
-        illust_frame.setStyleSheet(f"background-color: transparent; border: none;")
+        illust_frame.setStyleSheet("background-color: transparent; border: none;")
         illust_frame.setMaximumWidth(self.theme_manager.scale_pixel(520))
+        
+        # 전체를 감싸는 메인 레이아웃
         illust_layout = QVBoxLayout(illust_frame)
         illust_layout.setContentsMargins(0, 0, 0, 0)
+        illust_layout.setSpacing(self.theme_manager.scale_pixel(15)) # 로고 세트와 서브 캡션 사이의 간격
         illust_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        # ----------------------------------------------------------
+        # 1. 로고 이미지와 타이틀 글자를 하나의 컨테이너로 묶기
+        # ----------------------------------------------------------
+        logo_container = QWidget()
+        logo_container.setStyleSheet("background-color: transparent;")
+        logo_container_layout = QVBoxLayout(logo_container)
+        logo_container_layout.setContentsMargins(0, 0, 0, 0)
+        logo_container_layout.setSpacing(0) # 💡 내부 스페이싱을 0으로 만들어 바짝 붙임
+        logo_container_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # 로고 이미지 라벨
         illust_label = QLabel()
         illust_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        illust_label.setStyleSheet("background-color: transparent; margin: 0px; padding: 0px;")
 
         # 홈 일러스트 로드
         image_path_candidates = [
@@ -75,8 +90,9 @@ class HubScreen(QWidget):
                 pixmap = QPixmap(str(image_path))
                 if pixmap.isNull():
                     continue
+                # 💡 이미지 크기를 340정도로 조절
                 scaled_pixmap = pixmap.scaledToHeight(
-                    self.theme_manager.scale_pixel(500),
+                    self.theme_manager.scale_pixel(340),
                     Qt.TransformationMode.SmoothTransformation,
                 )
                 illust_label.setPixmap(scaled_pixmap)
@@ -86,8 +102,52 @@ class HubScreen(QWidget):
         else:
             illust_label.setText("[일러스트]")
 
-        illust_layout.addWidget(illust_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        # 타이틀 캡션 라벨 (로고 컨테이너 내부용)
+        title_caption = QLabel()
+        title_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_caption.setStyleSheet(f"""
+            color: #000000;
+            font-size: {self.theme_manager.scale_pixel(36)}px;
+            font-weight: bold;
+            margin: 0px;
+            padding: 0px;
+        """)
+
+        # 로고 세트 조립
+        logo_container_layout.addWidget(illust_label)
+        logo_container_layout.addWidget(title_caption)
+
+        # ----------------------------------------------------------
+        # 2. 서브 캡션 라벨 (따로 분리하여 하단 배치)
+        # ----------------------------------------------------------
+        sub_caption = QLabel()
+        sub_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sub_caption.setStyleSheet(f"""
+            color: #1A1A1A;
+            font-size: {self.theme_manager.scale_pixel(22)}px;
+            margin: 0px;
+            padding: 0px;
+        """)
+
+        # 데이터 유무 분기 처리
+        has_records = False  
+        user_name = "사용자"
+
+        if not has_records:
+            title_caption.setText("바로목에 오신 걸 환영합니다")
+            sub_caption.setText("아래 버튼으로 첫 측정을 시작해보세요")
+        else:
+            title_caption.setText(f"안녕하세요, {user_name}님")
+            sub_caption.setText("오늘도 바른 자세로 시작해볼까요?")
+
+        # ----------------------------------------------------------
+        # 3. 메인 일러스트 레이아웃에 최종 조립
+        # ----------------------------------------------------------
+        illust_layout.addWidget(logo_container, 0, Qt.AlignmentFlag.AlignCenter)
+        illust_layout.addWidget(sub_caption, 0, Qt.AlignmentFlag.AlignCenter)
+
         top_layout.addWidget(illust_frame, 1, Qt.AlignmentFlag.AlignCenter)
+
         # 오른쪽 슬롯: score panel
         right_container = QWidget()
         right_layout = QVBoxLayout()
@@ -216,7 +276,7 @@ class HubScreen(QWidget):
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_label)
 
-        title = QLabel("기준자세 데이터가 필요해요")
+        title = QLabel("아직 측정 기록이 없어요")
         title.setFont(
             app_font(self.theme_manager.scale_pixel(17), QFont.Weight.Medium)
         )
@@ -225,7 +285,7 @@ class HubScreen(QWidget):
         layout.addWidget(title)
 
         desc = QLabel(
-            "저장된 기준자세가 없거나 유효하지 않습니다.\n바로목 감지를 시작하려면\n기준자세설정 화면으로 이동해주세요."
+            "첫 측정을 마치면\n여기에 점수가 표시됩니다"
         )
         desc.setFont(app_font(self.theme_manager.scale_pixel(13)))
         desc.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")

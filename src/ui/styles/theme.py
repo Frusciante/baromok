@@ -410,22 +410,21 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     }}
 
     QMessageBox QPushButton {{
-        background-color: {Colors.PURPLE_PRIMARY.value};
-        color: {Colors.WHITE.value};
-        border: 1px solid rgba(255, 255, 255, 0.35);
-        border-radius: {button_radius}px;
-        padding: {int(6 * dpi_scale)}px {int(8 * dpi_scale)}px {int(3 * dpi_scale)}px {int(8 * dpi_scale)}px;
+        background-color: {Colors.WHITE.value};
+        color: {Colors.PURPLE_PRIMARY.value};
+        border: 1px solid {Colors.PURPLE_PRIMARY.value};
+        border-radius: 8px;
+        padding: {int(3 * dpi_scale)}px {int(8 * dpi_scale)}px {int(3 * dpi_scale)}px {int(8 * dpi_scale)}px;
         min-width: {button_width}px;
-        min-height: {int(36 * dpi_scale)}px;
+        min-height: {int(24 * dpi_scale)}px;
     }}
 
     QMessageBox QPushButton:hover {{
-        background-color: {Colors.PURPLE_PRIMARY.value};
-        color: {Colors.WHITE.value};
+        background-color: #F4F0FF;
     }}
 
     QMessageBox QPushButton:pressed {{
-        background-color: #ECEBFC;
+        background-color: #E8E0FF;
         color: {Colors.PURPLE_PRIMARY.value};
     }}
     """

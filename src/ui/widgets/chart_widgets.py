@@ -157,7 +157,7 @@ class StatisticsLineChart(QWidget):
         figsize = (10 * dpi_scale, 4 * dpi_scale)
 
         self.figure = Figure(figsize=figsize, dpi=100)
-        self.figure.patch.set_facecolor(Colors.GRAY_LIGHT.value)
+        self.figure.patch.set_facecolor("#FBFBFE")
 
         # Canvas 생성
         self.canvas = FigureCanvas(self.figure)
@@ -209,8 +209,8 @@ class StatisticsLineChart(QWidget):
             # Figure 초기화
             self.figure.clear()
             ax = self.figure.add_subplot(111)
-            self.figure.patch.set_facecolor("#F7CBD7")
-            ax.set_facecolor("#F7CBD7")
+            self.figure.patch.set_facecolor("#FBFBFE")
+            ax.set_facecolor("#FBFBFE")
 
             self._hover_annotation = ax.annotate(
                 "",
@@ -224,18 +224,18 @@ class StatisticsLineChart(QWidget):
                 color=Colors.WHITE.value,
                 bbox=dict(
                     boxstyle="round,pad=0.45,rounding_size=0.4",
-                    fc="#5D3C6B",
-                    ec="#5D3C6B",
+                    fc="#6D28D9",
+                    ec="#6D28D9",
                     alpha=0.95,
                 ),
                 zorder=7,
             )
             self._hover_annotation.set_visible(False)
 
-            bar_colors = ["#FFFFFF"] * len(session_nums)
-            bar_edge_colors = [Colors.WHITE.value] * len(session_nums)
-            bar_colors[latest_index] = Colors.PINK_PRIMARY.value
-            bar_edge_colors[latest_index] = Colors.PINK_PRIMARY.value
+            bar_colors = ["#E0E0FF"] * len(session_nums)
+            bar_edge_colors = ["#E0E0FF"] * len(session_nums)
+            bar_colors[latest_index] = "#7C3AED"
+            bar_edge_colors[latest_index] = "#7C3AED"
 
             bars = ax.bar(
                 session_nums,
@@ -264,7 +264,7 @@ class StatisticsLineChart(QWidget):
             # 평균선
             avg_line = ax.axhline(
                 avg_retention,
-                color=Colors.PINK_PRIMARY.value,
+                color="#DC2626",
                 linewidth=2.5,
                 zorder=2,
             )
@@ -281,12 +281,12 @@ class StatisticsLineChart(QWidget):
             ax.set_yticks([0, 25, 50, 75, 100])
 
             # 그리드 및 스파인
-            ax.grid(True, axis="y", linestyle="--", alpha=0.28, color="#8A6BA8")
+            ax.grid(True, axis="y", linestyle="--", alpha=0.28, color="#C4B5FD")
             ax.set_axisbelow(True)
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
-            ax.spines["left"].set_color("#3B2F4A")
-            ax.spines["bottom"].set_color("#3B2F4A")
+            ax.spines["left"].set_color("#6D28D9")
+            ax.spines["bottom"].set_color("#6D28D9")
             ax.spines["left"].set_linewidth(1.2)
             ax.spines["bottom"].set_linewidth(1.6)
 
@@ -294,12 +294,14 @@ class StatisticsLineChart(QWidget):
             ax.legend(
                 [bars[0], avg_line],
                 ["바른자세 유지율", "평균 유지율"],
-                loc="upper left",
+                loc="lower left",  # 기준점을 범례 상자의 '좌측 하단'으로 잡고
+                # 차트 왼쪽 선(0)보다 살짝 왼쪽(-0.02), 차트 위쪽 선(1)보다 살짝 위쪽(1.02) 외곽으로 떨어뜨려서 배치. 이렇게 하면 tight_layout()이 범례 위치를 건드리지 못하게 됨.
+                bbox_to_anchor=(-0.02, 1.02), 
                 fontsize=10,
                 frameon=True,
-                facecolor="#FFFFFF",
-                edgecolor="#D7B0C0",
-            )
+                facecolor="#FBFBFE",
+                edgecolor="#C4B5FD",
+            ).set_in_layout(True) # tight_layout()이 이 범례의 위치를 무시하지 못하도록 대처
 
             # 각 세션 값 표기
             for idx, bar in enumerate(bars):
@@ -318,7 +320,7 @@ class StatisticsLineChart(QWidget):
                     va="bottom",
                     fontsize=9,
                     fontweight="bold",
-                    color="#5D3C6B",
+                    color="#6D28D9",
                     zorder=5,
                 )
 
@@ -345,13 +347,13 @@ class StatisticsLineChart(QWidget):
                 color=Colors.WHITE.value,
                 bbox=dict(
                     boxstyle="round,pad=0.55,rounding_size=0.8",
-                    fc=Colors.PINK_PRIMARY.value,
-                    ec=Colors.PINK_PRIMARY.value,
+                    fc="#7C3AED",
+                    ec="#7C3AED",
                     alpha=0.98,
                 ),
                 arrowprops=dict(
                     arrowstyle="-|>",
-                    color=Colors.PINK_PRIMARY.value,
+                    color="#7C3AED",
                     lw=1.2,
                     shrinkA=0,
                     shrinkB=4,
@@ -368,7 +370,7 @@ class StatisticsLineChart(QWidget):
                 va="center",
                 fontsize=13,
                 fontweight="bold",
-                color=Colors.PINK_PRIMARY.value,
+                color="#DC2626",
                 clip_on=False,
                 zorder=6,
             )

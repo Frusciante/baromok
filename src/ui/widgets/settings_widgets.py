@@ -730,12 +730,13 @@ class SensitivitySettingsWidget(QWidget):
         self.reset_btn.setFont(app_font(self.theme_manager.scale_pixel(12), QFont.Weight.Bold))
         self.reset_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {Colors.PURPLE_PRIMARY.value};
-                color: {Colors.WHITE.value};
-                border-radius: 6px;
+                background-color: {Colors.WHITE.value};
+                color: {Colors.PURPLE_PRIMARY.value};
+                border: 1px solid {Colors.PURPLE_PRIMARY.value};
+                border-radius: 8px;
             }}
             QPushButton:hover {{
-                background-color: #5343B6;
+                background-color: #F4F0FF;
             }}
         """)
         self.reset_btn.clicked.connect(self.reset_requested_signal.emit)
@@ -747,7 +748,7 @@ class SensitivitySettingsWidget(QWidget):
 
         # 거북목 감도 슬라이더
         self.fwd_slider, self.fwd_label = self._create_slider_row(
-            "거북목 감도 (낮을수록 민감)",
+            "거북목 감도",
             self.fwd_val, self.FWD_MIN, self.FWD_MAX,
             self._on_fwd_slider_changed,
         )
@@ -755,7 +756,7 @@ class SensitivitySettingsWidget(QWidget):
 
         # 기댄 자세 감도 슬라이더
         self.rec_slider, self.rec_label = self._create_slider_row(
-            "기댄 자세 감도 (낮을수록 민감)",
+            "기댄 자세 감도",
             self.rec_val, self.REC_MIN, self.REC_MAX,
             self._on_rec_slider_changed,
         )
@@ -765,7 +766,7 @@ class SensitivitySettingsWidget(QWidget):
         description = QLabel(
             "값이 낮을수록 작은 변화에도 알림이 발생하며,\n높을수록 확실한 변화가 있을 때만 알림이 발생합니다."
         )
-        description.setFont(app_font(self.theme_manager.scale_pixel(12)))
+        description.setFont(app_font(self.theme_manager.scale_pixel(14)))
         description.setStyleSheet(
             f"color: {Colors.GRAY_DARK.value}; {FLAT_LABEL_STYLE}"
         )
