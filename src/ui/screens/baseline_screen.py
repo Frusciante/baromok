@@ -233,8 +233,7 @@ class BaselineScreen(QWidget):
                 self.step_ticks = 0
                 if self.camera_worker:
                     self.camera_worker.current_step = self.current_step
-                if self.sound_manager:
-                    self.sound_manager.play_beep(1000, 300) # 수집 시작 알림
+                # Baseline 촬영 중 단계별 알림음은 제거 (UI 상태 업데이트만)
                 
         elif self.step_state == "COLLECT":
             remaining = max(0.0, self.collect_seconds - (self.step_ticks / 10.0))
@@ -256,14 +255,12 @@ class BaselineScreen(QWidget):
                     self.camera_worker.current_step = 0
                 
                 if self.current_step > self.total_steps:
-                    if self.sound_manager:
-                        self.sound_manager.play_beep(1200, 500)
+                    # Baseline 수집 완료 (소리 제거 - 사용자가 직관적으로 알 수 있도록 UI로만 표시)
                     self._finish_capture()
                 else:
                     self.step_state = "WAIT"
                     self.step_ticks = 0
-                    if self.sound_manager:
-                        self.sound_manager.play_beep(600, 200)
+                    # Baseline 촬영 중 단계별 알림음은 제거
 
     def _on_frame_processed(self, frame_data: dict):
         """프레임 처리 완료 시 호출"""

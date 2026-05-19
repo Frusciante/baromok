@@ -1,8 +1,8 @@
 {
   "notification_enabled": true,
-  "notification_interval": 27,
+  "notification_interval": 5,
   "sound_enabled": false,
-  "sound_volume": 44,
+  "sound_volume": 39,
   "popup_position": "center",
   "popup_auto_close": true,
   "popup_auto_close_time": 5,

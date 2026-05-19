@@ -129,7 +129,7 @@ class baromokApp:
             self.sound_manager.set_volume_percent(self.settings_config.sound_volume)
         except Exception:
             logger.debug("사운드 초기 볼륨 반영 실패")
-        self._sound_playing = False
+
         self._last_sound_time = 0.0
         self._sound_cooldown_seconds = 3.0
         self._last_sound_state = ""
@@ -142,12 +142,8 @@ class baromokApp:
             self.main_window.posture_adjust_requested.connect(
                 lambda: self.switch_screen(0)
             )
-            self.main_window.settings_requested.connect(
-                lambda: self.switch_screen(2)
-            )
-            self.main_window.statistics_requested.connect(
-                lambda: self.switch_screen(3)
-            )
+            self.main_window.settings_requested.connect(lambda: self.switch_screen(2))
+            self.main_window.statistics_requested.connect(lambda: self.switch_screen(3))
         except Exception:
             logger.debug("메인 윈도우 헤더 버튼 시그널 연결 실패")
 
@@ -353,6 +349,68 @@ class baromokApp:
     def _start_detection(self):
         """감지 시작"""
         logger.info("감지 시작")
+
+        # Baseline 존재 여부 확인: 없으면 사용자에게 안내하고
+        # 확인 시 Baseline 캡처 화면으로 이동하도록 처리
+        try:
+            baseline_ok = False
+            failure_reason = ""
+
+            try:
+                baseline_ok = self.baseline_manager.is_baseline_valid()
+                if not baseline_ok:
+                    failure_reason = "현재 로드된 Baseline이 유효하지 않습니다."
+            except Exception as e:
+                failure_reason = f"Baseline 검증 중 오류: {str(e)}"
+                logger.debug(f"Baseline 검증 예외: {e}", exc_info=True)
+
+            if not baseline_ok:
+                # 저장된 baseline 파일이 있는지 시도 로드
+                try:
+                    loaded = self.baseline_manager.load_baseline_from_file()
+                    if loaded:
+                        baseline_ok = self.baseline_manager.is_baseline_valid()
+                        if baseline_ok:
+                            logger.info("저장된 Baseline 파일로부터 로드 및 유효성 검증 완료")
+                        else:
+                            failure_reason = "저장된 Baseline 파일이 유효하지 않습니다."
+                    else:
+                        failure_reason = "저장된 Baseline 파일을 찾을 수 없습니다."
+                        logger.warning(failure_reason)
+                except Exception as e:
+                    failure_reason = f"Baseline 파일 로드 실패: {str(e)}"
+                    logger.warning(failure_reason, exc_info=True)
+
+            if not baseline_ok:
+                # 사용자 확인 대화상자 표시
+                from PyQt6.QtWidgets import QMessageBox
+
+                msg = QMessageBox(self.main_window)
+                msg.setIcon(QMessageBox.Icon.Information)
+                msg.setWindowTitle("Baseline 필요")
+                msg.setText(
+                    f"{failure_reason}\n\n"
+                    "Baseline 캡처 화면으로 이동하겠습니다.\n"
+                    "'확인'을 누르면 Baseline 캡처 화면으로 이동합니다."
+                )
+                msg.setStandardButtons(
+                    QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+                )
+                ret = msg.exec()
+                if ret == QMessageBox.StandardButton.Ok:
+                    logger.info("사용자가 Baseline 캡처 화면으로 이동하기로 선택")
+                    self.switch_screen(0)
+                else:
+                    logger.info("사용자가 Baseline 캡처 화면 이동을 취소")
+                return
+
+            logger.info("Baseline 유효성 확인 완료: 감지 시작 가능")
+
+        except Exception as e:
+            logger.error(f"Baseline 확인 중 예상치 못한 오류: {e}", exc_info=True)
+            return
+
+        # baseline이 있으면 기존 감지 시작 흐름 실행
         self.camera_worker.set_baseline_mode(False)
         if self.camera_worker.is_paused:
             self.camera_worker.resume()
@@ -468,64 +526,40 @@ class baromokApp:
             logger.debug(f"팝업 타이머 시작: {timeout_ms}ms")
         else:
             logger.debug("팝업 타이머 비활성화 (수동 닫기)")
-        # 알림음은 나쁜 자세 상태에서만 재생한다.
-        if self.settings_config.sound_enabled and alert_type == "danger":
-            self._play_alert_sound_async()
 
     def _hide_alert_popup(self):
         """알림 팝업 숨김"""
         if self.alert_popup is not None:
             self.alert_popup.hide()
 
-    def _play_alert_sound_async(self):
-        """알림음을 UI 스레드를 막지 않도록 백그라운드에서 재생"""
-        if not self.settings_config.sound_enabled:
-            return
-
-        now = time.time()
-        if now - self._last_sound_time < self._sound_cooldown_seconds:
-            return
-
-        if self._sound_playing:
-            return
-
-        # QSoundEffect 기반으로 볼륨 제어가 가능한 경우는 non-blocking이므로
-        # 별도 스레드를 만들지 않고 즉시 재생합니다. 그렇지 않으면 기존과 같이
-        # 백그라운드 스레드에서 winsound.Beep를 호출합니다.
-        self._last_sound_time = now
-        self._sound_playing = True
-
-        if getattr(self.sound_manager, "supports_volume_control", False):
-            try:
-                self.sound_manager.play_alert(self.settings_config.sound_volume)
-            except Exception as e:
-                logger.error(f"알림음 재생 실패: {e}", exc_info=True)
-            finally:
-                self._sound_playing = False
-        else:
-
-            def _play():
-                try:
-                    self.sound_manager.play_alert(self.settings_config.sound_volume)
-                except Exception as e:
-                    logger.error(f"알림음 재생 실패: {e}", exc_info=True)
-                finally:
-                    self._sound_playing = False
-
-            thread = threading.Thread(target=_play, daemon=True)
-            thread.start()
-
     def _play_bad_posture_sound_once(self):
         """BAD_POSTURE 진입 시에만 중복 없이 경고음을 재생한다."""
+        logger.info(
+            f"sound check: enabled={self.settings_config.sound_enabled}, "
+            f"volume={self.settings_config.sound_volume}, "
+            f"last_state={self._last_sound_state}"
+        )
+
         if not self.settings_config.sound_enabled:
+            logger.info("sound skipped: sound_enabled=False")
+            return
+
+        if self.settings_config.sound_volume <= 0:
+            logger.info("sound skipped: sound_volume <= 0")
             return
 
         now = time.time()
-        if self._last_sound_state == "bad_posture" and now - self._last_sound_time < self._sound_cooldown_seconds:
+        if (
+            self._last_sound_state == "bad_posture"
+            and now - self._last_sound_time < self._sound_cooldown_seconds
+        ):
+            logger.info("sound skipped: cooldown")
             return
 
         self._last_sound_state = "bad_posture"
-        self._play_alert_sound_async()
+        self._last_sound_time = now
+        logger.info("sound play requested")
+        self.sound_manager.play_alert(self.settings_config.sound_volume)
 
     def _save_settings(self, settings_dict: dict):
         """설정 저장"""
