@@ -15,10 +15,15 @@ from matplotlib import font_manager
 from pathlib import Path
 
 _font_dir = Path(__file__).resolve().parents[3] / "assets" / "fonts"
-_bundled_font = _font_dir / "NotoSansKR-Variable.ttf"
-if _bundled_font.exists():
-    font_manager.fontManager.addfont(str(_bundled_font))
-    plt.rcParams["font.sans-serif"] = ["Noto Sans KR", "Malgun Gothic", "DejaVu Sans"]
+_bundled_fonts = ["Pretendard-Regular.otf", "Pretendard-Bold.otf"]
+_loaded_any = False
+for _f in _bundled_fonts:
+    _fp = _font_dir / _f
+    if _fp.exists():
+        font_manager.fontManager.addfont(str(_fp))
+        _loaded_any = True
+if _loaded_any:
+    plt.rcParams["font.sans-serif"] = ["Pretendard", "Malgun Gothic", "DejaVu Sans"]
 else:
     plt.rcParams["font.sans-serif"] = ["Malgun Gothic", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False

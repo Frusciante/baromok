@@ -2,9 +2,11 @@ import logging
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton, QWidget
+    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton,
+    QWidget, QSizePolicy
 )
 from src.ui.styles.theme import Colors, ThemeManager
+from src.ui.styles.font_loader import app_font
 from src.ui.widgets.chart_widgets import CalibrationScatterChart
 from .helpers import set_recognition_message, cv2_to_qpixmap
 
@@ -67,18 +69,24 @@ class BaselineScreen(QWidget):
         content_layout = QHBoxLayout()
         content_layout.setSpacing(20)
 
-        # 1. 왼쪽: 카메라 프리뷰
+        # 1. 왼쪽: 카메라 프리뷰 (고정 크기 — 영상 크기에 따라 흔들리지 않도록)
         self.preview_frame = QFrame()
         self.preview_frame.setStyleSheet(f"""
             background-color: {Colors.WHITE.value};
             border: 2px solid {Colors.GRAY_MEDIUM.value};
             border-radius: 15px;
         """)
-        self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(420))
+        self.preview_frame.setFixedHeight(self.theme_manager.scale_pixel(420))
         preview_vbox = QVBoxLayout()
-        preview_vbox.setContentsMargins(0, 0, 0, 0)
+        preview_vbox.setContentsMargins(8, 8, 8, 8)
         self.preview_label = QLabel("카메라 프리뷰")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # 픽스맵 크기가 레이아웃에 영향을 주지 않도록 — 박스 위치 고정
+        self.preview_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored
+        )
+        self.preview_label.setMinimumSize(1, 1)
+        self.preview_label.setStyleSheet("border: none; background-color: transparent;")
         preview_vbox.addWidget(self.preview_label)
         self.preview_frame.setLayout(preview_vbox)
         content_layout.addWidget(self.preview_frame, 3) # 비율 조절
@@ -113,13 +121,14 @@ class BaselineScreen(QWidget):
 
         self.main_status_label = QLabel("준비")
         self.main_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.main_status_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(22), QFont.Weight.Bold))
-        self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value};")
+        self.main_status_label.setFont(app_font(self.theme_manager.scale_pixel(25), QFont.Weight.Bold))
+        self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value}; border: none; background-color: transparent;")
         status_vbox.addWidget(self.main_status_label)
 
         self.sub_status_label = QLabel("자세 맞춤 시작을 눌러주세요")
         self.sub_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.sub_status_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(13)))
+        self.sub_status_label.setFont(app_font(self.theme_manager.scale_pixel(16)))
+        self.sub_status_label.setStyleSheet("border: none; background-color: transparent;")
         status_vbox.addWidget(self.sub_status_label)
 
         # 진행 바
@@ -131,8 +140,9 @@ class BaselineScreen(QWidget):
         status_vbox.addWidget(self.step_progress_bar)
 
         self.step_label = QLabel(f"전체 진행: 0 / {self.total_steps}")
-        self.step_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(11), QFont.Weight.Bold))
+        self.step_label.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
         self.step_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.step_label.setStyleSheet("border: none; background-color: transparent;")
         status_vbox.addWidget(self.step_label)
 
         self.total_progress_bar = QProgressBar()
@@ -151,14 +161,24 @@ class BaselineScreen(QWidget):
         # 하단 안내 및 버튼
         self.recognition_label = QLabel("")
         self.recognition_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.recognition_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12), QFont.Weight.Bold))
-        self.recognition_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
+        self.recognition_label.setFont(app_font(self.theme_manager.scale_pixel(15), QFont.Weight.Bold))
+        self.recognition_label.setStyleSheet(f"color: {Colors.RED_DANGER.value}; border: none; background-color: transparent;")
         set_recognition_message(self.recognition_label, False)
         layout.addWidget(self.recognition_label)
 
         self.capture_btn = QPushButton("자세 맞춤 시작")
         self.capture_btn.setFixedHeight(self.theme_manager.scale_pixel(56))
-        self.capture_btn.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(18), QFont.Weight.Bold))
+        self.capture_btn.setFont(app_font(self.theme_manager.scale_pixel(21), QFont.Weight.Bold))
+        self.capture_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Colors.PURPLE_PRIMARY.value};
+                color: {Colors.WHITE.value};
+                border-radius: 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #5343B6;
+            }}
+        """)
         self.capture_btn.clicked.connect(self.start_capture)
         layout.addWidget(self.capture_btn)
 
@@ -216,7 +236,7 @@ class BaselineScreen(QWidget):
             progress = int((self.step_ticks / (self.wait_seconds * 10)) * 100)
             
             self.main_status_label.setText("이동 하세요")
-            self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value};")
+            self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value}; border: none; background-color: transparent;")
             self.sub_status_label.setText(f"다음 거리로 이동해 주세요... ({remaining:.1f}초)")
             self.step_progress_bar.setValue(min(progress, 100))
             self.step_progress_bar.setStyleSheet(f"QProgressBar::chunk {{ background-color: {Colors.PRIMARY.value}; }}")
@@ -234,7 +254,7 @@ class BaselineScreen(QWidget):
             progress = int((self.step_ticks / (self.collect_seconds * 10)) * 100)
             
             self.main_status_label.setText("정지 하세요")
-            self.main_status_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
+            self.main_status_label.setStyleSheet(f"color: {Colors.RED_DANGER.value}; border: none; background-color: transparent;")
             self.sub_status_label.setText(f"가만히 자세를 유지해 주세요... ({remaining:.1f}초)")
             self.step_progress_bar.setValue(min(progress, 100))
             self.step_progress_bar.setStyleSheet(f"QProgressBar::chunk {{ background-color: {Colors.RED_DANGER.value}; }}")
@@ -261,11 +281,18 @@ class BaselineScreen(QWidget):
             annotated_frame = frame_data.get("frame")
             if annotated_frame is not None:
                 pixmap = cv2_to_qpixmap(annotated_frame)
-                # 고속 스케일링
+                # 박스를 가득 채우도록 확대 후 좌우를 잘라 인물이 중앙에 보이게 함
+                target = self.preview_label.size()
                 scaled_pixmap = pixmap.scaled(
-                    self.preview_label.size(),
-                    Qt.AspectRatioMode.KeepAspectRatio,
+                    target,
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                     Qt.TransformationMode.FastTransformation,
+                )
+                # 넘치는 영역을 중앙 기준으로 잘라 박스 크기에 맞춤
+                x = max(0, (scaled_pixmap.width() - target.width()) // 2)
+                y = max(0, (scaled_pixmap.height() - target.height()) // 2)
+                scaled_pixmap = scaled_pixmap.copy(
+                    x, y, target.width(), target.height()
                 )
                 self.preview_label.setPixmap(scaled_pixmap)
 
@@ -318,7 +345,7 @@ class BaselineScreen(QWidget):
         if success:
             self.total_progress_bar.setValue(self.total_steps)
             self.main_status_label.setText("분석 완료")
-            self.main_status_label.setStyleSheet(f"color: {Colors.SECONDARY.value};")
+            self.main_status_label.setStyleSheet(f"color: {Colors.SECONDARY.value}; border: none; background-color: transparent;")
             self.sub_status_label.setText(f"총 {self.valid_baseline_frame_count}개 유효 데이터 수집됨")
             
             if self.baseline_manager:
@@ -330,7 +357,7 @@ class BaselineScreen(QWidget):
             self.baseline_captured_signal.emit()
         else:
             self.main_status_label.setText("학습 실패")
-            self.main_status_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
+            self.main_status_label.setStyleSheet(f"color: {Colors.RED_DANGER.value}; border: none; background-color: transparent;")
             self.sub_status_label.setText("데이터가 부족합니다.")
 
     def cancel_capture(self):
@@ -359,7 +386,7 @@ class BaselineScreen(QWidget):
         self.step_progress_bar.setValue(0)
         self.step_label.setText(f"전체 진행: 0 / {self.total_steps}")
         self.main_status_label.setText("준비")
-        self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value};")
+        self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value}; border: none; background-color: transparent;")
         self.sub_status_label.setText("자세 맞춤 시작을 눌러주세요")
         set_recognition_message(self.recognition_label, False)
 

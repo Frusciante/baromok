@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget, QHBoxLayout, QSpacerItem, QSizePolicy
 )
 from src.ui.styles.theme import ThemeManager, Colors
+from src.ui.styles.font_loader import app_font
 from src.core.session_manager import SessionManager
 import matplotlib
 matplotlib.use("QtAgg")
@@ -93,8 +94,11 @@ class HubScreen(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
         score_panel = self._create_score_panel()
+        # 텍스트 내용과 무관하게 패널을 세로로 늘려 일정한 크기 유지
+        score_panel.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
+        )
         right_layout.addWidget(score_panel)
-        right_layout.addStretch()
         right_container.setLayout(right_layout)
 
         top_layout.addWidget(right_container, 1)
@@ -103,7 +107,17 @@ class HubScreen(QWidget):
 
         start_btn = QPushButton("바로목 감지 시작")
         start_btn.setFixedHeight(self.theme_manager.scale_pixel(56))
-        start_btn.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(20), QFont.Weight.Bold))
+        start_btn.setFont(app_font(self.theme_manager.scale_pixel(23), QFont.Weight.Bold))
+        start_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Colors.PURPLE_PRIMARY.value};
+                color: {Colors.WHITE.value};
+                border-radius: 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #5343B6;
+            }}
+        """)
         start_btn.clicked.connect(self.start_detection_signal.emit)
         main_layout.addWidget(start_btn)
 
@@ -157,21 +171,21 @@ class HubScreen(QWidget):
 
         # 아이콘 (간단한 텍스트 아이콘 사용)
         icon_label = QLabel("📈")
-        icon_font = QFont("Noto Sans KR", self.theme_manager.scale_pixel(28))
+        icon_font = app_font(self.theme_manager.scale_pixel(31))
         icon_label.setFont(icon_font)
-        icon_label.setStyleSheet(f"color: {self._colors['empty_icon']};")
+        icon_label.setStyleSheet(f"color: {self._colors['empty_icon']}; border: none; background-color: transparent;")
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_label)
 
         title = QLabel("아직 측정 기록이 없어요")
-        title.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12), QFont.Weight.Medium))
-        title.setStyleSheet(f"color: {self._colors['title_text']};")
+        title.setFont(app_font(self.theme_manager.scale_pixel(15), QFont.Weight.Medium))
+        title.setStyleSheet(f"color: {self._colors['title_text']}; border: none; background-color: transparent;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
         desc = QLabel("아직 측정 기록이 없어요\n첫 측정을 시작하면\n자세 변화 리포트를 볼 수 있어요")
-        desc.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
-        desc.setStyleSheet(f"color: {self._colors['muted']};")
+        desc.setFont(app_font(self.theme_manager.scale_pixel(13)))
+        desc.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")
         desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         desc.setWordWrap(True)
         layout.addWidget(desc)
@@ -187,26 +201,34 @@ class HubScreen(QWidget):
         layout.setSpacing(self.theme_manager.scale_pixel(8))
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        icon_label = QLabel("📷")
-        icon_font = QFont("Noto Sans KR", self.theme_manager.scale_pixel(34))
-        icon_label.setFont(icon_font)
-        icon_label.setStyleSheet(f"color: {self._colors['empty_icon']};")
+        icon_label = QLabel()
+        icon_path = Path("assets/ui/icon_statsvalue.png")
+        if icon_path.exists():
+            icon_pixmap = QPixmap(str(icon_path))
+            if not icon_pixmap.isNull():
+                icon_label.setPixmap(
+                    icon_pixmap.scaledToHeight(
+                        self.theme_manager.scale_pixel(130),
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                )
+        icon_label.setStyleSheet("border: none; background-color: transparent;")
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_label)
 
         title = QLabel("기준자세 데이터가 필요해요")
         title.setFont(
-            QFont("Noto Sans KR", self.theme_manager.scale_pixel(14), QFont.Weight.Medium)
+            app_font(self.theme_manager.scale_pixel(17), QFont.Weight.Medium)
         )
-        title.setStyleSheet(f"color: {self._colors['title_text']};")
+        title.setStyleSheet(f"color: {self._colors['title_text']}; border: none; background-color: transparent;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
         desc = QLabel(
             "저장된 기준자세가 없거나 유효하지 않습니다.\n바로목 감지를 시작하려면\n기준자세설정 화면으로 이동해주세요."
         )
-        desc.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
-        desc.setStyleSheet(f"color: {self._colors['muted']};")
+        desc.setFont(app_font(self.theme_manager.scale_pixel(13)))
+        desc.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")
         desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         desc.setWordWrap(True)
         layout.addWidget(desc)
@@ -223,8 +245,8 @@ class HubScreen(QWidget):
 
         # 자세 점수 라벨
         lbl = QLabel("자세 점수")
-        lbl.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
-        lbl.setStyleSheet(f"color: {self._colors['muted']};")
+        lbl.setFont(app_font(self.theme_manager.scale_pixel(13)))
+        lbl.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")
         layout.addWidget(lbl)
 
         # 점수 계산: statics_screen의 평균 로직과 동일
@@ -241,13 +263,13 @@ class HubScreen(QWidget):
         score_row_layout.setSpacing(self.theme_manager.scale_pixel(6))
 
         score_label = QLabel(f"{score:.1f}")
-        score_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(36), QFont.Weight.Medium))
-        score_label.setStyleSheet(f"color: {self._colors['score']};")
+        score_label.setFont(app_font(self.theme_manager.scale_pixel(39), QFont.Weight.Medium))
+        score_label.setStyleSheet(f"color: {self._colors['score']}; border: none; background-color: transparent;")
         score_row_layout.addWidget(score_label)
 
         slash_label = QLabel("/ 100")
-        slash_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(11)))
-        slash_label.setStyleSheet(f"color: {self._colors['muted']};")
+        slash_label.setFont(app_font(self.theme_manager.scale_pixel(14)))
+        slash_label.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")
         score_row_layout.addWidget(slash_label, alignment=Qt.AlignmentFlag.AlignBottom)
         score_row_layout.addStretch()
         score_row.setLayout(score_row_layout)
@@ -261,8 +283,8 @@ class HubScreen(QWidget):
 
         # 최근 기록 라벨
         lbl2 = QLabel("최근 기록")
-        lbl2.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
-        lbl2.setStyleSheet(f"color: {self._colors['muted']};")
+        lbl2.setFont(app_font(self.theme_manager.scale_pixel(13)))
+        lbl2.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")
         layout.addWidget(lbl2)
 
         # 최근 3일 표시
@@ -282,8 +304,8 @@ class HubScreen(QWidget):
                 day_text = f"{idx+1}일 전"
 
             day_lbl = QLabel(day_text)
-            day_lbl.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(11)))
-            day_lbl.setStyleSheet(f"color: {self._colors['muted']};")
+            day_lbl.setFont(app_font(self.theme_manager.scale_pixel(14)))
+            day_lbl.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")
             row_layout.addWidget(day_lbl)
 
             # 스파크라인
@@ -301,8 +323,8 @@ class HubScreen(QWidget):
             # 점수
             score_val = s.statistics.get("good_posture_percentage", 0) if hasattr(s, 'statistics') else 0
             val_lbl = QLabel(str(int(score_val)))
-            val_lbl.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(11), QFont.Weight.Medium))
-            val_lbl.setStyleSheet(f"color: {self._colors['title_text']};")
+            val_lbl.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Medium))
+            val_lbl.setStyleSheet(f"color: {self._colors['title_text']}; border: none; background-color: transparent;")
             row_layout.addWidget(val_lbl, alignment=Qt.AlignmentFlag.AlignRight)
 
             row.setLayout(row_layout)

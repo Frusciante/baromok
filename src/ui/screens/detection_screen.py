@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 )
 from src.ui.styles.theme import Colors, ThemeManager
+from src.ui.styles.font_loader import app_font
 from .helpers import set_recognition_message, cv2_to_qpixmap, RECOGNITION_DIFFICULT_MESSAGE
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ class DetectionScreen(QWidget):
 
         top_layout = QHBoxLayout()
         self.status_label = QLabel("준비중")
-        self.status_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
+        self.status_label.setFont(app_font(self.theme_manager.scale_pixel(17), QFont.Weight.Bold))
         self.status_label.setObjectName("status_normal")
         top_layout.addWidget(self.status_label)
         top_layout.addStretch()
@@ -62,7 +63,7 @@ class DetectionScreen(QWidget):
 
         self.time_label = QLabel("00:00:00")
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.time_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(48), QFont.Weight.Bold))
+        self.time_label.setFont(app_font(self.theme_manager.scale_pixel(51), QFont.Weight.Bold))
         layout.addWidget(self.time_label)
 
         self.preview_frame = QFrame()
@@ -81,19 +82,19 @@ class DetectionScreen(QWidget):
 
         self.recognition_label = QLabel("")
         self.recognition_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.recognition_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12), QFont.Weight.Bold))
+        self.recognition_label.setFont(app_font(self.theme_manager.scale_pixel(15), QFont.Weight.Bold))
         self.recognition_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
         set_recognition_message(self.recognition_label, False)
         layout.addWidget(self.recognition_label)
 
         self.posture_label = QLabel("감지 중")
         self.posture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.posture_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(16), QFont.Weight.Bold))
+        self.posture_label.setFont(app_font(self.theme_manager.scale_pixel(19), QFont.Weight.Bold))
         layout.addWidget(self.posture_label)
 
         self.cheek_detail_label = QLabel("광대 거리: - (예상: -)")
         self.cheek_detail_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cheek_detail_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12)))
+        self.cheek_detail_label.setFont(app_font(self.theme_manager.scale_pixel(15)))
         self.cheek_detail_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
         layout.addWidget(self.cheek_detail_label)
 

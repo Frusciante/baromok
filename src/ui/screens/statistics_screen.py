@@ -4,6 +4,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 from src.ui.styles.theme import ThemeManager
+from src.ui.styles.font_loader import app_font
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class StatisticsScreen(QWidget):
 
         subtitle = QLabel("최근 10개 세션 바른자세 유지율")
         subtitle.setFont(
-            QFont("Noto Sans KR", self.theme_manager.scale_pixel(16), QFont.Weight.Bold)
+            app_font(self.theme_manager.scale_pixel(19), QFont.Weight.Bold)
         )
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
@@ -39,16 +40,11 @@ class StatisticsScreen(QWidget):
         self.avg_label = QLabel("데이터 없음")
         self.avg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.avg_label.setFont(
-            QFont("Noto Sans KR", self.theme_manager.scale_pixel(14), QFont.Weight.Bold)
+            app_font(self.theme_manager.scale_pixel(17), QFont.Weight.Bold)
         )
         layout.addWidget(self.avg_label)
 
         self._load_and_plot_data()
-
-        back_btn = QPushButton("돌아가기")
-        back_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
-        back_btn.clicked.connect(self.back_to_hub_signal.emit)
-        layout.addWidget(back_btn)
 
         self.setLayout(layout)
 

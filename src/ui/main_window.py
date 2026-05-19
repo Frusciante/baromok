@@ -16,13 +16,14 @@ from PyQt6.QtWidgets import (
     QApplication,
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QEvent
-from PyQt6.QtGui import QFont, QGuiApplication, QIcon
+from PyQt6.QtGui import QFont, QGuiApplication, QIcon, QPixmap
 from PyQt6.QtCore import QTimer
 from pathlib import Path
 import sys
 
 from src.utils.logger import get_logger
 from src.ui.styles.theme import ThemeManager, Colors, FontSize, Spacing
+from src.ui.styles.font_loader import app_font
 
 logger = get_logger(__name__)
 
@@ -119,21 +120,37 @@ class MainWindow(QMainWindow):
 
         # 뒤로가기 버튼 (왼쪽)
         back_btn = QPushButton("←")
-        back_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
+        back_btn.setFont(app_font(int(19 * self.dpi_scale)))
         back_btn.setFixedSize(int(40 * self.dpi_scale), int(40 * self.dpi_scale))
         back_btn.clicked.connect(self._on_back_clicked)
         back_btn.setVisible(False)
         layout.addWidget(back_btn)
 
-        # 타이틀 (좌측 배치)
+        icon_dir = Path(__file__).resolve().parents[2] / "assets" / "ui"
+        self._icon_dir = icon_dir
+
+        # 화면별 타이틀 아이콘 + 타이틀 (아이콘-텍스트 간격 5px)
+        title_layout = QHBoxLayout()
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        title_layout.setSpacing(int(5 * self.dpi_scale))
+
+        self.header_icon = QLabel()
+        self.header_icon.setObjectName("header_icon")
+        self.header_icon.setFixedSize(
+            int(48 * self.dpi_scale), int(48 * self.dpi_scale)
+        )
+        self.header_icon.setScaledContents(True)
+        self.header_icon.setVisible(False)
+        title_layout.addWidget(self.header_icon)
+
+        # 타이틀 — 크기/굵기는 전역 QSS(#header_title)에서 지정
         self.header_title = QLabel("바로목")
-        title_font = QFont("Noto Sans KR", int(56 * self.dpi_scale), QFont.Weight.Bold)
-        self.header_title.setFont(title_font)
-        layout.addWidget(self.header_title)
+        self.header_title.setObjectName("header_title")
+        title_layout.addWidget(self.header_title)
+
+        layout.addLayout(title_layout)
 
         layout.addStretch()
-
-        icon_dir = Path(__file__).resolve().parents[2] / "assets" / "ui"
 
         def create_header_button(text: str, icon_name: str, callback):
             btn = QToolButton()
@@ -143,7 +160,7 @@ class MainWindow(QMainWindow):
             btn.setIcon(QIcon(str(default_icon)))
             btn.setIconSize(QSize(int(34 * self.dpi_scale), int(34 * self.dpi_scale)))
             btn.setText(text)
-            btn.setFont(QFont("Noto Sans KR", int(9 * self.dpi_scale)))
+            btn.setFont(app_font(int(12 * self.dpi_scale)))
             base_width = int(96 * self.dpi_scale)
             base_height = int(72 * self.dpi_scale)
             pressed_width = int(94 * self.dpi_scale)
@@ -199,7 +216,7 @@ class MainWindow(QMainWindow):
 
         # 뒤로가기 버튼 (기본 숨김)
         back_btn = QPushButton("←")
-        back_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
+        back_btn.setFont(app_font(int(19 * self.dpi_scale)))
         back_btn.setFixedSize(int(40 * self.dpi_scale), int(40 * self.dpi_scale))
         back_btn.clicked.connect(self._on_back_clicked)
         back_btn.setVisible(False)
@@ -275,7 +292,7 @@ class MainWindow(QMainWindow):
         notice = QLabel(
             "본 애플리케이션은 의료 진단 도구가 아니며, 정보 제공 목적으로만 사용됩니다."
         )
-        notice.setFont(QFont("Noto Sans KR", int(9 * self.dpi_scale)))
+        notice.setFont(app_font(int(12 * self.dpi_scale)))
         notice.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
         layout.addWidget(notice)
 
@@ -324,7 +341,7 @@ class MainWindow(QMainWindow):
         placeholder_layout = QVBoxLayout()
         placeholder_label = QLabel("화면 준비 중...\n(Phase 3에서 구현)")
         placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        placeholder_label.setFont(QFont("Noto Sans KR", 16))
+        placeholder_label.setFont(app_font(19))
         placeholder_layout.addWidget(placeholder_label)
         placeholder.setLayout(placeholder_layout)
 
@@ -333,9 +350,25 @@ class MainWindow(QMainWindow):
         # 초기 화면 참조 저장 (아이콘 전환 조건으로 사용)
         self._initial_placeholder = placeholder
 
+    # 화면 타이틀별 좌측 아이콘
+    _HEADER_ICONS = {
+        "환경설정": "icon_settings.png",
+        "기준 자세 설정": "icon_posture.png",
+        "나의 통계": "icon_stats.png",
+    }
+
     def set_header_title(self, title: str):
-        """헤더 타이틀 텍스트 변경"""
+        """헤더 타이틀 텍스트 및 좌측 아이콘 변경"""
         self.header_title.setText(title)
+
+        icon_name = self._HEADER_ICONS.get(title)
+        if icon_name:
+            icon_path = self._icon_dir / icon_name
+            if icon_path.exists():
+                self.header_icon.setPixmap(QPixmap(str(icon_path)))
+                self.header_icon.setVisible(True)
+                return
+        self.header_icon.setVisible(False)
 
     def switch_to_screen(self, screen_name: str):
         """

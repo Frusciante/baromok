@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QWidget
 )
 from src.ui.styles.theme import Colors, ThemeManager
+from src.ui.styles.font_loader import app_font
 
 class AlertPopup(QWidget):
     """알림 팝업 (배너 & 토스트)"""
@@ -39,7 +40,7 @@ class AlertPopup(QWidget):
         layout.setSpacing(10)
 
         self.message_label = QLabel(self.message_text)
-        self.message_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(12), QFont.Weight.Bold))
+        self.message_label.setFont(app_font(self.theme_manager.scale_pixel(15), QFont.Weight.Bold))
         self.message_label.setStyleSheet(f"color: {Colors.WHITE.value};")
         layout.addWidget(self.message_label, 1)
 

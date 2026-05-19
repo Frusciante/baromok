@@ -75,13 +75,14 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
 
     # 버튼 크기
     button_height = int(40 * dpi_scale)
+    button_width = int(100 * dpi_scale)
     button_radius = int(10 * dpi_scale)
 
     return f"""
     /* 기본 설정 */
     QMainWindow {{
         background-color: {Colors.GRAY_LIGHT.value};
-        font-family: "Noto Sans KR", "Malgun Gothic", "맑은 고딕", "나눔고딕", sans-serif;
+        font-family: "Pretendard", "Malgun Gothic", "맑은 고딕", "나눔고딕", sans-serif;
         font-size: {normal_font}pt;
     }}
     
@@ -97,6 +98,13 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     QWidget#app_header QLabel {{
         color: {Colors.WHITE.value};
         background-color: transparent;
+    }}
+    QWidget#app_header QLabel#header_title {{
+        color: {Colors.WHITE.value};
+        background-color: transparent;
+        font-size: {int(24 * dpi_scale)}pt;
+        font-weight: bold;
+        margin-left: 0px;
     }}
     QWidget#app_header QPushButton {{
         color: {Colors.WHITE.value};
@@ -399,6 +407,26 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     
     QMessageBox {{
         background-color: {Colors.GRAY_LIGHT.value};
+    }}
+
+    QMessageBox QPushButton {{
+        background-color: {Colors.PURPLE_PRIMARY.value};
+        color: {Colors.WHITE.value};
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        border-radius: {button_radius}px;
+        padding: {int(6 * dpi_scale)}px {int(8 * dpi_scale)}px {int(3 * dpi_scale)}px {int(8 * dpi_scale)}px;
+        min-width: {button_width}px;
+        min-height: {int(36 * dpi_scale)}px;
+    }}
+
+    QMessageBox QPushButton:hover {{
+        background-color: {Colors.PURPLE_PRIMARY.value};
+        color: {Colors.WHITE.value};
+    }}
+
+    QMessageBox QPushButton:pressed {{
+        background-color: #ECEBFC;
+        color: {Colors.PURPLE_PRIMARY.value};
     }}
     """
 

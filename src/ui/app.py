@@ -421,6 +421,12 @@ class baromokApp:
                 msg.setStandardButtons(
                     QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
                 )
+                ok_button = msg.button(QMessageBox.StandardButton.Ok)
+                cancel_button = msg.button(QMessageBox.StandardButton.Cancel)
+                if ok_button is not None:
+                    ok_button.setText("확인")
+                if cancel_button is not None:
+                    cancel_button.setText("취소")
                 ret = msg.exec()
                 if ret == QMessageBox.StandardButton.Ok:
                     logger.info("사용자가 Baseline 캡처 화면으로 이동하기로 선택")
