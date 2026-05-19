@@ -334,6 +334,10 @@ class BaselineManager:
             logger.error(f"Baseline 로드 실패: {e}")
             return False
 
+    def baseline_file_exists(self) -> bool:
+        """저장된 baseline.json 파일 존재 여부"""
+        return (self.data_dir / "baseline.json").exists()
+
     def get_baseline_metrics(self) -> Optional[BaselineMetrics]:
         """현재 baseline 메트릭 반환"""
         return self.baseline_metrics

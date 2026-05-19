@@ -181,7 +181,11 @@ class baromokApp:
             self.baseline_manager,
             self.sound_manager,
         )
-        self.hub_screen = HubScreen(self.theme_manager, self.session_manager)
+        self.hub_screen = HubScreen(
+            self.theme_manager,
+            self.session_manager,
+            self.baseline_manager,
+        )
         self.settings_screen = SettingsScreen(
             self.theme_manager, vars(self.settings_config)  # dataclass를 dict로 변환
         )
@@ -394,9 +398,9 @@ class baromokApp:
                         if baseline_ok:
                             logger.info("저장된 Baseline 파일로부터 로드 및 유효성 검증 완료")
                         else:
-                            failure_reason = "저장된 Baseline 파일이 유효하지 않습니다."
+                            failure_reason = "저장된 기준자세 파일이 유효하지 않습니다."
                     else:
-                        failure_reason = "저장된 Baseline 파일을 찾을 수 없습니다."
+                        failure_reason = "저장된 기준자세 파일을 찾을 수 없습니다."
                         logger.warning(failure_reason)
                 except Exception as e:
                     failure_reason = f"Baseline 파일 로드 실패: {str(e)}"
@@ -411,8 +415,8 @@ class baromokApp:
                 msg.setWindowTitle("Baseline 필요")
                 msg.setText(
                     f"{failure_reason}\n\n"
-                    "Baseline 캡처 화면으로 이동하겠습니다.\n"
-                    "'확인'을 누르면 Baseline 캡처 화면으로 이동합니다."
+                    "기준자세설정 화면으로 이동하겠습니다.\n"
+                    "'확인'을 누르면 기준자세 설정 화면으로 이동합니다."
                 )
                 msg.setStandardButtons(
                     QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel

@@ -22,10 +22,16 @@ class HubScreen(QWidget):
     open_statistics_signal = pyqtSignal()
     open_baseline_signal = pyqtSignal()
 
-    def __init__(self, theme_manager: ThemeManager, session_manager: SessionManager = None):
+    def __init__(
+        self,
+        theme_manager: ThemeManager,
+        session_manager: SessionManager = None,
+        baseline_manager=None,
+    ):
         super().__init__()
         self.theme_manager = theme_manager
         self.session_manager = session_manager
+        self.baseline_manager = baseline_manager
         self._colors = {
             "panel_border": "#e5e5e7",
             "empty_icon": "#c9c4ed",
@@ -121,7 +127,18 @@ class HubScreen(QWidget):
         except Exception:
             logger.exception("세션 데이터 로드 실패")
 
-        if not sessions:
+        baseline_missing = True
+        try:
+            if self.baseline_manager:
+                baseline_missing = not self.baseline_manager.is_baseline_valid()
+            else:
+                baseline_missing = True
+        except Exception:
+            baseline_missing = True
+
+        if baseline_missing:
+            content = self._create_baseline_missing_state()
+        elif not sessions:
             content = self._create_empty_state()
         else:
             content = self._create_score_state(sessions)
@@ -153,6 +170,41 @@ class HubScreen(QWidget):
         layout.addWidget(title)
 
         desc = QLabel("아직 측정 기록이 없어요\n첫 측정을 시작하면\n자세 변화 리포트를 볼 수 있어요")
+        desc.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
+        desc.setStyleSheet(f"color: {self._colors['muted']};")
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        w.setLayout(layout)
+        return w
+
+    def _create_baseline_missing_state(self) -> QWidget:
+        """상태 A: Baseline 파일이 없어서 초기 설정 안내"""
+        w = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(self.theme_manager.scale_pixel(8))
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        icon_label = QLabel("📷")
+        icon_font = QFont("Noto Sans KR", self.theme_manager.scale_pixel(34))
+        icon_label.setFont(icon_font)
+        icon_label.setStyleSheet(f"color: {self._colors['empty_icon']};")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(icon_label)
+
+        title = QLabel("기준자세 데이터가 필요해요")
+        title.setFont(
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(14), QFont.Weight.Medium)
+        )
+        title.setStyleSheet(f"color: {self._colors['title_text']};")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        desc = QLabel(
+            "저장된 기준자세가 없거나 유효하지 않습니다.\n바로목 감지를 시작하려면\n기준자세설정 화면으로 이동해주세요."
+        )
         desc.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(10)))
         desc.setStyleSheet(f"color: {self._colors['muted']};")
         desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
