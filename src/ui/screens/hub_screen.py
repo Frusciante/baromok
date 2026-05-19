@@ -166,7 +166,7 @@ class HubScreen(QWidget):
         main_layout.addLayout(top_layout, 1)
         main_layout.addStretch()
 
-        start_btn = QPushButton("바로목 감지 시작")
+        start_btn = QPushButton("모니터링 시작")
         start_btn.setFixedHeight(self.theme_manager.scale_pixel(56))
         start_btn.setFont(app_font(self.theme_manager.scale_pixel(23), QFont.Weight.Bold))
         start_btn.setStyleSheet(f"""
@@ -191,8 +191,8 @@ class HubScreen(QWidget):
         panel.setObjectName("score_panel")
         panel.setStyleSheet(f"background-color: {Colors.WHITE.value}; border-radius: {self.theme_manager.scale_pixel(10)}px; border: none;")
         panel_layout = QVBoxLayout()
-        panel_layout.setContentsMargins(self.theme_manager.scale_pixel(16), self.theme_manager.scale_pixel(16), self.theme_manager.scale_pixel(16), self.theme_manager.scale_pixel(16))
-        panel_layout.setSpacing(self.theme_manager.scale_pixel(12))
+        panel_layout.setContentsMargins(self.theme_manager.scale_pixel(18), self.theme_manager.scale_pixel(18), self.theme_manager.scale_pixel(18), self.theme_manager.scale_pixel(18))
+        panel_layout.setSpacing(self.theme_manager.scale_pixel(14))
 
         # 데이터 로드 데이터베이스 예외 처리 유지
         sessions = []
@@ -274,67 +274,104 @@ class HubScreen(QWidget):
         return w
 
     def _create_score_state(self, sessions: list) -> QWidget:
-        """상태 B: 측정 기록 있음 - 최근 통계 데이터를 요약하는 대시보드"""
+        """상태 B: 측정 기록 있음 - 최근 통계 데이터를 요약하는 대시보드 (글자 크기 확장 버전)"""
         w = QWidget()
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(self.theme_manager.scale_pixel(12))
+        # 글자들이 커진 만큼 패널 내부 간격도 살짝 넓힙니다.
+        layout.setSpacing(self.theme_manager.scale_pixel(16))
 
-        main_title = QLabel("나의 통계")
-        main_title.setFont(app_font(self.theme_manager.scale_pixel(16), QFont.Weight.Bold))
-        main_title.setStyleSheet(f"color: {self._colors['title_text']}; border: none; background-color: transparent;")
+        # 1. 메인 타이틀 ("평균 점수")
+        main_title = QLabel("평균 점수")
+        main_title.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        main_title.setStyleSheet(f"""
+            color: {self._colors['title_text']};
+            font-size: {self.theme_manager.scale_pixel(22)}px !important; /* 💡 16px -> 22px 확장 */
+            font-weight: bold !important;
+            border: none;
+            background-color: transparent;
+        """)
         layout.addWidget(main_title)
 
+        # 2. 서브 타이틀 설명 문구
         sub_title = QLabel("최근 세션의 자세 유지율을 한눈에 확인해 보세요")
-        sub_title.setFont(app_font(self.theme_manager.scale_pixel(12)))
-        sub_title.setStyleSheet("color: #888888; border: none; background-color: transparent;")
         sub_title.setWordWrap(True)
+        sub_title.setStyleSheet(f"""
+            color: #888888;
+            font-size: {self.theme_manager.scale_pixel(15)}px !important; /* 💡 12px -> 15px 확장 */
+            border: none;
+            background-color: transparent;
+        """)
         layout.addWidget(sub_title)
 
+        # 데이터 계산부
         recent = sessions[:3]
         recent_values = [
             float(s.statistics.get("good_posture_percentage", 0))
             for s in recent
             if isinstance(getattr(s, "statistics", {}), dict)
         ]
-
         average_score = int(round(sum(recent_values) / len(recent_values))) if recent_values else 0
         latest_score = int(recent_values[0]) if recent_values else 0
 
+        # 3. 점수 영역 (거대한 숫자)
         score_row = QWidget()
         score_row_layout = QHBoxLayout()
         score_row_layout.setContentsMargins(0, 0, 0, 0)
-        score_row_layout.setSpacing(self.theme_manager.scale_pixel(10))
+        score_row_layout.setSpacing(self.theme_manager.scale_pixel(12))
         score_row_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
 
+        # 메인 점수 숫자 (예: 85)
         score_label = QLabel(f"{average_score}")
-        score_label.setFont(app_font(self.theme_manager.scale_pixel(70), QFont.Weight.Bold))
-        score_label.setStyleSheet(f"color: {self._colors['score']}; border: none; background-color: transparent;")
+        score_label.setStyleSheet(f"""
+            color: {self._colors['score']};
+            font-size: {self.theme_manager.scale_pixel(110)}px !important; /* 💡 90px -> 110px 대폭 확장 */
+            font-weight: bold !important;
+            border: none;
+            background-color: transparent;
+        """)
+        # 글자가 커진 만큼 라벨의 최소 크기도 안전하게 확보합니다.
+        score_label.setMinimumHeight(self.theme_manager.scale_pixel(100))
+        score_label.setMinimumWidth(self.theme_manager.scale_pixel(130))
         score_row_layout.addWidget(score_label)
 
+        # 뒤에 붙는 "/ 100"
         slash_label = QLabel("/ 100")
-        slash_label.setFont(app_font(self.theme_manager.scale_pixel(18), QFont.Weight.Medium))
-        slash_label.setStyleSheet("color: #888888; border: none; background-color: transparent;")
+        slash_label.setStyleSheet(f"""
+            color: #888888;
+            font-size: {self.theme_manager.scale_pixel(28)}px !important; /* 💡 22px -> 28px 확장 */
+            font-weight: medium !important;
+            border: none;
+            background-color: transparent;
+        """)
         score_row_layout.addWidget(slash_label, alignment=Qt.AlignmentFlag.AlignBottom)
 
         score_row.setLayout(score_row_layout)
         layout.addWidget(score_row)
 
-        score_note = QLabel(f"최근 {len(recent_values)}회 평균 · 최신 {latest_score}점")
-        score_note.setFont(app_font(self.theme_manager.scale_pixel(12)))
-        score_note.setStyleSheet("color: #888888; border: none; background-color: transparent;")
+        # 4. 점수 하단 요약 노트 ("최근 3회 평균")
+        score_note = QLabel(f"\n최근 {len(recent_values)}회 평균")
+        score_note.setStyleSheet(f"""
+            color: #000000;
+            font-size: {self.theme_manager.scale_pixel(22)}px !important; /* 💡 12px -> 15px 확장 */
+            font-weight: bold !important;
+            border: none;
+            background-color: transparent;
+        """)
         layout.addWidget(score_note)
 
+        # 5. 하단 상세 리스트 + 그래프 레이아웃
         bottom_container = QWidget()
         bottom_layout = QHBoxLayout()
         bottom_layout.setContentsMargins(0, 0, 0, 0)
-        bottom_layout.setSpacing(self.theme_manager.scale_pixel(16))
+        bottom_layout.setSpacing(self.theme_manager.scale_pixel(20))
         bottom_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
 
+        # 왼쪽: 최근 3회 기록 텍스트 리스트
         left_summary = QWidget()
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(self.theme_manager.scale_pixel(8))
+        left_layout.setSpacing(self.theme_manager.scale_pixel(10)) # 글자가 커져서 간격도 넓힘
         left_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
 
         for session in reversed(recent):
@@ -344,16 +381,26 @@ class HubScreen(QWidget):
             item = QWidget()
             item_layout = QHBoxLayout()
             item_layout.setContentsMargins(0, 0, 0, 0)
-            item_layout.setSpacing(self.theme_manager.scale_pixel(6))
+            item_layout.setSpacing(self.theme_manager.scale_pixel(10))
 
+            # 날짜 (예: 05/20)
             date_label = QLabel(label)
-            date_label.setFont(app_font(self.theme_manager.scale_pixel(11)))
-            date_label.setStyleSheet("color: #888888; border: none; background-color: transparent;")
+            date_label.setStyleSheet(f"""
+                color: #888888;
+                font-size: {self.theme_manager.scale_pixel(18)}px !important; /* 
+                border: none;
+                background-color: transparent;
+            """)
             item_layout.addWidget(date_label)
 
+            # 해당 날짜 점수 (예: 80점)
             value_label = QLabel(f"{value}점")
-            value_label.setFont(app_font(self.theme_manager.scale_pixel(13), QFont.Weight.Medium))
-            value_label.setStyleSheet(f"color: {self._colors['title_text']}; border: none; background-color: transparent;")
+            value_label.setStyleSheet(f"""
+                color: {self._colors['title_text']};
+                font-size: {self.theme_manager.scale_pixel(20)}px !important; /* 
+                border: none;
+                background-color: transparent;
+            """)
             item_layout.addWidget(value_label)
 
             item.setLayout(item_layout)
@@ -361,17 +408,21 @@ class HubScreen(QWidget):
 
         left_layout.addStretch()
         left_summary.setLayout(left_layout)
+        left_summary.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         bottom_layout.addWidget(left_summary, 1)
 
+        # 오른쪽: 추세 차트 (날짜/점수 리스트 오른쪽에 배치)
         right_chart_wrapper = QWidget()
         right_chart_layout = QVBoxLayout()
         right_chart_layout.setContentsMargins(0, 0, 0, 0)
         right_chart_layout.setSpacing(0)
-        right_chart_layout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
+        right_chart_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
 
         trend_chart = self._create_trend_chart(list(reversed(recent_values)))
-        right_chart_layout.addWidget(trend_chart, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+        right_chart_layout.addWidget(trend_chart, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
         right_chart_wrapper.setLayout(right_chart_layout)
+        right_chart_wrapper.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
+        right_chart_wrapper.setMinimumWidth(self.theme_manager.scale_pixel(240))
         bottom_layout.addWidget(right_chart_wrapper, 0)
 
         bottom_container.setLayout(bottom_layout)
@@ -381,13 +432,14 @@ class HubScreen(QWidget):
         return w
 
     def _create_trend_chart(self, values: list) -> QWidget:
-        """세 개 날짜 순서대로 점 세 개를 찍는 간단한 추세 차트"""
-        fig = Figure(figsize=(2.2, 1.1), dpi=100)
+        """우측 하단 추세 차트 사이즈 확장"""
+        fig = Figure(figsize=(4.8, 2.6), dpi=150)
+        fig.subplots_adjust(top=0.96, bottom=0.08, left=0.08, right=0.98)
         ax = fig.add_subplot(111)
-        ax.plot(values, color=self._colors['score'], linewidth=2, marker='o', markersize=5)
+        ax.plot(values, color=self._colors['score'], linewidth=2.5, marker='o', markersize=6)
         ax.fill_between(range(len(values)), values, color=self._colors['score'], alpha=0.12)
         ax.set_xlim(-0.3, max(2, len(values) - 1) + 0.3)
-        ax.set_ylim(0, 100)
+        ax.set_ylim(-8, 108)
         ax.set_xticks([])
         ax.set_yticks([])
         ax.spines['top'].set_visible(False)
@@ -397,10 +449,16 @@ class HubScreen(QWidget):
         ax.set_facecolor(Colors.WHITE.value)
 
         canvas = FigureCanvas(fig)
-        canvas.setFixedSize(self.theme_manager.scale_pixel(180), self.theme_manager.scale_pixel(90))
+        
+        # 💡 이 줄의 오타를 수정했습니다! 가로, 세로 크기를 콤마(,)로 정직하게 넘겨줍니다.
+        canvas.setFixedSize(
+            self.theme_manager.scale_pixel(300),
+            self.theme_manager.scale_pixel(170)
+        )
+        
         canvas.setStyleSheet('background-color: transparent; border: none;')
         return canvas
-
+    
     def _format_session_date(self, start_time: str) -> str:
         try:
             return datetime.fromisoformat(start_time).strftime('%m/%d')

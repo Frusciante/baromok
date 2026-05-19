@@ -248,7 +248,7 @@ class BaselineScreen(QWidget):
             self.camera_worker.start()
 
         self.capture_timer.start(100)
-        logger.info("자세 맞춤 캡처 시작")
+        logger.info("자세 설정 캡처 시작")
 
     def _update_progress(self):
         """진행 상태 업데이트 (대기 ↔ 수집)"""
@@ -379,7 +379,7 @@ class BaselineScreen(QWidget):
             self.camera_worker.set_baseline_mode(False)
             
         self.capture_btn.setEnabled(True)
-        self.capture_btn.setText("자세 맞춤 시작")
+        self.capture_btn.setText("자세 설정 시작")
         
         if success:
             self.total_progress_bar.setValue(self.total_steps)
@@ -400,7 +400,7 @@ class BaselineScreen(QWidget):
             self.sub_status_label.setText("데이터가 부족합니다.")
 
     def cancel_capture(self):
-        """진행 중인 자세 맞춤을 취소하고 초기 상태로 되돌린다."""
+        """진행 중인 초기 자세 설정을 취소하고 초기 상태로 되돌린다."""
         if self.capture_timer.isActive():
             self.capture_timer.stop()
 
@@ -422,7 +422,7 @@ class BaselineScreen(QWidget):
             self.camera_worker.set_baseline_mode(False)
 
         self.capture_btn.setEnabled(True)
-        self.capture_btn.setText("자세 맞춤 시작")
+        self.capture_btn.setText("자세 설정 시작")
         self.preview_label.clear()
         self.preview_label.setText("카메라 프리뷰")
         try:
@@ -434,7 +434,7 @@ class BaselineScreen(QWidget):
         self.step_label.setText(f"전체 진행: 0 / {self.total_steps}")
         self.main_status_label.setText("준비")
         self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value}; border: none; background-color: transparent;")
-        self.sub_status_label.setText("자세 맞춤 시작을 눌러주세요")
+        self.sub_status_label.setText("자세 설정 시작을 눌러주세요")
         set_recognition_message(self.recognition_label, False)
 
     def _fail_capture(self, message: str):

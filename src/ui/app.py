@@ -249,7 +249,7 @@ class baromokApp:
 
         # 초기 화면: Hub
         self.main_window.stacked_widget.setCurrentWidget(self.hub_screen)
-        self.main_window.set_header_title(self.SCREEN_TITLES[1])
+        self.main_window.set_header_title(self.SCREEN_TITLES[1], show_icon=False)
 
         logger.info("화면 설정 완료 (5개 화면 등록)")
 
@@ -336,7 +336,10 @@ class baromokApp:
                     logger.debug("헤더를 기본 모드로 전환하지 못함")
 
             self.main_window.stacked_widget.setCurrentIndex(screen_index)
-            self.main_window.set_header_title(self.SCREEN_TITLES.get(screen_index, "바로목"))
+            self.main_window.set_header_title(
+                self.SCREEN_TITLES.get(screen_index, "바로목"),
+                show_icon=(screen_index != 1)
+            )
             screen_names = ["baseline", "hub", "settings", "statistics", "detection"]
             logger.info("화면 전환: %s", screen_names[screen_index])
         else:
@@ -426,7 +429,7 @@ class baromokApp:
 
                 msg = QMessageBox(self.main_window)
                 msg.setIcon(QMessageBox.Icon.Information)
-                msg.setWindowTitle("Baseline 필요")
+                msg.setWindowTitle("기준자세설정 필요")
                 msg.setText(
                     f"{failure_reason}\n\n"
                     "기준자세설정 화면으로 이동하겠습니다.\n"

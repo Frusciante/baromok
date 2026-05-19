@@ -55,7 +55,7 @@ class MainWindow(QMainWindow):
         logger.info(f"MainWindow 초기화 (DPI scale: {self.dpi_scale:.2f})")
 
         # 기본 설정
-        self.setWindowTitle("바로목 - 자세 측정 시스템")
+        self.setWindowTitle("바로목")
         self.setGeometry(100, 100, 1152, 768)
         self.setFixedSize(1152, 768)
 
@@ -405,9 +405,13 @@ class MainWindow(QMainWindow):
         "나의 통계": "icon_stats.png",
     }
 
-    def set_header_title(self, title: str):
+    def set_header_title(self, title: str, show_icon: bool = True):
         """헤더 타이틀 텍스트 및 좌측 아이콘 변경"""
         self.header_title.setText(title)
+
+        if not show_icon:
+            self.header_icon.setVisible(False)
+            return
 
         icon_name = self._HEADER_ICONS.get(title)
         if icon_name:
