@@ -267,15 +267,15 @@ class SettingsConfig:
                 
                 # 현재 설정값이 없으면 기본값(Factory Default) 사용
                 if instance.forward_head_sensitivity is None:
-                    instance.forward_head_sensitivity = sensitivities.get("forward_head", 0.10)
+                    instance.forward_head_sensitivity = sensitivities.get("forward_head", 0.075)
                 if instance.recline_sensitivity is None:
-                    instance.recline_sensitivity = sensitivities.get("recline", 0.04)
-                
+                    instance.recline_sensitivity = sensitivities.get("recline", 0.01)
+
                 # 권장값이 없으면 역시 기본값으로 초기화
                 if instance.recommended_forward_head is None:
-                    instance.recommended_forward_head = sensitivities.get("forward_head", 0.10)
+                    instance.recommended_forward_head = sensitivities.get("forward_head", 0.075)
                 if instance.recommended_recline is None:
-                    instance.recommended_recline = sensitivities.get("recline", 0.04)
+                    instance.recommended_recline = sensitivities.get("recline", 0.01)
                     
             return instance
             

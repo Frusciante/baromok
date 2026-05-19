@@ -215,8 +215,29 @@ class BaselineScreen(QWidget):
         self.capture_timer = QTimer()
         self.capture_timer.timeout.connect(self._update_progress)
 
+    def start_camera_preview(self):
+        """화면 진입 시 카메라 프리뷰만 미리 시작 (baseline 모드)"""
+        if self.camera_worker is None:
+            return
+
+        if hasattr(self.camera_worker, "set_baseline_mode"):
+            self.camera_worker.set_baseline_mode(True)
+
+        if not self.camera_worker.isRunning():
+            self.camera_worker.start()
+        elif self.camera_worker.is_paused:
+            self.camera_worker.resume()
+
+        logger.info("카메라 프리뷰 미리 시작 (baseline 모드)")
+
+    def pause_camera_preview(self):
+        """화면 이탈 시 카메라 일시정지 (스레드 유지)"""
+        if self.camera_worker and self.camera_worker.isRunning():
+            self.camera_worker.pause()
+            logger.info("카메라 프리뷰 일시정지")
+
     def start_capture(self):
-        """촬영 시작"""
+        """촬영 시작 (카메라는 이미 실행 중)"""
         if self.camera_worker is None or self.baseline_manager is None:
             return
 
@@ -236,14 +257,14 @@ class BaselineScreen(QWidget):
         self.main_status_label.setText("준비")
         self.sub_status_label.setText("잠시 후 시작합니다...")
 
-        if self.camera_worker.is_paused:
-            self.camera_worker.resume()
-
         if hasattr(self.camera_worker, "set_baseline_mode"):
             self.camera_worker.set_baseline_mode(True)
 
         self.baseline_manager.start_baseline_collection()
 
+        # 카메라가 아직 안 켜져 있으면 시작
+        if self.camera_worker.is_paused:
+            self.camera_worker.resume()
         if not self.camera_worker.isRunning():
             self.camera_worker.start()
 
@@ -366,8 +387,6 @@ class BaselineScreen(QWidget):
             return
         self.is_capturing_baseline = False
         self.capture_timer.stop()
-        if self.camera_worker and self.camera_worker.isRunning():
-            self.camera_worker.stop_capture()
         
         actual_fps = max(1, int(self.valid_baseline_frame_count / (self.total_steps * self.collect_seconds)))
         
@@ -440,8 +459,8 @@ class BaselineScreen(QWidget):
     def _fail_capture(self, message: str):
         self.is_capturing_baseline = False
         self.capture_timer.stop()
-        if self.camera_worker:
-            self.camera_worker.stop_capture()
+        if self.camera_worker and self.camera_worker.isRunning():
+            self.camera_worker.pause()
         if self.baseline_manager:
             self.baseline_manager.reset()
         self.capture_btn.setEnabled(True)

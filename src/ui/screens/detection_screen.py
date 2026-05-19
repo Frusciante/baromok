@@ -187,20 +187,20 @@ class DetectionScreen(QWidget):
             self.detection_paused_signal.emit()
 
     def _recalibrate(self):
-        if self.camera_worker:
-            self.camera_worker.stop_capture()
-            self.time_timer.stop()
-            self.is_detection_paused = False
-            self.pause_btn.setText("일시정지")
+        if self.camera_worker and self.camera_worker.isRunning():
+            self.camera_worker.pause()
+        self.time_timer.stop()
+        self.is_detection_paused = False
+        self.pause_btn.setText("일시정지")
         self.open_baseline_signal.emit()
 
     def _stop_detection(self):
-        if self.camera_worker:
-            self.camera_worker.stop_capture()
-            self.time_timer.stop()
-            self.pause_btn.setText("일시정지")
-            self.is_detection_paused = False
-            self.detection_stopped_signal.emit()
+        if self.camera_worker and self.camera_worker.isRunning():
+            self.camera_worker.pause()
+        self.time_timer.stop()
+        self.pause_btn.setText("일시정지")
+        self.is_detection_paused = False
+        self.detection_stopped_signal.emit()
 
     def on_detection_started(self):
         self.is_detection_paused = False

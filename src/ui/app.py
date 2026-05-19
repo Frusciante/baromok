@@ -317,11 +317,29 @@ class baromokApp:
         if 0 <= screen_index < self.main_window.stacked_widget.count():
             self._previous_screen_index = self.main_window.stacked_widget.currentIndex()
 
+            # 이전 화면 정리
+            if self._previous_screen_index == 0 and screen_index != 0 and hasattr(self, "baseline_screen"):
+                try:
+                    self.baseline_screen.cancel_capture()
+                    if screen_index != 4:
+                        self.baseline_screen.pause_camera_preview()
+                except Exception:
+                    logger.debug("Baseline 화면 이탈 처리 실패")
+
+            if self._previous_screen_index == 4 and screen_index != 4:
+                try:
+                    if screen_index != 0 and self.camera_worker.isRunning():
+                        self.camera_worker.pause()
+                except Exception:
+                    logger.debug("Detection 화면 이탈 시 카메라 일시정지 실패")
+
+            # 진입 화면 설정
             if screen_index == 0 and hasattr(self, "baseline_screen"):
                 try:
                     self.baseline_screen.cancel_capture()
+                    self.baseline_screen.start_camera_preview()
                 except Exception:
-                    logger.debug("Baseline 화면 진입 시 상태 초기화 실패")
+                    logger.debug("Baseline 화면 진입 시 카메라 시작 실패")
 
             # 자세 맞춤/설정/통계/감지 화면으로 이동할 때는 뒤로가기 버튼을 노출한다.
             if screen_index in (0, 2, 3, 4):
@@ -351,6 +369,7 @@ class baromokApp:
         if current_index == 0 and hasattr(self, "baseline_screen"):
             try:
                 self.baseline_screen.cancel_capture()
+                self.baseline_screen.pause_camera_preview()
             except Exception:
                 logger.debug("베이스라인 취소 처리 중 오류")
 
@@ -366,17 +385,16 @@ class baromokApp:
         if target_index == 2:
             target_index = 1
 
-        # 베이스라인 화면에서 뒤로 나갈 때, 감지 화면으로 복귀하는 경우
-        # 카메라가 실제로 살아있지 않으면 즉시 다시 시작한다.
-        if (
-            target_index == 4
-            and hasattr(self, "camera_worker")
-            and not self.camera_worker.isRunning()
-        ):
+        # 감지 화면으로 복귀하는 경우: 카메라 resume + detection 모드
+        if target_index == 4 and hasattr(self, "camera_worker"):
             try:
-                self.camera_worker.start()
+                self.camera_worker.set_baseline_mode(False)
+                if not self.camera_worker.isRunning():
+                    self.camera_worker.start()
+                elif self.camera_worker.is_paused:
+                    self.camera_worker.resume()
             except Exception:
-                logger.debug("카메라 재시작 실패")
+                logger.debug("감지 화면 복귀 시 카메라 재개 실패")
 
         self.switch_screen(target_index)
 
@@ -460,13 +478,15 @@ class baromokApp:
 
         # baseline이 있으면 기존 감지 시작 흐름 실행
         self.camera_worker.set_baseline_mode(False)
-        if self.camera_worker.is_paused:
-            self.camera_worker.resume()
         self.state_machine.reset()
         self._hide_alert_popup()
         self.session_manager.start_session()
+
         if not self.camera_worker.isRunning():
             self.camera_worker.start()
+        elif self.camera_worker.is_paused:
+            self.camera_worker.resume()
+
         self.switch_screen(4)  # DetectionScreen으로 이동
         self.detection_screen.on_detection_started()
 
@@ -501,8 +521,8 @@ class baromokApp:
     def _stop_detection(self):
         """감지 중지"""
         logger.info("감지 중지")
-        if self.camera_worker.isRunning() or self.camera_worker.is_running:
-            self.camera_worker.stop_capture()
+        if self.camera_worker.isRunning():
+            self.camera_worker.pause()
         self.session_manager.end_session()
         self._hide_alert_popup()
         self.switch_screen(1)  # HubScreen으로 이동
@@ -725,6 +745,13 @@ class baromokApp:
         # 앱 실행 중에는 주기적으로 저장하거나 종료 시 저장
         # PyQt 종료 시점 처리를 위해 exec_ 호출 후 저장
         exit_code = self.qt_app.exec()
+
+        # 종료 시 카메라 완전 정지
+        try:
+            if self.camera_worker.isRunning():
+                self.camera_worker.stop_capture()
+        except Exception:
+            logger.debug("종료 시 카메라 정지 실패")
 
         # 종료 전 설정 최종 저장
         self.settings_config.save_to_json("data/config.json")

@@ -366,10 +366,10 @@ class SoundSettingsWidget(QWidget):
 
     def _sync_slider_state(self):
         """토글 상태에 따라 슬라이더 활성화/비활성화"""
-        # 사용자가 소리 활성화를 끄더라도 슬라이더는 조절할 수 있게 둡니다.
-        # 실제 재생 여부는 앱 레이어에서 `sound_enabled`를 확인하여 처리합니다.
-        self.slider.setEnabled(True)
-        self.volume_label.setEnabled(True)
+        enabled = self.toggle.isChecked()
+        self.slider.setEnabled(enabled)
+        self.volume_label.setEnabled(enabled)
+        self.test_btn.setEnabled(enabled)
 
     def _emit_value_changed(self):
         """값 변경 신호 발생"""
@@ -671,8 +671,8 @@ class SensitivitySettingsWidget(QWidget):
     reset_requested_signal = pyqtSignal()
 
     # 감도 범위
-    FWD_MIN, FWD_MAX = 0.03, 0.07
-    REC_MIN, REC_MAX = 0.01, 0.03
+    FWD_MIN, FWD_MAX = 0.00, 0.15
+    REC_MIN, REC_MAX = 0.01, 0.10
 
     def __init__(self, theme_manager: ThemeManager, initial_config: dict = None):
         super().__init__()
@@ -681,11 +681,11 @@ class SensitivitySettingsWidget(QWidget):
 
         # 현재 값 (설정 파일에서 로드, 범위 내로 클램프)
         self.fwd_val = self._clamp(
-            self.config.get("forward_head_sensitivity", 0.05),
+            self.config.get("forward_head_sensitivity", 0.075),
             self.FWD_MIN, self.FWD_MAX,
         )
         self.rec_val = self._clamp(
-            self.config.get("recline_sensitivity", 0.02),
+            self.config.get("recline_sensitivity", 0.01),
             self.REC_MIN, self.REC_MAX,
         )
 
@@ -847,11 +847,11 @@ class SensitivitySettingsWidget(QWidget):
 
     def set_value(self, config: dict):
         self.fwd_val = self._clamp(
-            config.get("forward_head_sensitivity", 0.05),
+            config.get("forward_head_sensitivity", 0.075),
             self.FWD_MIN, self.FWD_MAX,
         )
         self.rec_val = self._clamp(
-            config.get("recline_sensitivity", 0.02),
+            config.get("recline_sensitivity", 0.01),
             self.REC_MIN, self.REC_MAX,
         )
         self.fwd_slider.blockSignals(True)
