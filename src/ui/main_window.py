@@ -78,8 +78,8 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         # 상단 헤더
-        header = self._create_header()
-        main_layout.addWidget(header)
+        self._header_widget = self._create_header()
+        main_layout.addWidget(self._header_widget)
 
         # 화면 스택
         self.stacked_widget = QStackedWidget()
@@ -125,18 +125,12 @@ class MainWindow(QMainWindow):
         back_btn.setVisible(False)
         layout.addWidget(back_btn)
 
-        # 스트레치 (왼쪽과 오른쪽으로 타이틀 중앙 정렬용)
-        layout.addStretch()
-
-        # 앱 이름 (중앙 배치, 화면 전환 시 동적 변경)
+        # 타이틀 (좌측 배치)
         self.header_title = QLabel("바로목")
-        title_font = QFont("Noto Sans KR", int(28 * self.dpi_scale), QFont.Weight.Bold)
-        title_font.setBold(True)
+        title_font = QFont("Noto Sans KR", int(56 * self.dpi_scale), QFont.Weight.Bold)
         self.header_title.setFont(title_font)
-        self.header_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.header_title)
 
-        # 스트레치 (오른쪽 공간)
         layout.addStretch()
 
         icon_dir = Path(__file__).resolve().parents[2] / "assets" / "ui"
@@ -259,22 +253,9 @@ class MainWindow(QMainWindow):
                 logger.exception("헤더 아이콘 복원 중 예외")
 
     def _update_title_visibility(self):
-        """현재 화면에 따라 타이틀(`바로목`)의 표시 여부를 갱신합니다.
-
-        초기(첫) 화면에서만 타이틀을 보이게 하고, 다른 화면에서는 숨깁니다.
-        """
-        try:
-            if not hasattr(self, "_title_label"):
-                return
-            # 초기 화면이 등록되어 있으면, 현재 위젯이 초기 화면일 때만 보이게 함
-            if hasattr(self, "_initial_placeholder") and self.stacked_widget is not None:
-                visible = self.stacked_widget.currentWidget() == self._initial_placeholder
-                self._title_label.setVisible(visible)
-            else:
-                # 초기 화면 참조가 없으면 기본적으로 보이게 함
-                self._title_label.setVisible(True)
-        except Exception:
-            logger.exception("타이틀 표시 업데이트 중 예외")
+        """헤더 타이틀은 항상 표시 (화면별 텍스트는 set_header_title로 변경)"""
+        if hasattr(self, "header_title"):
+            self.header_title.setVisible(True)
 
     def _create_footer(self) -> QWidget:
         """하단 푸터 생성"""
