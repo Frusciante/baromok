@@ -63,6 +63,36 @@ class MainWindow(QMainWindow):
         if logo_path.exists():
             self.setWindowIcon(QIcon(str(logo_path)))
 
+        # 프로그램 아이콘 및 작업 표시줄 설정
+        current_dir = Path(__file__).resolve().parent # src/ui 폴더 위치
+        # 프로젝트 루트 폴더 기준으로 assets/ui/바로목로고.png 경로 지정
+        logo_path = current_dir.parent.parent / "assets" / "ui" / "바로목로고.png"
+
+        if logo_path.exists():
+            # 시스템 기본 크기(보통 32x32나 48x48)에 맞춰 배율을 적용해 아이콘 생성
+            icon_size = int(32 * self.dpi_scale)
+            pixmap = QPixmap(str(logo_path)).scaled(
+                icon_size, icon_size,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.setWindowIcon(QIcon(pixmap))
+        else:
+            logger.error(f"로고 아이콘 파일을 찾을 수 없습니다: {logo_path}")
+
+        # Windows 작업 표시줄에 파이썬 인터프리터 로고 대신 바로목 로고 강제 적용
+        if sys.platform == "win32":
+            import ctypes
+            myappid = "baromok.posture.system.1.0"
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        # ==========================================
+
+        # 스타일 적용 (기존 코드)
+        self.setStyleSheet(self.theme_manager.stylesheet)
+
+        # UI 구성 (기존 코드)
+        self.setup_ui()
+
         # 스타일 적용
         self.setStyleSheet(self.theme_manager.stylesheet)
 

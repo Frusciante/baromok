@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QPixmap
 from PyQt6.QtWidgets import (
@@ -185,15 +186,15 @@ class HubScreen(QWidget):
 
     # ----------------------------- Score Panel -----------------------------
     def _create_score_panel(self) -> QWidget:
-        """우측 점수 패널 생성: 빈 상태 또는 점수 상태로 분기 렌더링"""
+        """우측 점수 패널 생성: 최근 통계자료(sessions) 유무로만 분기 렌더링"""
         panel = QFrame()
         panel.setObjectName("score_panel")
-        panel.setStyleSheet(f"background-color: {Colors.WHITE.value}; border-radius: {self.theme_manager.scale_pixel(10)}px; border: 0.5px solid {self._colors['panel_border']};")
+        panel.setStyleSheet(f"background-color: {Colors.WHITE.value}; border-radius: {self.theme_manager.scale_pixel(10)}px; border: none;")
         panel_layout = QVBoxLayout()
         panel_layout.setContentsMargins(self.theme_manager.scale_pixel(16), self.theme_manager.scale_pixel(16), self.theme_manager.scale_pixel(16), self.theme_manager.scale_pixel(16))
         panel_layout.setSpacing(self.theme_manager.scale_pixel(12))
 
-        # 데이터 로드
+        # 데이터 로드 데이터베이스 예외 처리 유지
         sessions = []
         try:
             if self.session_manager:
@@ -201,92 +202,68 @@ class HubScreen(QWidget):
         except Exception:
             logger.exception("세션 데이터 로드 실패")
 
-        baseline_missing = True
-        try:
-            if self.baseline_manager:
-                baseline_missing = not self.baseline_manager.is_baseline_valid()
-            else:
-                baseline_missing = True
-        except Exception:
-            baseline_missing = True
+        # 통계 레코드의 유무로 분기
+        valid_sessions = [
+            s for s in sessions
+            if isinstance(getattr(s, "statistics", {}), dict)
+            and s.statistics.get("good_posture_percentage") is not None
+        ]
 
-        if baseline_missing:
-            content = self._create_baseline_missing_state()
-        elif not sessions:
+        if not valid_sessions:
             content = self._create_empty_state()
         else:
-            content = self._create_score_state(sessions)
+            content = self._create_score_state(valid_sessions)
 
         panel_layout.addWidget(content)
         panel.setLayout(panel_layout)
         return panel
 
     def _create_empty_state(self) -> QWidget:
-        """상태 A: 측정 기록 없음"""
+        """상태 A: 측정 기록 및 통계 자료 없음 (통합형 안내 가이드)"""
         w = QWidget()
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(self.theme_manager.scale_pixel(8))
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # 아이콘 (간단한 텍스트 아이콘 사용)
-        icon_label = QLabel("📈")
-        icon_font = app_font(self.theme_manager.scale_pixel(31))
-        icon_label.setFont(icon_font)
-        icon_label.setStyleSheet(f"color: {self._colors['empty_icon']}; border: none; background-color: transparent;")
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(icon_label)
-
-        title = QLabel("아직 측정 기록이 없어요")
-        title.setFont(app_font(self.theme_manager.scale_pixel(15), QFont.Weight.Medium))
-        title.setStyleSheet(f"color: {self._colors['title_text']}; border: none; background-color: transparent;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
-
-        desc = QLabel("아직 측정 기록이 없어요\n첫 측정을 시작하면\n자세 변화 리포트를 볼 수 있어요")
-        desc.setFont(app_font(self.theme_manager.scale_pixel(13)))
-        desc.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")
-        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
-
-        w.setLayout(layout)
-        return w
-
-    def _create_baseline_missing_state(self) -> QWidget:
-        """상태 A: Baseline 파일이 없어서 초기 설정 안내"""
-        w = QWidget()
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(self.theme_manager.scale_pixel(8))
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
+        # 이미지 에셋 로드 및 예외 백업 로직 결합
         icon_label = QLabel()
         icon_path = Path("assets/ui/icon_statsvalue.png")
+        
         if icon_path.exists():
-            icon_pixmap = QPixmap(str(icon_path))
-            if not icon_pixmap.isNull():
-                icon_label.setPixmap(
-                    icon_pixmap.scaledToHeight(
-                        self.theme_manager.scale_pixel(130),
-                        Qt.TransformationMode.SmoothTransformation,
+            try:
+                icon_pixmap = QPixmap(str(icon_path))
+                if not icon_pixmap.isNull():
+                    icon_label.setPixmap(
+                        icon_pixmap.scaledToHeight(
+                            self.theme_manager.scale_pixel(130),
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
                     )
-                )
+                else:
+                    icon_label.setText("📈")
+                    icon_label.setFont(app_font(self.theme_manager.scale_pixel(31)))
+                    icon_label.setStyleSheet(f"color: {self._colors['empty_icon']};")
+            except Exception:
+                icon_label.setText("📈")
+                icon_label.setFont(app_font(self.theme_manager.scale_pixel(31)))
+                icon_label.setStyleSheet(f"color: {self._colors['empty_icon']};")
+        else:
+            icon_label.setText("📈")
+            icon_label.setFont(app_font(self.theme_manager.scale_pixel(31)))
+            icon_label.setStyleSheet(f"color: {self._colors['empty_icon']};")
+            
         icon_label.setStyleSheet("border: none; background-color: transparent;")
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_label)
 
         title = QLabel("아직 측정 기록이 없어요")
-        title.setFont(
-            app_font(self.theme_manager.scale_pixel(17), QFont.Weight.Medium)
-        )
+        title.setFont(app_font(self.theme_manager.scale_pixel(17), QFont.Weight.Medium))
         title.setStyleSheet(f"color: {self._colors['title_text']}; border: none; background-color: transparent;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        desc = QLabel(
-            "첫 측정을 마치면\n여기에 점수가 표시됩니다"
-        )
+        desc = QLabel("첫 측정을 마치면\n여기에 점수가 표시됩니다")
         desc.setFont(app_font(self.theme_manager.scale_pixel(13)))
         desc.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")
         desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -297,110 +274,135 @@ class HubScreen(QWidget):
         return w
 
     def _create_score_state(self, sessions: list) -> QWidget:
-        """상태 B: 측정 기록 있음 - 최근 데이터로 요약 표시"""
+        """상태 B: 측정 기록 있음 - 최근 통계 데이터를 요약하는 대시보드"""
         w = QWidget()
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(self.theme_manager.scale_pixel(8))
+        layout.setSpacing(self.theme_manager.scale_pixel(12))
 
-        # 자세 점수 라벨
-        lbl = QLabel("자세 점수")
-        lbl.setFont(app_font(self.theme_manager.scale_pixel(13)))
-        lbl.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")
-        layout.addWidget(lbl)
+        main_title = QLabel("나의 통계")
+        main_title.setFont(app_font(self.theme_manager.scale_pixel(16), QFont.Weight.Bold))
+        main_title.setStyleSheet(f"color: {self._colors['title_text']}; border: none; background-color: transparent;")
+        layout.addWidget(main_title)
 
-        # 점수 계산: statics_screen의 평균 로직과 동일
-        try:
-            retention_values = [float(s.statistics.get("good_posture_percentage", 0)) for s in sessions if hasattr(s, 'statistics')]
-            score = (sum(retention_values) / len(retention_values)) if retention_values else 0.0
-        except Exception:
-            logger.exception("점수 계산 실패")
-            score = 0.0
+        sub_title = QLabel("최근 세션의 자세 유지율을 한눈에 확인해 보세요")
+        sub_title.setFont(app_font(self.theme_manager.scale_pixel(12)))
+        sub_title.setStyleSheet("color: #888888; border: none; background-color: transparent;")
+        sub_title.setWordWrap(True)
+        layout.addWidget(sub_title)
+
+        recent = sessions[:3]
+        recent_values = [
+            float(s.statistics.get("good_posture_percentage", 0))
+            for s in recent
+            if isinstance(getattr(s, "statistics", {}), dict)
+        ]
+
+        average_score = int(round(sum(recent_values) / len(recent_values))) if recent_values else 0
+        latest_score = int(recent_values[0]) if recent_values else 0
 
         score_row = QWidget()
         score_row_layout = QHBoxLayout()
         score_row_layout.setContentsMargins(0, 0, 0, 0)
-        score_row_layout.setSpacing(self.theme_manager.scale_pixel(6))
+        score_row_layout.setSpacing(self.theme_manager.scale_pixel(10))
+        score_row_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
 
-        score_label = QLabel(f"{score:.1f}")
-        score_label.setFont(app_font(self.theme_manager.scale_pixel(39), QFont.Weight.Medium))
+        score_label = QLabel(f"{average_score}")
+        score_label.setFont(app_font(self.theme_manager.scale_pixel(70), QFont.Weight.Bold))
         score_label.setStyleSheet(f"color: {self._colors['score']}; border: none; background-color: transparent;")
         score_row_layout.addWidget(score_label)
 
         slash_label = QLabel("/ 100")
-        slash_label.setFont(app_font(self.theme_manager.scale_pixel(14)))
-        slash_label.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")
+        slash_label.setFont(app_font(self.theme_manager.scale_pixel(18), QFont.Weight.Medium))
+        slash_label.setStyleSheet("color: #888888; border: none; background-color: transparent;")
         score_row_layout.addWidget(slash_label, alignment=Qt.AlignmentFlag.AlignBottom)
-        score_row_layout.addStretch()
+
         score_row.setLayout(score_row_layout)
         layout.addWidget(score_row)
 
-        # 구분선
-        divider = QWidget()
-        divider.setFixedHeight(1)
-        divider.setStyleSheet(f"background-color: {self._colors['panel_border']}; margin-top: {self.theme_manager.scale_pixel(8)}px; margin-bottom: {self.theme_manager.scale_pixel(8)}px;")
-        layout.addWidget(divider)
+        score_note = QLabel(f"최근 {len(recent_values)}회 평균 · 최신 {latest_score}점")
+        score_note.setFont(app_font(self.theme_manager.scale_pixel(12)))
+        score_note.setStyleSheet("color: #888888; border: none; background-color: transparent;")
+        layout.addWidget(score_note)
 
-        # 최근 기록 라벨
-        lbl2 = QLabel("최근 기록")
-        lbl2.setFont(app_font(self.theme_manager.scale_pixel(13)))
-        lbl2.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")
-        layout.addWidget(lbl2)
+        bottom_container = QWidget()
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setSpacing(self.theme_manager.scale_pixel(16))
+        bottom_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
 
-        # 최근 3일 표시
-        recent = sessions[:3]
-        for idx, s in enumerate(recent):
-            row = QWidget()
-            row_layout = QHBoxLayout()
-            row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.setSpacing(self.theme_manager.scale_pixel(8))
+        left_summary = QWidget()
+        left_layout = QVBoxLayout()
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(self.theme_manager.scale_pixel(8))
+        left_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
 
-            # 날짜 텍스트 (어제, 그제, 3일 전)
-            if idx == 0:
-                day_text = "어제"
-            elif idx == 1:
-                day_text = "그제"
-            else:
-                day_text = f"{idx+1}일 전"
+        for session in reversed(recent):
+            label = self._format_session_date(session.start_time)
+            value = int(float(session.statistics.get("good_posture_percentage", 0)))
 
-            day_lbl = QLabel(day_text)
-            day_lbl.setFont(app_font(self.theme_manager.scale_pixel(14)))
-            day_lbl.setStyleSheet(f"color: {self._colors['muted']}; border: none; background-color: transparent;")
-            row_layout.addWidget(day_lbl)
+            item = QWidget()
+            item_layout = QHBoxLayout()
+            item_layout.setContentsMargins(0, 0, 0, 0)
+            item_layout.setSpacing(self.theme_manager.scale_pixel(6))
 
-            # 스파크라인
-            spark_values = []
-            try:
-                # use statistics if available
-                all_sessions = [float(x.statistics.get("good_posture_percentage", 0)) for x in sessions]
-                spark_values = all_sessions
-            except Exception:
-                spark_values = [0]
+            date_label = QLabel(label)
+            date_label.setFont(app_font(self.theme_manager.scale_pixel(11)))
+            date_label.setStyleSheet("color: #888888; border: none; background-color: transparent;")
+            item_layout.addWidget(date_label)
 
-            spark = self._create_sparkline(spark_values)
-            row_layout.addWidget(spark)
+            value_label = QLabel(f"{value}점")
+            value_label.setFont(app_font(self.theme_manager.scale_pixel(13), QFont.Weight.Medium))
+            value_label.setStyleSheet(f"color: {self._colors['title_text']}; border: none; background-color: transparent;")
+            item_layout.addWidget(value_label)
 
-            # 점수
-            score_val = s.statistics.get("good_posture_percentage", 0) if hasattr(s, 'statistics') else 0
-            val_lbl = QLabel(str(int(score_val)))
-            val_lbl.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Medium))
-            val_lbl.setStyleSheet(f"color: {self._colors['title_text']}; border: none; background-color: transparent;")
-            row_layout.addWidget(val_lbl, alignment=Qt.AlignmentFlag.AlignRight)
+            item.setLayout(item_layout)
+            left_layout.addWidget(item)
 
-            row.setLayout(row_layout)
-            layout.addWidget(row)
+        left_layout.addStretch()
+        left_summary.setLayout(left_layout)
+        bottom_layout.addWidget(left_summary, 1)
+
+        right_chart_wrapper = QWidget()
+        right_chart_layout = QVBoxLayout()
+        right_chart_layout.setContentsMargins(0, 0, 0, 0)
+        right_chart_layout.setSpacing(0)
+        right_chart_layout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
+
+        trend_chart = self._create_trend_chart(list(reversed(recent_values)))
+        right_chart_layout.addWidget(trend_chart, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+        right_chart_wrapper.setLayout(right_chart_layout)
+        bottom_layout.addWidget(right_chart_wrapper, 0)
+
+        bottom_container.setLayout(bottom_layout)
+        layout.addWidget(bottom_container)
 
         w.setLayout(layout)
         return w
 
-    def _create_sparkline(self, values: list) -> QWidget:
-        """간단한 작은 선 그래프를 반환한다."""
-        # Create a tiny matplotlib figure and render as FigureCanvas
-        fig = Figure(figsize=(2, 0.5), dpi=100)
+    def _create_trend_chart(self, values: list) -> QWidget:
+        """세 개 날짜 순서대로 점 세 개를 찍는 간단한 추세 차트"""
+        fig = Figure(figsize=(2.2, 1.1), dpi=100)
         ax = fig.add_subplot(111)
-        ax.plot(values, color=self._colors['score'])
-        ax.fill_between(range(len(values)), values, color=self._colors['score'], alpha=0.1)
-        ax.axis('off')
+        ax.plot(values, color=self._colors['score'], linewidth=2, marker='o', markersize=5)
+        ax.fill_between(range(len(values)), values, color=self._colors['score'], alpha=0.12)
+        ax.set_xlim(-0.3, max(2, len(values) - 1) + 0.3)
+        ax.set_ylim(0, 100)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.set_facecolor(Colors.WHITE.value)
+
         canvas = FigureCanvas(fig)
-        canvas.setFixedSize(self.theme_manager.scale_pixel(80), self.theme_manager.scale_pixel(24))
+        canvas.setFixedSize(self.theme_manager.scale_pixel(180), self.theme_manager.scale_pixel(90))
+        canvas.setStyleSheet('background-color: transparent; border: none;')
         return canvas
+
+    def _format_session_date(self, start_time: str) -> str:
+        try:
+            return datetime.fromisoformat(start_time).strftime('%m/%d')
+        except Exception:
+            return '-'
