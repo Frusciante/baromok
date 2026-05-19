@@ -174,7 +174,7 @@ class baromokApp:
             self.baseline_manager,
             self.sound_manager,
         )
-        self.hub_screen = HubScreen(self.theme_manager)
+        self.hub_screen = HubScreen(self.theme_manager, self.session_manager)
         self.settings_screen = SettingsScreen(
             self.theme_manager, vars(self.settings_config)  # dataclass를 dict로 변환
         )

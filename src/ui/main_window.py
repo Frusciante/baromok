@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QToolButton,
     QApplication,
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QEvent
 from PyQt6.QtGui import QFont, QGuiApplication, QIcon
 from PyQt6.QtCore import QTimer
 from pathlib import Path
@@ -123,7 +123,10 @@ class MainWindow(QMainWindow):
         def create_header_button(text: str, icon_name: str, callback):
             btn = QToolButton()
             btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-            btn.setIcon(QIcon(str(icon_dir / icon_name)))
+            # 기본/보라 아이콘 파일 경로
+            default_icon = icon_dir / icon_name
+            purple_icon = icon_dir / (Path(icon_name).stem + "_purple.png")
+            btn.setIcon(QIcon(str(default_icon)))
             btn.setIconSize(QSize(int(34 * self.dpi_scale), int(34 * self.dpi_scale)))
             btn.setText(text)
             btn.setFont(QFont("Noto Sans KR", int(9 * self.dpi_scale)))
@@ -151,7 +154,26 @@ class MainWindow(QMainWindow):
             """)
             btn.pressed.connect(lambda b=btn: b.setFixedSize(pressed_width, pressed_height))
             btn.released.connect(lambda b=btn: b.setFixedSize(base_width, base_height))
-            btn.clicked.connect(callback)
+
+            # 클릭 시 원래 콜백 실행 후, 초기 화면일 때 아이콘을 보라색으로 교체
+            def on_click_wrapper():
+                try:
+                    callback()
+                except Exception:
+                    logger.exception("Header 버튼 콜백 실행 중 예외")
+                # 클릭 시 아이콘을 보라색으로 변경
+                try:
+                    self._set_header_icons("purple")
+                except Exception:
+                    logger.exception("헤더 아이콘 보라색으로 변경 중 예외")
+
+            btn.clicked.connect(on_click_wrapper)
+            # 아이콘 경로 정보 저장
+            btn._default_icon = default_icon
+            btn._purple_icon = purple_icon
+            # 마우스 오버/리브 처리용 이벤트 필터 등록
+            btn.installEventFilter(self)
+
             layout.addWidget(btn)
             return btn
 
@@ -223,6 +245,12 @@ class MainWindow(QMainWindow):
             self._settings_btn.setVisible(True)
         if hasattr(self, "_statistics_btn"):
             self._statistics_btn.setVisible(True)
+        # 기본 헤더로 복원될 때 아이콘도 기본 상태로 되돌림
+        if hasattr(self, "_set_header_icons"):
+            try:
+                self._set_header_icons("default")
+            except Exception:
+                logger.exception("헤더 아이콘 복원 중 예외")
 
     def _create_footer(self) -> QWidget:
         """하단 푸터 생성"""
@@ -251,6 +279,36 @@ class MainWindow(QMainWindow):
         footer.setLayout(layout)
         return footer
 
+    def _set_header_icons(self, theme: str):
+        """헤더 버튼 아이콘을 변경합니다. theme: 'default' 또는 'purple'"""
+        def apply_icon(btn, kind: str):
+            try:
+                if kind == "purple" and hasattr(btn, "_purple_icon") and btn._purple_icon.exists():
+                    btn.setIcon(QIcon(str(btn._purple_icon)))
+                elif hasattr(btn, "_default_icon") and btn._default_icon.exists():
+                    btn.setIcon(QIcon(str(btn._default_icon)))
+            except Exception:
+                logger.exception("아이콘 적용 중 예외")
+
+        apply_icon(self._posture_adjust_btn, theme)
+        apply_icon(self._settings_btn, theme)
+        apply_icon(self._statistics_btn, theme)
+
+    def eventFilter(self, obj, event):
+        """버튼 마우스 엔터/리브 이벤트로 아이콘 변경 처리"""
+        try:
+            if event.type() == QEvent.Type.Enter:
+                if hasattr(obj, "_purple_icon") and obj._purple_icon.exists():
+                    obj.setIcon(QIcon(str(obj._purple_icon)))
+                    return True
+            elif event.type() == QEvent.Type.Leave:
+                if hasattr(obj, "_default_icon") and obj._default_icon.exists():
+                    obj.setIcon(QIcon(str(obj._default_icon)))
+                    return True
+        except Exception:
+            logger.exception("eventFilter 처리 중 예외")
+        return super().eventFilter(obj, event)
+
     def _setup_screens(self):
         """화면 설정 (Phase 3에서 순차적으로 추가)"""
         # 현재는 placeholder 화면만 추가
@@ -267,6 +325,8 @@ class MainWindow(QMainWindow):
 
         self.stacked_widget.addWidget(placeholder)
         self.stacked_widget.setCurrentWidget(placeholder)
+        # 초기 화면 참조 저장 (아이콘 전환 조건으로 사용)
+        self._initial_placeholder = placeholder
 
     def switch_to_screen(self, screen_name: str):
         """
