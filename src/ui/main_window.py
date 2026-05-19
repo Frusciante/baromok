@@ -12,10 +12,11 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QLabel,
     QPushButton,
+    QToolButton,
     QApplication,
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal
-from PyQt6.QtGui import QFont, QGuiApplication
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QEvent
+from PyQt6.QtGui import QFont, QGuiApplication, QIcon
 from PyQt6.QtCore import QTimer
 from pathlib import Path
 import sys
@@ -31,6 +32,9 @@ class MainWindow(QMainWindow):
 
     # 신호
     screen_changed_signal = pyqtSignal(str)
+    posture_adjust_requested = pyqtSignal()
+    settings_requested = pyqtSignal()
+    statistics_requested = pyqtSignal()
 
     def __init__(self, config=None):
         """
@@ -51,8 +55,8 @@ class MainWindow(QMainWindow):
 
         # 기본 설정
         self.setWindowTitle("바로목 - 자세 측정 시스템")
-        self.setGeometry(100, 100, 1280, 800)
-        self.setMinimumSize(800, 600)
+        self.setGeometry(100, 100, 1152, 768)
+        self.setFixedSize(1152, 768)
 
         # 스타일 적용
         self.setStyleSheet(self.theme_manager.stylesheet)
@@ -91,7 +95,7 @@ class MainWindow(QMainWindow):
     def _create_header(self) -> QWidget:
         """상단 헤더 생성"""
         header = QWidget()
-        header.setFixedHeight(int(60 * self.dpi_scale))
+        header.setFixedHeight(int(95 * self.dpi_scale))
         header.setStyleSheet(f"background-color: {Colors.PURPLE_PRIMARY.value};")
 
         layout = QHBoxLayout()
@@ -105,50 +109,83 @@ class MainWindow(QMainWindow):
 
         # 앱 이름
         title = QLabel("바로목")
-        title.setFont(
-            QFont("Noto Sans KR", int(24 * self.dpi_scale), QFont.Weight.Bold)
-        )
+        title_font = QFont("Noto Sans KR", int(54 * self.dpi_scale), QFont.Weight.Bold)
+        title_font.setBold(True)
+        title.setFont(title_font)
         title.setStyleSheet(f"color: {Colors.WHITE.value};")
         layout.addWidget(title)
 
         # 스트래치 (오른쪽 공간)
         layout.addStretch()
 
-        # 최소화 버튼 (향후 구현)
-        minimize_btn = QPushButton("−")
-        minimize_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
-        minimize_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {Colors.WHITE.value};
-                border: none;
-                width: {int(32 * self.dpi_scale)}px;
-                height: {int(32 * self.dpi_scale)}px;
-            }}
-            QPushButton:hover {{
-                background-color: rgba(255, 255, 255, 0.2);
-            }}
-        """)
-        minimize_btn.clicked.connect(self.showMinimized)
-        layout.addWidget(minimize_btn)
+        icon_dir = Path(__file__).resolve().parents[2] / "assets" / "ui"
 
-        # 닫기 버튼
-        close_btn = QPushButton("✕")
-        close_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
-        close_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {Colors.WHITE.value};
-                border: none;
-                width: {int(32 * self.dpi_scale)}px;
-                height: {int(32 * self.dpi_scale)}px;
-            }}
-            QPushButton:hover {{
-                background-color: {Colors.RED_DANGER.value};
-            }}
-        """)
-        close_btn.clicked.connect(self.close)
-        layout.addWidget(close_btn)
+        def create_header_button(text: str, icon_name: str, callback):
+            btn = QToolButton()
+            btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+            # 기본/보라 아이콘 파일 경로
+            default_icon = icon_dir / icon_name
+            purple_icon = icon_dir / (Path(icon_name).stem + "_purple.png")
+            btn.setIcon(QIcon(str(default_icon)))
+            btn.setIconSize(QSize(int(34 * self.dpi_scale), int(34 * self.dpi_scale)))
+            btn.setText(text)
+            btn.setFont(QFont("Noto Sans KR", int(9 * self.dpi_scale)))
+            base_width = int(96 * self.dpi_scale)
+            base_height = int(72 * self.dpi_scale)
+            pressed_width = int(94 * self.dpi_scale)
+            pressed_height = int(70 * self.dpi_scale)
+            btn.setFixedSize(base_width, base_height)
+            btn.setStyleSheet(f"""
+                QToolButton {{
+                    background-color: transparent;
+                    color: {Colors.WHITE.value};
+                    border: 1px solid rgba(255, 255, 255, 0.35);
+                    border-radius: {int(8 * self.dpi_scale)}px;
+                    padding: {int(6 * self.dpi_scale)}px {int(8 * self.dpi_scale)}px {int(3 * self.dpi_scale)}px {int(8 * self.dpi_scale)}px;
+                }}
+                QToolButton:hover {{
+                    background-color: {Colors.WHITE.value};
+                    color: {Colors.PURPLE_PRIMARY.value};
+                }}
+                QToolButton:pressed {{
+                    background-color: #ECEBFC;
+                    color: {Colors.PURPLE_PRIMARY.value};
+                }}
+            """)
+            btn.pressed.connect(lambda b=btn: b.setFixedSize(pressed_width, pressed_height))
+            btn.released.connect(lambda b=btn: b.setFixedSize(base_width, base_height))
+
+            # 클릭 시 원래 콜백 실행 후, 초기 화면일 때 아이콘을 보라색으로 교체
+            def on_click_wrapper():
+                try:
+                    callback()
+                except Exception:
+                    logger.exception("Header 버튼 콜백 실행 중 예외")
+                # 클릭 시 아이콘을 보라색으로 변경
+                try:
+                    self._set_header_icons("purple")
+                except Exception:
+                    logger.exception("헤더 아이콘 보라색으로 변경 중 예외")
+
+            btn.clicked.connect(on_click_wrapper)
+            # 아이콘 경로 정보 저장
+            btn._default_icon = default_icon
+            btn._purple_icon = purple_icon
+            # 마우스 오버/리브 처리용 이벤트 필터 등록
+            btn.installEventFilter(self)
+
+            layout.addWidget(btn)
+            return btn
+
+        self._posture_adjust_btn = create_header_button(
+            "자세 맞춤", "icon_posture.png", self.posture_adjust_requested.emit
+        )
+        self._settings_btn = create_header_button(
+            "환경설정", "icon_settings.png", self.settings_requested.emit
+        )
+        self._statistics_btn = create_header_button(
+            "나의 통계", "icon_stats.png", self.statistics_requested.emit
+        )
 
         # 뒤로가기 버튼 (기본 숨김). 일부 화면에서는 이 버튼을 대신 노출하도록 함
         back_btn = QPushButton("←")
@@ -169,9 +206,6 @@ class MainWindow(QMainWindow):
         back_btn.setVisible(False)
         layout.addWidget(back_btn)
 
-        # store references for mode switching
-        self._minimize_btn = minimize_btn
-        self._close_btn = close_btn
         self._back_btn = back_btn
         self._back_callback = None
 
@@ -191,22 +225,32 @@ class MainWindow(QMainWindow):
         self._back_callback = callback
 
     def show_back_header(self):
-        """뒤로가기 모드: 최소화/닫기 숨기고 뒤로가기 버튼 보이기"""
-        if hasattr(self, "_minimize_btn"):
-            self._minimize_btn.setVisible(False)
-        if hasattr(self, "_close_btn"):
-            self._close_btn.setVisible(False)
+        """뒤로가기 모드: 뒤로가기 버튼 보이기"""
         if hasattr(self, "_back_btn"):
             self._back_btn.setVisible(True)
+        if hasattr(self, "_posture_adjust_btn"):
+            self._posture_adjust_btn.setVisible(False)
+        if hasattr(self, "_settings_btn"):
+            self._settings_btn.setVisible(False)
+        if hasattr(self, "_statistics_btn"):
+            self._statistics_btn.setVisible(False)
 
     def show_default_header(self):
-        """기본 모드: 최소화/닫기 보이고 뒤로가기 버튼 숨기기"""
-        if hasattr(self, "_minimize_btn"):
-            self._minimize_btn.setVisible(True)
-        if hasattr(self, "_close_btn"):
-            self._close_btn.setVisible(True)
+        """기본 모드: 뒤로가기 버튼 숨기기"""
         if hasattr(self, "_back_btn"):
             self._back_btn.setVisible(False)
+        if hasattr(self, "_posture_adjust_btn"):
+            self._posture_adjust_btn.setVisible(True)
+        if hasattr(self, "_settings_btn"):
+            self._settings_btn.setVisible(True)
+        if hasattr(self, "_statistics_btn"):
+            self._statistics_btn.setVisible(True)
+        # 기본 헤더로 복원될 때 아이콘도 기본 상태로 되돌림
+        if hasattr(self, "_set_header_icons"):
+            try:
+                self._set_header_icons("default")
+            except Exception:
+                logger.exception("헤더 아이콘 복원 중 예외")
 
     def _create_footer(self) -> QWidget:
         """하단 푸터 생성"""
@@ -235,6 +279,36 @@ class MainWindow(QMainWindow):
         footer.setLayout(layout)
         return footer
 
+    def _set_header_icons(self, theme: str):
+        """헤더 버튼 아이콘을 변경합니다. theme: 'default' 또는 'purple'"""
+        def apply_icon(btn, kind: str):
+            try:
+                if kind == "purple" and hasattr(btn, "_purple_icon") and btn._purple_icon.exists():
+                    btn.setIcon(QIcon(str(btn._purple_icon)))
+                elif hasattr(btn, "_default_icon") and btn._default_icon.exists():
+                    btn.setIcon(QIcon(str(btn._default_icon)))
+            except Exception:
+                logger.exception("아이콘 적용 중 예외")
+
+        apply_icon(self._posture_adjust_btn, theme)
+        apply_icon(self._settings_btn, theme)
+        apply_icon(self._statistics_btn, theme)
+
+    def eventFilter(self, obj, event):
+        """버튼 마우스 엔터/리브 이벤트로 아이콘 변경 처리"""
+        try:
+            if event.type() == QEvent.Type.Enter:
+                if hasattr(obj, "_purple_icon") and obj._purple_icon.exists():
+                    obj.setIcon(QIcon(str(obj._purple_icon)))
+                    return True
+            elif event.type() == QEvent.Type.Leave:
+                if hasattr(obj, "_default_icon") and obj._default_icon.exists():
+                    obj.setIcon(QIcon(str(obj._default_icon)))
+                    return True
+        except Exception:
+            logger.exception("eventFilter 처리 중 예외")
+        return super().eventFilter(obj, event)
+
     def _setup_screens(self):
         """화면 설정 (Phase 3에서 순차적으로 추가)"""
         # 현재는 placeholder 화면만 추가
@@ -251,6 +325,8 @@ class MainWindow(QMainWindow):
 
         self.stacked_widget.addWidget(placeholder)
         self.stacked_widget.setCurrentWidget(placeholder)
+        # 초기 화면 참조 저장 (아이콘 전환 조건으로 사용)
+        self._initial_placeholder = placeholder
 
     def switch_to_screen(self, screen_name: str):
         """
