@@ -43,8 +43,8 @@ class MainWindow(QMainWindow):
 
         self.config = config
 
-        # DPI 스케일 계산
-        self.dpi_scale = QGuiApplication.primaryScreen().devicePixelRatio()
+        # DPI 스케일 계산 (logicalDotsPerInch로 Windows 배율 정확히 반영)
+        self.dpi_scale = QGuiApplication.primaryScreen().logicalDotsPerInch() / 96.0
         self.theme_manager = ThemeManager(self.dpi_scale)
 
         logger.info(f"MainWindow 초기화 (DPI scale: {self.dpi_scale:.2f})")
@@ -91,8 +91,8 @@ class MainWindow(QMainWindow):
     def _create_header(self) -> QWidget:
         """상단 헤더 생성"""
         header = QWidget()
-        header.setFixedHeight(int(60 * self.dpi_scale))
-        header.setStyleSheet(f"background-color: {Colors.PURPLE_PRIMARY.value};")
+        header.setObjectName("app_header")
+        header.setFixedHeight(int(70 * self.dpi_scale))
 
         layout = QHBoxLayout()
         layout.setContentsMargins(
@@ -103,50 +103,27 @@ class MainWindow(QMainWindow):
         )
         layout.setSpacing(int(12 * self.dpi_scale))
 
-        # 앱 이름
-        title = QLabel("바로목")
-        title.setFont(
-            QFont("Noto Sans KR", int(24 * self.dpi_scale), QFont.Weight.Bold)
+        # 앱 이름 (화면 전환 시 동적 변경)
+        self.header_title = QLabel("바로목")
+        self.header_title.setFont(
+            QFont("Noto Sans KR", int(28 * self.dpi_scale), QFont.Weight.Bold)
         )
-        title.setStyleSheet(f"color: {Colors.WHITE.value};")
-        layout.addWidget(title)
+        self.header_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.header_title, 1)
 
-        # 스트래치 (오른쪽 공간)
-        layout.addStretch()
-
-        # 최소화 버튼 (향후 구현)
+        # 최소화 버튼
         minimize_btn = QPushButton("−")
+        minimize_btn.setObjectName("header_minimize")
         minimize_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
-        minimize_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {Colors.WHITE.value};
-                border: none;
-                width: {int(32 * self.dpi_scale)}px;
-                height: {int(32 * self.dpi_scale)}px;
-            }}
-            QPushButton:hover {{
-                background-color: rgba(255, 255, 255, 0.2);
-            }}
-        """)
+        minimize_btn.setFixedSize(int(32 * self.dpi_scale), int(32 * self.dpi_scale))
         minimize_btn.clicked.connect(self.showMinimized)
         layout.addWidget(minimize_btn)
 
         # 닫기 버튼
         close_btn = QPushButton("✕")
+        close_btn.setObjectName("header_close")
         close_btn.setFont(QFont("Noto Sans KR", int(16 * self.dpi_scale)))
-        close_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {Colors.WHITE.value};
-                border: none;
-                width: {int(32 * self.dpi_scale)}px;
-                height: {int(32 * self.dpi_scale)}px;
-            }}
-            QPushButton:hover {{
-                background-color: {Colors.RED_DANGER.value};
-            }}
-        """)
+        close_btn.setFixedSize(int(32 * self.dpi_scale), int(32 * self.dpi_scale))
         close_btn.clicked.connect(self.close)
         layout.addWidget(close_btn)
 
@@ -196,6 +173,10 @@ class MainWindow(QMainWindow):
 
         self.stacked_widget.addWidget(placeholder)
         self.stacked_widget.setCurrentWidget(placeholder)
+
+    def set_header_title(self, title: str):
+        """헤더 타이틀 텍스트 변경"""
+        self.header_title.setText(title)
 
     def switch_to_screen(self, screen_name: str):
         """

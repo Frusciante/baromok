@@ -26,11 +26,12 @@ class StatisticsScreen(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
 
-        title = QLabel("최근 10개 세션 바른자세 유지율")
-        title.setFont(
-            QFont("Noto Sans KR", self.theme_manager.scale_pixel(18), QFont.Weight.Bold)
+        subtitle = QLabel("최근 10개 세션 바른자세 유지율")
+        subtitle.setFont(
+            QFont("Noto Sans KR", self.theme_manager.scale_pixel(16), QFont.Weight.Bold)
         )
-        layout.addWidget(title)
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(subtitle)
 
         self.chart_widget = StatisticsLineChart(self.theme_manager)
         layout.addWidget(self.chart_widget, 1)

@@ -10,10 +10,17 @@ from typing import Any
 
 matplotlib.use("QtAgg")  # PyQt6 환경에서 안정적으로 동작하는 Qt 백엔드
 
-# 한글 폰트 설정 (Windows 환경)
 import matplotlib.pyplot as plt
+from matplotlib import font_manager
+from pathlib import Path
 
-plt.rcParams["font.sans-serif"] = ["Malgun Gothic", "DejaVu Sans"]
+_font_dir = Path(__file__).resolve().parents[3] / "assets" / "fonts"
+_bundled_font = _font_dir / "NotoSansKR-Variable.ttf"
+if _bundled_font.exists():
+    font_manager.fontManager.addfont(str(_bundled_font))
+    plt.rcParams["font.sans-serif"] = ["Noto Sans KR", "Malgun Gothic", "DejaVu Sans"]
+else:
+    plt.rcParams["font.sans-serif"] = ["Malgun Gothic", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas

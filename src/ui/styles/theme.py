@@ -81,7 +81,7 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     /* 기본 설정 */
     QMainWindow {{
         background-color: {Colors.GRAY_LIGHT.value};
-        font-family: "Noto Sans KR", "나눔고딕", sans-serif;
+        font-family: "Noto Sans KR", "Malgun Gothic", "맑은 고딕", "나눔고딕", sans-serif;
         font-size: {normal_font}pt;
     }}
     
@@ -90,6 +90,26 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
         color: {Colors.TEXT_BLACK.value};
     }}
     
+    /* 헤더 */
+    QWidget#app_header {{
+        background-color: {Colors.PURPLE_PRIMARY.value};
+    }}
+    QWidget#app_header QLabel {{
+        color: {Colors.WHITE.value};
+        background-color: transparent;
+    }}
+    QWidget#app_header QPushButton {{
+        color: {Colors.WHITE.value};
+        background-color: transparent;
+        border: none;
+    }}
+    QWidget#app_header QPushButton:hover {{
+        background-color: rgba(255, 255, 255, 0.2);
+    }}
+    QWidget#app_header QPushButton#header_close:hover {{
+        background-color: {Colors.RED_DANGER.value};
+    }}
+
     /* 라벨 */
     QLabel {{
         color: {Colors.TEXT_BLACK.value};
