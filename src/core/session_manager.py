@@ -8,7 +8,7 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, fields
 from typing import List, Optional, Dict, Any
 import logging
 
@@ -69,7 +69,18 @@ class SessionData:
     @staticmethod
     def from_dict(data: dict) -> "SessionData":
         """딕셔너리에서 생성"""
-        frame_records = [FrameRecord(**r) for r in data.get("frame_records", [])]
+        # 과거 버전의 세션 파일에 추가 필드가 있을 수 있으므로
+        # FrameRecord가 인식하는 필드만 골라서 전달합니다.
+        fr_fields = {f.name for f in fields(FrameRecord)}
+        frame_records = []
+        for r in data.get("frame_records", []):
+            if isinstance(r, dict):
+                filtered = {k: v for k, v in r.items() if k in fr_fields}
+                frame_records.append(FrameRecord(**filtered))
+            else:
+                # 안전하게 무시
+                logger.debug("frame_record 항목이 dict가 아님: %s", type(r))
+        
         return SessionData(
             session_id=data["session_id"],
             start_time=data["start_time"],

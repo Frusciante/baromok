@@ -75,13 +75,14 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
 
     # 버튼 크기
     button_height = int(40 * dpi_scale)
+    button_width = int(100 * dpi_scale)
     button_radius = int(10 * dpi_scale)
 
     return f"""
     /* 기본 설정 */
     QMainWindow {{
         background-color: {Colors.GRAY_LIGHT.value};
-        font-family: "Noto Sans KR", "나눔고딕", sans-serif;
+        font-family: "Pretendard", "Malgun Gothic", "맑은 고딕", "나눔고딕", sans-serif;
         font-size: {normal_font}pt;
     }}
     
@@ -90,6 +91,33 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
         color: {Colors.TEXT_BLACK.value};
     }}
     
+    /* 헤더 */
+    QWidget#app_header {{
+        background-color: {Colors.PURPLE_PRIMARY.value};
+    }}
+    QWidget#app_header QLabel {{
+        color: {Colors.WHITE.value};
+        background-color: transparent;
+    }}
+    QWidget#app_header QLabel#header_title {{
+        color: {Colors.WHITE.value};
+        background-color: transparent;
+        font-size: {int(24 * dpi_scale)}pt;
+        font-weight: bold;
+        margin-left: 0px;
+    }}
+    QWidget#app_header QPushButton {{
+        color: {Colors.WHITE.value};
+        background-color: transparent;
+        border: none;
+    }}
+    QWidget#app_header QPushButton:hover {{
+        background-color: rgba(255, 255, 255, 0.2);
+    }}
+    QWidget#app_header QPushButton#header_close:hover {{
+        background-color: {Colors.RED_DANGER.value};
+    }}
+
     /* 라벨 */
     QLabel {{
         color: {Colors.TEXT_BLACK.value};
@@ -379,6 +407,25 @@ def get_stylesheet(dpi_scale: float = 1.0) -> str:
     
     QMessageBox {{
         background-color: {Colors.GRAY_LIGHT.value};
+    }}
+
+    QMessageBox QPushButton {{
+        background-color: {Colors.WHITE.value};
+        color: {Colors.PURPLE_PRIMARY.value};
+        border: 1px solid {Colors.PURPLE_PRIMARY.value};
+        border-radius: 8px;
+        padding: {int(3 * dpi_scale)}px {int(8 * dpi_scale)}px {int(3 * dpi_scale)}px {int(8 * dpi_scale)}px;
+        min-width: {button_width}px;
+        min-height: {int(24 * dpi_scale)}px;
+    }}
+
+    QMessageBox QPushButton:hover {{
+        background-color: #F4F0FF;
+    }}
+
+    QMessageBox QPushButton:pressed {{
+        background-color: #E8E0FF;
+        color: {Colors.PURPLE_PRIMARY.value};
     }}
     """
 

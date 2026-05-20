@@ -1,26 +1,22 @@
-# Core Dependencies
-python-version >= 3.9
-python-version < 3.14
-
 # MediaPipe and Computer Vision
-opencv-python==4.8.1.78
-mediapipe==0.10.33
-numpy==1.24.3
+opencv-python
+mediapipe
+numpy
 
 # UI Framework
-PyQt6==6.7.0
-PyQt6-sip==13.6.0
+PyQt6
+PyQt6-sip
 
 # Configuration and Data Validation
-pydantic==2.5.0
-pydantic-settings==2.1.0
+pydantic
+pydantic-settings
 
 # Data Processing (Statistics)
-pandas==2.0.3
-scikit-learn==1.3.0
+pandas
+scikit-learn
 
 # Visualization (Optional)
-matplotlib==3.7.2
+matplotlib
 
 # Utilities
-python-dotenv==1.0.0
+python-dotenv

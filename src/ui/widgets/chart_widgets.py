@@ -10,10 +10,22 @@ from typing import Any
 
 matplotlib.use("QtAgg")  # PyQt6 환경에서 안정적으로 동작하는 Qt 백엔드
 
-# 한글 폰트 설정 (Windows 환경)
 import matplotlib.pyplot as plt
+from matplotlib import font_manager
+from pathlib import Path
 
-plt.rcParams["font.sans-serif"] = ["Malgun Gothic", "DejaVu Sans"]
+_font_dir = Path(__file__).resolve().parents[3] / "assets" / "fonts"
+_bundled_fonts = ["Pretendard-Regular.otf", "Pretendard-Bold.otf"]
+_loaded_any = False
+for _f in _bundled_fonts:
+    _fp = _font_dir / _f
+    if _fp.exists():
+        font_manager.fontManager.addfont(str(_fp))
+        _loaded_any = True
+if _loaded_any:
+    plt.rcParams["font.sans-serif"] = ["Pretendard", "Malgun Gothic", "DejaVu Sans"]
+else:
+    plt.rcParams["font.sans-serif"] = ["Malgun Gothic", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -40,95 +52,85 @@ class CalibrationScatterChart(QWidget):
         self.figure.patch.set_facecolor(Colors.WHITE.value)
 
         self.canvas = FigureCanvas(self.figure)
-        
+
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.canvas)
         self.setLayout(layout)
 
         self.ax = self.figure.add_subplot(111)
-        
+
         self.points_x = []
         self.points_y = []
         self.points_colors = []
-        
+        self._draw_cnt = 0  # 성능 최적화용 카운터
+
         self._init_axes()
         logger.info("자세 맞춤 차트 초기화 완료")
 
     def _init_axes(self):
-        self.ax.clear()
-        self.ax.set_title("어깨 너비 vs 광대 거리 분포", fontsize=12, fontweight="bold")
-        self.ax.set_xlabel("어깨 너비 (Normalized)", fontsize=10)
-        self.ax.set_ylabel("광대 거리 (Normalized)", fontsize=10)
-        self.ax.set_xlim(0.1, 0.7) # 대략적인 범위 설정
-        self.ax.set_ylim(0.05, 0.3)
-        self.ax.grid(True, linestyle="--", alpha=0.3)
+        # 축 초기화 시 라벨과 범위를 '고정'하여 떨림 방지
+        self.ax.set_title("어깨 너비 vs 광대 거리 분포", fontsize=11, fontweight="bold")
+        self.ax.set_xlabel("어깨 너비", fontsize=9)
+        self.ax.set_ylabel("광대 거리", fontsize=9)
+
+        # 범위를 고정하여 축 숫자가 생겼다 없어졌다 하는 현상 방지
+        self.ax.set_xlim(0.1, 0.7)
+        self.ax.set_ylim(0.0, 0.4)
+
+        # 눈금 고정 (축 숫자가 변하지 않게 함)
+        self.ax.set_xticks([0.1, 0.25, 0.4, 0.55, 0.7])
+        self.ax.set_yticks([0.0, 0.1, 0.2, 0.3, 0.4])
+
+        self.ax.grid(True, linestyle="--", alpha=0.2)
         self.figure.tight_layout()
 
-    def update_live_point(self, x: float, y: float, is_collecting: bool = False, step: int = 0, total_steps: int = 20):
-        """실시간 포인트 및 수집된 포인트 업데이트"""
+    def update_live_point(
+        self,
+        x: float,
+        y: float,
+        is_collecting: bool = False,
+        step: int = 0,
+        total_steps: int = 20,
+    ):
+        """실시간 포인트 및 수집된 포인트 업데이트 (안정화 버전)"""
         if x <= 0 or y <= 0:
-            # 좌표가 없으면 그리지 않음 (오버레이가 제거되었으므로 갱신 불필요)
             return
 
         # 1. 수집 중인 경우 포인트 저장
         if is_collecting and step > 0:
             self.points_x.append(x)
             self.points_y.append(y)
-            # 무지개색 계산
             color = cm.rainbow((step - 1) / max(1, total_steps - 1) * 0.8)
             self.points_colors.append(color)
 
-        # 2. 화면 갱신
+        # 2. 성능 최적화: 3프레임마다 한 번씩만 렌더링
+        self._draw_cnt += 1
+        if self._draw_cnt % 3 != 0:
+            return
+
+        # 3. 화면 갱신 (clear 대신 데이터만 업데이트하는 것이 좋으나,
+        # 여러 점의 색상이 달라 scatter를 다시 그리는 것이 간편함.
+        # 대신 축 설정은 유지하여 떨림 방지)
         self.ax.clear()
         self._init_axes()
-        
+
         # 기존 포인트들 그리기
         if self.points_x:
-            self.ax.scatter(self.points_x, self.points_y, c=self.points_colors, s=20, alpha=0.5, edgecolors='none')
+            self.ax.scatter(
+                self.points_x,
+                self.points_y,
+                c=self.points_colors,
+                s=25,
+                alpha=0.6,
+                edgecolors="none",
+            )
 
-        # 현재 커서
-        cursor_color = Colors.RED_DANGER.value if is_collecting else Colors.PRIMARY.value
-        cursor_size = 120 if not is_collecting else 60
-        self.ax.scatter([x], [y], color=cursor_color, s=cursor_size, marker='x', linewidths=2.5, label="현재 위치")
-        
-        # 동적 범위 조절
-        if self.points_x:
-            all_x = self.points_x + [x]
-            all_y = self.points_y + [y]
-            self.ax.set_xlim(min(all_x) * 0.9, max(all_x) * 1.1)
-            self.ax.set_ylim(min(all_y) * 0.9, max(all_y) * 1.1)
-
-        self.canvas.draw_idle()
-
-        # 1. 수집 중인 경우 포인트 저장
-        if is_collecting and step > 0:
-            self.points_x.append(x)
-            self.points_y.append(y)
-            # 무지개색 계산
-            color = cm.rainbow((step - 1) / max(1, total_steps - 1) * 0.8)
-            self.points_colors.append(color)
-
-        # 2. 화면 갱신
-        self.ax.clear()
-        self._init_axes()
-        
-        # 기존 포인트들 그리기
-        if self.points_x:
-            self.ax.scatter(self.points_x, self.points_y, c=self.points_colors, s=20, alpha=0.5, edgecolors='none')
-
-        # 현재 커서 (이동 중일 때 더 강조)
-        # Colors 클래스에 PRIMARY, SECONDARY, RED_DANGER, PURPLE_PRIMARY 멤버가 있는지 확인됨
-        cursor_color = Colors.RED_DANGER.value if is_collecting else Colors.PRIMARY.value
-        cursor_size = 120 if not is_collecting else 60
-        self.ax.scatter([x], [y], color=cursor_color, s=cursor_size, marker='x', linewidths=2.5, label="현재 위치")
-        
-        # 동적 범위 조절
-        if self.points_x:
-            all_x = self.points_x + [x]
-            all_y = self.points_y + [y]
-            self.ax.set_xlim(min(all_x) * 0.9, max(all_x) * 1.1)
-            self.ax.set_ylim(min(all_y) * 0.9, max(all_y) * 1.1)
+        # 현재 커서 (X 표시)
+        cursor_color = (
+            Colors.RED_DANGER.value if is_collecting else Colors.PRIMARY.value
+        )
+        self.ax.scatter([x], [y], color=cursor_color, s=100, marker="x", linewidths=2)
 
         self.canvas.draw_idle()
 
@@ -155,7 +157,7 @@ class StatisticsLineChart(QWidget):
         figsize = (10 * dpi_scale, 4 * dpi_scale)
 
         self.figure = Figure(figsize=figsize, dpi=100)
-        self.figure.patch.set_facecolor(Colors.GRAY_LIGHT.value)
+        self.figure.patch.set_facecolor("#FBFBFE")
 
         # Canvas 생성
         self.canvas = FigureCanvas(self.figure)
@@ -207,8 +209,8 @@ class StatisticsLineChart(QWidget):
             # Figure 초기화
             self.figure.clear()
             ax = self.figure.add_subplot(111)
-            self.figure.patch.set_facecolor("#F7CBD7")
-            ax.set_facecolor("#F7CBD7")
+            self.figure.patch.set_facecolor("#FBFBFE")
+            ax.set_facecolor("#FBFBFE")
 
             self._hover_annotation = ax.annotate(
                 "",
@@ -222,18 +224,18 @@ class StatisticsLineChart(QWidget):
                 color=Colors.WHITE.value,
                 bbox=dict(
                     boxstyle="round,pad=0.45,rounding_size=0.4",
-                    fc="#5D3C6B",
-                    ec="#5D3C6B",
+                    fc="#6D28D9",
+                    ec="#6D28D9",
                     alpha=0.95,
                 ),
                 zorder=7,
             )
             self._hover_annotation.set_visible(False)
 
-            bar_colors = ["#FFFFFF"] * len(session_nums)
-            bar_edge_colors = [Colors.WHITE.value] * len(session_nums)
-            bar_colors[latest_index] = Colors.PINK_PRIMARY.value
-            bar_edge_colors[latest_index] = Colors.PINK_PRIMARY.value
+            bar_colors = ["#E0E0FF"] * len(session_nums)
+            bar_edge_colors = ["#E0E0FF"] * len(session_nums)
+            bar_colors[latest_index] = "#7C3AED"
+            bar_edge_colors[latest_index] = "#7C3AED"
 
             bars = ax.bar(
                 session_nums,
@@ -262,13 +264,13 @@ class StatisticsLineChart(QWidget):
             # 평균선
             avg_line = ax.axhline(
                 avg_retention,
-                color=Colors.PINK_PRIMARY.value,
+                color="#DC2626",
                 linewidth=2.5,
                 zorder=2,
             )
 
             # 축 레이블
-            ax.set_xlabel("세션 번호", fontsize=11, fontweight="bold")
+            ax.set_xlabel("날짜", fontsize=11, fontweight="bold")
             ax.set_ylabel("유지율 (%)", fontsize=11, fontweight="bold")
             ax.set_ylim(0, 105)
 
@@ -279,12 +281,12 @@ class StatisticsLineChart(QWidget):
             ax.set_yticks([0, 25, 50, 75, 100])
 
             # 그리드 및 스파인
-            ax.grid(True, axis="y", linestyle="--", alpha=0.28, color="#8A6BA8")
+            ax.grid(True, axis="y", linestyle="--", alpha=0.28, color="#C4B5FD")
             ax.set_axisbelow(True)
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
-            ax.spines["left"].set_color("#3B2F4A")
-            ax.spines["bottom"].set_color("#3B2F4A")
+            ax.spines["left"].set_color("#6D28D9")
+            ax.spines["bottom"].set_color("#6D28D9")
             ax.spines["left"].set_linewidth(1.2)
             ax.spines["bottom"].set_linewidth(1.6)
 
@@ -292,12 +294,14 @@ class StatisticsLineChart(QWidget):
             ax.legend(
                 [bars[0], avg_line],
                 ["바른자세 유지율", "평균 유지율"],
-                loc="upper left",
+                loc="lower left",  # 기준점을 범례 상자의 '좌측 하단'으로 잡고
+                # 차트 왼쪽 선(0)보다 살짝 왼쪽(-0.02), 차트 위쪽 선(1)보다 살짝 위쪽(1.02) 외곽으로 떨어뜨려서 배치. 이렇게 하면 tight_layout()이 범례 위치를 건드리지 못하게 됨.
+                bbox_to_anchor=(-0.02, 1.02), 
                 fontsize=10,
                 frameon=True,
-                facecolor="#FFFFFF",
-                edgecolor="#D7B0C0",
-            )
+                facecolor="#FBFBFE",
+                edgecolor="#C4B5FD",
+            ).set_in_layout(True) # tight_layout()이 이 범례의 위치를 무시하지 못하도록 대처
 
             # 각 세션 값 표기
             for idx, bar in enumerate(bars):
@@ -316,7 +320,7 @@ class StatisticsLineChart(QWidget):
                     va="bottom",
                     fontsize=9,
                     fontweight="bold",
-                    color="#5D3C6B",
+                    color="#6D28D9",
                     zorder=5,
                 )
 
@@ -343,13 +347,13 @@ class StatisticsLineChart(QWidget):
                 color=Colors.WHITE.value,
                 bbox=dict(
                     boxstyle="round,pad=0.55,rounding_size=0.8",
-                    fc=Colors.PINK_PRIMARY.value,
-                    ec=Colors.PINK_PRIMARY.value,
+                    fc="#7C3AED",
+                    ec="#7C3AED",
                     alpha=0.98,
                 ),
                 arrowprops=dict(
                     arrowstyle="-|>",
-                    color=Colors.PINK_PRIMARY.value,
+                    color="#7C3AED",
                     lw=1.2,
                     shrinkA=0,
                     shrinkB=4,
@@ -366,7 +370,7 @@ class StatisticsLineChart(QWidget):
                 va="center",
                 fontsize=13,
                 fontweight="bold",
-                color=Colors.PINK_PRIMARY.value,
+                color="#DC2626",
                 clip_on=False,
                 zorder=6,
             )

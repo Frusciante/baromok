@@ -58,8 +58,8 @@ class JudgmentEngine:
         # 설정에서 가중치 및 임계값 로드
         scoring_config = self.config.get_frame_scoring_config()
         self.weights = scoring_config.get("likelihood_weights", {
-            "forward_head": {"face_near": 1.0},
-            "recline": {"face_far": 1.0},
+            "forward_head": {"deviation": 1.0},
+            "recline": {"deviation": 1.0},
             "chin_rest": {"eye": 0.35, "shoulder": 0.2, "neck": 0.15, "hand": 0.3}
         })
         
@@ -70,6 +70,9 @@ class JudgmentEngine:
         self.forward_head_sensitivity = sensitivities.get("forward_head", 0.10)
         self.recline_sensitivity = sensitivities.get("recline", 0.04)
         self.neck_offset_sensitivity = sensitivities.get("neck_offset", 10.0)
+        
+        # 스코어링 앵커 (감도 도달 시 부여할 점수)
+        self.warning_anchor = scoring_config.get("warning_anchor", 0.5)
 
         # 자세별 프레임 누적 횟수
         self.posture_history: Dict[str, int] = {
@@ -125,7 +128,6 @@ class JudgmentEngine:
         measured_cheek = indicators.cheek_distance
         
         # 편차 계산 (Deviation)
-        # expected_cheek 대비 얼마나 커졌거나 작아졌는가
         deviation = (measured_cheek - expected_cheek) / expected_cheek
 
         # 각 자세별 판정
@@ -168,15 +170,36 @@ class JudgmentEngine:
         )
 
     def _judge_forward_head(self, indicators: PostureIndicators, deviation: float) -> Dict[str, Any]:
-        """거북목 자세 판정 (Technical Summary 준수)"""
+        """거북목 자세 판정"""
         try:
+<<<<<<< HEAD
             # Forward Head: deviation > 0 (얼굴이 커짐)
             # 허용 오차: self.forward_head_sensitivity (예: 0.10)
             if deviation <= 0:
+=======
+            criteria = self.config.get_posture_type_config(PostureType.FORWARD_HEAD.value)
+            primary_th = criteria["primary_conditions"]["deviation"]["threshold"]
+            guards = criteria.get("guards", {})
+
+            # 1. 기본 방향 확인
+            if deviation <= primary_th:
+>>>>>>> origin
                 return {"likelihood": 0.0, "triggered": False}
                 
-            # deviation이 sensitivity(0.10)에 도달하면 0.5, 그 이상이면 선형 증가
-            score = (deviation / self.forward_head_sensitivity) * 0.5
+            # 2. 고개 기울임 및 중앙 정렬(Symmetry) 가드
+            side_tilt_excessive = abs(indicators.eye_line_tilt) > guards.get("max_eye_tilt", 12.0)
+            shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > guards.get("max_shoulder_tilt", 10.0)
+            
+            # 눈/광대 대칭 확인
+            eye_sym_excessive = indicators.eye_symmetry_ratio > guards.get("max_eye_symmetry_ratio", 0.15)
+            cheek_sym_excessive = indicators.cheek_symmetry_ratio > guards.get("max_cheek_symmetry_ratio", 0.15)
+            chin_offset_excessive = indicators.chin_alignment_offset > guards.get("max_chin_alignment_offset", 0.05)
+            
+            if side_tilt_excessive or shoulder_tilt_excessive or eye_sym_excessive or cheek_sym_excessive or chin_offset_excessive:
+                return {"likelihood": 0.0, "triggered": False}
+
+            # 3. 점수 계산
+            score = (deviation / self.forward_head_sensitivity) * self.warning_anchor
             
             return {"likelihood": float(np.clip(score, 0.0, 1.0)), "triggered": False}
 
@@ -185,14 +208,36 @@ class JudgmentEngine:
             return {"likelihood": 0.0, "triggered": False}
 
     def _judge_recline(self, indicators: PostureIndicators, deviation: float) -> Dict[str, Any]:
-        """기댄 자세 판정 (Technical Summary 준수)"""
+        """기댄 자세 판정"""
         try:
+<<<<<<< HEAD
             # Recline: deviation < 0 (얼굴이 작아짐)
             # 허용 오차: self.recline_sensitivity (예: 0.04)
             if deviation >= 0:
+=======
+            criteria = self.config.get_posture_type_config(PostureType.RECLINE.value)
+            primary_th = criteria["primary_conditions"]["deviation"]["threshold"]
+            guards = criteria.get("guards", {})
+
+            # 1. 기본 방향 확인
+            if deviation >= primary_th:
+>>>>>>> origin
                 return {"likelihood": 0.0, "triggered": False}
                 
-            score = (abs(deviation) / self.recline_sensitivity) * 0.5
+            # 2. 고개 기울임 및 중앙 정렬(Symmetry) 가드
+            side_tilt_excessive = abs(indicators.eye_line_tilt) > guards.get("max_eye_tilt", 12.0)
+            shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > guards.get("max_shoulder_tilt", 10.0)
+            
+            # 눈/광대 대칭 및 턱 정렬 확인
+            eye_sym_excessive = indicators.eye_symmetry_ratio > guards.get("max_eye_symmetry_ratio", 0.15)
+            cheek_sym_excessive = indicators.cheek_symmetry_ratio > guards.get("max_cheek_symmetry_ratio", 0.15)
+            chin_offset_excessive = indicators.chin_alignment_offset > guards.get("max_chin_alignment_offset", 0.05)
+
+            if side_tilt_excessive or shoulder_tilt_excessive or eye_sym_excessive or cheek_sym_excessive or chin_offset_excessive:
+                return {"likelihood": 0.0, "triggered": False}
+
+            # 3. 점수 계산
+            score = (abs(deviation) / self.recline_sensitivity) * self.warning_anchor
             
             return {"likelihood": float(np.clip(score, 0.0, 1.0)), "triggered": False}
 

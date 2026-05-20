@@ -202,15 +202,27 @@ class CameraWorker(QThread):
         """
         timestamp = datetime.now()
         current_timestamp_seconds = timestamp.timestamp()
-        normalized_landmarks = None  # 시각화 안정성을 위해 초기화
+
 
         # 1. 랜드마크 추출
-        landmarks = ExtractedLandmarks(
-            pose=None,
-            face=None,
-            hands=None,
-            frame_timestamp_ms=0,
-        )
+
+        if self.is_baseline_mode:
+            # baseline = skip recognition pipeline completely
+            return {
+                "frame": frame,
+                "indicators": None,
+                "message": None,
+                "baseline": True
+            }
+
+            # normal pipeline starts here
+            ...
+            landmarks = ExtractedLandmarks(
+                pose=None,
+                face=None,
+                hands=None,
+                frame_timestamp_ms=0,
+            )
         try:
             landmarks = self.landmark_extractor.extract_landmarks(frame)
 

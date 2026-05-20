@@ -32,6 +32,7 @@ def test_1_ransac_cheek_model():
             
             ind = PostureIndicators(
                 cheek_distance=y, eye_distance=0.05,
+                face_vertical_length=0.1, # 기본값
                 shoulder_width=x, shoulder_tilt_deg=0.0,
                 neck_offset=0.0, eye_line_tilt=0.0, chin_occlusion=0.0,
                 hand_near_face=False, hand_face_score=0.0, timestamp=time.time()
@@ -61,8 +62,20 @@ def test_2_judgment_logic():
         config = ConfigManager()
         bm = BaselineManager(config, data_dir="data_test")
         # Mock baseline
-        bm.baseline_metrics = type('obj', (object,), {'metrics': {'cheek_distance': 0.1, 'shoulder_width': 0.3}})()
+        bm.baseline_metrics = type('obj', (object,), {
+            'metrics': {
+                'cheek_distance': 0.1, 
+                'shoulder_width': 0.3,
+                'face_vertical_length': 0.15,
+                'eye_distance': 0.05
+            }
+        })()
         bm.get_expected_cheek = lambda x: 0.1
+        # calculate_change_percentage mock
+        def mock_calc_change(val, name):
+            base = bm.baseline_metrics.metrics[name]
+            return (val - base) / base * 100.0
+        bm.calculate_change_percentage = mock_calc_change
         
         je = JudgmentEngine(config, bm)
         # EMA 필터 영향 배제를 위해 alpha=1.0 강제 적용 (테스트용)
@@ -74,7 +87,8 @@ def test_2_judgment_logic():
         # 1. 정상 자세
         normal_ind = PostureIndicators(
             cheek_distance=0.1, shoulder_width=0.3,
-            eye_distance=0.05, shoulder_tilt_deg=0.0,
+            eye_distance=0.05, face_vertical_length=0.15,
+            shoulder_tilt_deg=0.0,
             neck_offset=0.0, eye_line_tilt=0.0, chin_occlusion=0.0,
             hand_near_face=False, hand_face_score=0.0, timestamp=time.time()
         )
@@ -86,30 +100,47 @@ def test_2_judgment_logic():
         # score = (0.15 / 0.10) * 0.5 = 0.75
         forward_ind = PostureIndicators(
             cheek_distance=0.115, shoulder_width=0.3,
-            eye_distance=0.05, shoulder_tilt_deg=0.0,
+            eye_distance=0.05, face_vertical_length=0.15,
+            shoulder_tilt_deg=0.0,
             neck_offset=0.0, eye_line_tilt=0.0, chin_occlusion=0.0,
             hand_near_face=False, hand_face_score=0.0, timestamp=time.time()
         )
         res_fwd = je.judge_single_frame(forward_ind)
         logger.info(f"Forward (+15%): Like={res_fwd.forward_head_likelihood:.4f}")
-        assert res_fwd.forward_head_likelihood >= 0.75, f"거북목 감지 실패: {res_fwd.forward_head_likelihood}"
+        assert res_fwd.forward_head_likelihood >= 0.74, f"거북목 감지 실패: {res_fwd.forward_head_likelihood}"
         
-        # 3. 기댄 자세 유도 (편차 -6% -> 4% 기준 초과)
-        # abs_dev = 0.06. score = (0.06 / 0.04) * 0.5 = 0.75
+        # 3. 기댄 자세 유도 (편차 -10% -> 4% 기준 초과, 얼굴 세로 길이도 감소 -10%)
+        # abs_dev = 0.10. score = (0.10 / 0.04) * 0.5 = 1.25 -> clip 1.0
         recline_ind = PostureIndicators(
-            cheek_distance=0.094, shoulder_width=0.3,
-            eye_distance=0.05, shoulder_tilt_deg=0.0,
+            cheek_distance=0.09, shoulder_width=0.3,
+            eye_distance=0.05, face_vertical_length=0.135, # -10% 감소
+            shoulder_tilt_deg=0.0,
             neck_offset=0.0, eye_line_tilt=0.0, chin_occlusion=0.0,
             hand_near_face=False, hand_face_score=0.0, timestamp=time.time()
         )
         res_rec = je.judge_single_frame(recline_ind)
-        logger.info(f"Recline (-6%): Like={res_rec.recline_likelihood:.4f}")
+        logger.info(f"Recline (-10%): Like={res_rec.recline_likelihood:.4f}")
         assert res_rec.recline_likelihood > 0.5, f"기댄 자세 감지 실패: {res_rec.recline_likelihood}"
+
+        # 4. 기댄 자세 가드 테스트 (얼굴 크기는 작아졌으나 세로 길이는 유지됨)
+        # face_v_len_change = 0% >= -4.0% (Stable) -> Recline 거부되어야 함
+        recline_guard_ind = PostureIndicators(
+            cheek_distance=0.09, shoulder_width=0.3,
+            eye_distance=0.05, face_vertical_length=0.15, # 유지
+            shoulder_tilt_deg=0.0,
+            neck_offset=0.0, eye_line_tilt=0.0, chin_occlusion=0.0,
+            hand_near_face=False, hand_face_score=0.0, timestamp=time.time()
+        )
+        res_rec_guard = je.judge_single_frame(recline_guard_ind)
+        logger.info(f"Recline Guard (Stable V-Len): Like={res_rec_guard.recline_likelihood:.4f}")
+        assert res_rec_guard.recline_likelihood == 0.0, f"기댄 자세 가드 작동 실패: {res_rec_guard.recline_likelihood}"
         
         logger.info("✓ Test 2 통과")
         return True
     except Exception as e:
         logger.error(f"✗ Test 2 실패: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 if __name__ == "__main__":

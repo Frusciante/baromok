@@ -26,7 +26,6 @@ class PostureIndicators:
     eye_line_tilt: float  # 눈 수평선 기울기 (도)
     chin_occlusion: float  # 턱 가림 정도 (0~1)
     hand_near_face: bool  # 손이 얼굴 근처인가
-    hand_face_score: float # 손-얼굴 상호작용 점수 (신규)
     timestamp: float  # 타임스탬프
     step_index: int = 0 # 캘리브레이션 단계 (디버그용)
 
@@ -41,23 +40,7 @@ class IndicatorCalculator:
         self.normalization_helper = NormalizationHelper()
         # 어깨 기울기 스무딩 버퍼
         self._shoulder_tilt_history = deque(maxlen=5)
-        
-        # 설정에서 alpha 값 로드 (기본값 0.15)
-        alpha = 0.15
-        if self.config:
-            alpha = self.config.get_posture_criteria().get("filters", {}).get("indicator_ema", {}).get("alpha", 0.15)
-            
-        self.ema_filters = {
-            'cheek_distance': EMAFilter(alpha=alpha),
-            'eye_distance': EMAFilter(alpha=alpha),
-            'shoulder_width': EMAFilter(alpha=alpha),
-            'shoulder_tilt_deg': EMAFilter(alpha=alpha),
-            'neck_offset': EMAFilter(alpha=alpha),
-            'eye_line_tilt': EMAFilter(alpha=alpha),
-            'chin_occlusion': EMAFilter(alpha=alpha),
-            'hand_face_score': EMAFilter(alpha=alpha),
-        }
-        logger.info(f"IndicatorCalculator 초기화 완료 (alpha={alpha})")
+        logger.info("IndicatorCalculator 초기화 완료")
     
     def calculate_cheek_distance(
         self, 
@@ -134,6 +117,20 @@ class IndicatorCalculator:
         angle_deg = np.degrees(angle_rad)
 
         return float(np.clip(angle_deg, -90.0, 90.0))
+    
+    def calculate_face_shoulder_ratio(
+        self,
+        cheek_distance: float,
+        shoulder_width: float
+    ) -> float:
+        """
+        얼굴 크기 대비 어깨 너비 비율 계산 (거리 메트릭)
+        """
+        if shoulder_width < 1e-3:
+            return 0.0
+        
+        ratio = cheek_distance / shoulder_width
+        return float(np.clip(ratio, 0.0, 1.0))
     
     def calculate_neck_offset(
         self, 
@@ -312,32 +309,22 @@ class IndicatorCalculator:
                 'left_hand_tips': landmarks.get('left_hand_tips', [])
             })
             
-            hand_near = self.calculate_hand_near_face({
-                'right_hand_tips': landmarks.get('right_hand_tips', []),
-                'left_hand_tips': landmarks.get('left_hand_tips', [])
-            }, landmarks.get('face_center'))
-            
-            near_score = self.calculate_hand_near_score({
-                'right_hand_tips': landmarks.get('right_hand_tips', []),
-                'left_hand_tips': landmarks.get('left_hand_tips', [])
-            }, landmarks.get('face_center'))
-            
-            # 설정에서 손-얼굴 가중치 로드
-            hf_weights = {"near_score": 0.5, "occlusion_score": 0.5}
-            if self.config:
-                scoring_config = self.config.get_frame_scoring_config()
-                hf_weights = scoring_config.get("hand_face_weights", hf_weights)
-            
-            hand_face_score_raw = (
-                hf_weights.get("near_score", 0.5) * near_score + 
-                hf_weights.get("occlusion_score", 0.5) * chin_occ
+            chin_occ = self.calculate_chin_occlusion(
+                landmarks.get('chin_points', []),
+                {
+                    'right_hand_tips': landmarks.get('right_hand_tips', []),
+                    'left_hand_tips': landmarks.get('left_hand_tips', [])
+                }
             )
             
-            shoulder_tilt = self.ema_filters['shoulder_tilt_deg'].process(shoulder_tilt)
-            neck_off = self.ema_filters['neck_offset'].process(neck_off)
-            eye_tilt = self.ema_filters['eye_line_tilt'].process(eye_tilt)
-            chin_occ = self.ema_filters['chin_occlusion'].process(chin_occ)
-            hand_face_score = self.ema_filters['hand_face_score'].process(hand_face_score_raw)
+            hand_near = self.calculate_hand_near_face(
+                {
+                    'right_hand_tips': landmarks.get('right_hand_tips', []),
+                    'left_hand_tips': landmarks.get('left_hand_tips', [])
+                },
+                landmarks.get('face_center'),
+                threshold=0.15
+            )
             
             return PostureIndicators(
                 cheek_distance=cheek_dist,
@@ -348,7 +335,6 @@ class IndicatorCalculator:
                 eye_line_tilt=eye_tilt,
                 chin_occlusion=chin_occ,
                 hand_near_face=hand_near,
-                hand_face_score=hand_face_score,
                 timestamp=timestamp
             )
         except Exception as e:
