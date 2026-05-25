@@ -1,0 +1,71 @@
+[
+  {
+    "label": "neutral",
+    "n_frames": 77,
+    "face_detection_rate": 0.0,
+    "shoulder_detection_rate": 1.0,
+    "metrics": {
+      "cheek_distance": null,
+      "eye_distance": null,
+      "face_vertical_length": null,
+      "shoulder_width": null,
+      "vh_ratio": null,
+      "cheek_eye_ratio": null,
+      "shoulder_tilt_deg": null,
+      "eye_line_tilt": null,
+      "chin_occlusion": null,
+      "hand_face_score": null,
+      "eye_symmetry_ratio": null,
+      "cheek_symmetry_ratio": null,
+      "chin_alignment_offset": null,
+      "face_center_x": null,
+      "face_center_y": null
+    }
+  },
+  {
+    "label": "forward_head_only",
+    "n_frames": 77,
+    "face_detection_rate": 0.0,
+    "shoulder_detection_rate": 0.8442,
+    "metrics": {
+      "cheek_distance": null,
+      "eye_distance": null,
+      "face_vertical_length": null,
+      "shoulder_width": null,
+      "vh_ratio": null,
+      "cheek_eye_ratio": null,
+      "shoulder_tilt_deg": null,
+      "eye_line_tilt": null,
+      "chin_occlusion": null,
+      "hand_face_score": null,
+      "eye_symmetry_ratio": null,
+      "cheek_symmetry_ratio": null,
+      "chin_alignment_offset": null,
+      "face_center_x": null,
+      "face_center_y": null
+    }
+  },
+  {
+    "label": "recline",
+    "n_frames": 77,
+    "face_detection_rate": 0.0,
+    "shoulder_detection_rate": 0.013,
+    "metrics": {
+      "cheek_distance": null,
+      "eye_distance": null,
+      "face_vertical_length": null,
+      "shoulder_width": null,
+      "vh_ratio": null,
+      "cheek_eye_ratio": null,
+      "shoulder_tilt_deg": null,
+      "eye_line_tilt": null,
+      "chin_occlusion": null,
+      "hand_face_score": null,
+      "eye_symmetry_ratio": null,
+      "cheek_symmetry_ratio": null,
+      "chin_alignment_offset": null,
+      "face_center_x": null,
+      "face_center_y": null
+    }
+  }
+]

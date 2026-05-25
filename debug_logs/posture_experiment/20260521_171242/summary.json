@@ -1,0 +1,327 @@
+[
+  {
+    "label": "neutral",
+    "n_frames": 77,
+    "face_detection_rate": 1.0,
+    "shoulder_detection_rate": 0.0779,
+    "metrics": {
+      "cheek_distance": {
+        "n": 6,
+        "mean": 0.217002,
+        "std": 0.000217,
+        "cv": 0.001002,
+        "min": 0.216615,
+        "max": 0.217171,
+        "range": 0.000556
+      },
+      "eye_distance": {
+        "n": 6,
+        "mean": 0.148269,
+        "std": 0.000201,
+        "cv": 0.001355,
+        "min": 0.147912,
+        "max": 0.148425,
+        "range": 0.000513
+      },
+      "face_vertical_length": {
+        "n": 6,
+        "mean": 0.241478,
+        "std": 7e-06,
+        "cv": 2.9e-05,
+        "min": 0.24147,
+        "max": 0.241489,
+        "range": 1.9e-05
+      },
+      "shoulder_width": {
+        "n": 6,
+        "mean": 0.016921,
+        "std": 0.001794,
+        "cv": 0.106,
+        "min": 0.013875,
+        "max": 0.018473,
+        "range": 0.004598
+      },
+      "vh_ratio": {
+        "n": 6,
+        "mean": 1.628649,
+        "std": 0.002248,
+        "cv": 0.001381,
+        "min": 1.626932,
+        "max": 1.63265,
+        "range": 0.005718
+      },
+      "cheek_eye_ratio": {
+        "n": 6,
+        "mean": 1.463565,
+        "std": 0.000517,
+        "cv": 0.000353,
+        "min": 1.463164,
+        "max": 1.464484,
+        "range": 0.00132
+      },
+      "shoulder_tilt_deg": {
+        "n": 6,
+        "mean": -90.0,
+        "std": 0.0,
+        "cv": 0.0,
+        "min": -90.0,
+        "max": -90.0,
+        "range": 0.0
+      },
+      "eye_line_tilt": {
+        "n": 6,
+        "mean": 0.533,
+        "std": 0.003617,
+        "cv": 0.006786,
+        "min": 0.5264,
+        "max": 0.5356,
+        "range": 0.0092
+      },
+      "chin_occlusion": {
+        "n": 6,
+        "mean": 0.0,
+        "std": 0.0,
+        "cv": null,
+        "min": 0.0,
+        "max": 0.0,
+        "range": 0.0
+      },
+      "hand_face_score": {
+        "n": 6,
+        "mean": 0.0,
+        "std": 0.0,
+        "cv": null,
+        "min": 0.0,
+        "max": 0.0,
+        "range": 0.0
+      },
+      "eye_symmetry_ratio": {
+        "n": 6,
+        "mean": 0.074313,
+        "std": 0.000714,
+        "cv": 0.00961,
+        "min": 0.07371,
+        "max": 0.075489,
+        "range": 0.001779
+      },
+      "cheek_symmetry_ratio": {
+        "n": 6,
+        "mean": 0.108356,
+        "std": 0.000482,
+        "cv": 0.004448,
+        "min": 0.107935,
+        "max": 0.109139,
+        "range": 0.001204
+      },
+      "chin_alignment_offset": {
+        "n": 6,
+        "mean": 0.010043,
+        "std": 0.000491,
+        "cv": 0.048851,
+        "min": 0.009337,
+        "max": 0.010774,
+        "range": 0.001437
+      },
+      "face_center_x": {
+        "n": 77,
+        "mean": 0.478155,
+        "std": 0.00219,
+        "cv": 0.004579,
+        "min": 0.474219,
+        "max": 0.481285,
+        "range": 0.007066
+      },
+      "face_center_y": {
+        "n": 77,
+        "mean": 0.853851,
+        "std": 0.012379,
+        "cv": 0.014498,
+        "min": 0.83384,
+        "max": 0.870833,
+        "range": 0.036993
+      }
+    }
+  },
+  {
+    "label": "forward_head_only",
+    "n_frames": 77,
+    "face_detection_rate": 1.0,
+    "shoulder_detection_rate": 0.0519,
+    "metrics": {
+      "cheek_distance": {
+        "n": 4,
+        "mean": 0.184009,
+        "std": 0.000141,
+        "cv": 0.000764,
+        "min": 0.183872,
+        "max": 0.184197,
+        "range": 0.000325
+      },
+      "eye_distance": {
+        "n": 4,
+        "mean": 0.116969,
+        "std": 9.8e-05,
+        "cv": 0.000834,
+        "min": 0.116876,
+        "max": 0.117101,
+        "range": 0.000225
+      },
+      "face_vertical_length": {
+        "n": 4,
+        "mean": 0.262785,
+        "std": 5.2e-05,
+        "cv": 0.000196,
+        "min": 0.262724,
+        "max": 0.262844,
+        "range": 0.00012
+      },
+      "shoulder_width": {
+        "n": 4,
+        "mean": 0.213508,
+        "std": 0.002866,
+        "cv": 0.013425,
+        "min": 0.20964,
+        "max": 0.216147,
+        "range": 0.006507
+      },
+      "vh_ratio": {
+        "n": 4,
+        "mean": 2.246618,
+        "std": 0.001457,
+        "cv": 0.000649,
+        "min": 2.244584,
+        "max": 2.247893,
+        "range": 0.003309
+      },
+      "cheek_eye_ratio": {
+        "n": 4,
+        "mean": 1.573143,
+        "std": 0.000115,
+        "cv": 7.3e-05,
+        "min": 1.572974,
+        "max": 1.573226,
+        "range": 0.000252
+      },
+      "shoulder_tilt_deg": {
+        "n": 4,
+        "mean": -65.4553,
+        "std": 21.506569,
+        "cv": 0.328569,
+        "min": -90.0,
+        "max": -43.7962,
+        "range": 46.2038
+      },
+      "eye_line_tilt": {
+        "n": 4,
+        "mean": -1.376425,
+        "std": 0.024004,
+        "cv": 0.017439,
+        "min": -1.3999,
+        "max": -1.3443,
+        "range": 0.0556
+      },
+      "chin_occlusion": {
+        "n": 4,
+        "mean": 0.0,
+        "std": 0.0,
+        "cv": null,
+        "min": 0.0,
+        "max": 0.0,
+        "range": 0.0
+      },
+      "hand_face_score": {
+        "n": 4,
+        "mean": 0.0,
+        "std": 0.0,
+        "cv": null,
+        "min": 0.0,
+        "max": 0.0,
+        "range": 0.0
+      },
+      "eye_symmetry_ratio": {
+        "n": 4,
+        "mean": 0.117744,
+        "std": 0.001556,
+        "cv": 0.013211,
+        "min": 0.115745,
+        "max": 0.119492,
+        "range": 0.003747
+      },
+      "cheek_symmetry_ratio": {
+        "n": 4,
+        "mean": 0.129935,
+        "std": 0.000831,
+        "cv": 0.006396,
+        "min": 0.128921,
+        "max": 0.130928,
+        "range": 0.002007
+      },
+      "chin_alignment_offset": {
+        "n": 4,
+        "mean": 0.02612,
+        "std": 0.001536,
+        "cv": 0.05882,
+        "min": 0.023874,
+        "max": 0.027129,
+        "range": 0.003255
+      },
+      "face_center_x": {
+        "n": 77,
+        "mean": 0.498857,
+        "std": 0.008344,
+        "cv": 0.016726,
+        "min": 0.485156,
+        "max": 0.511836,
+        "range": 0.02668
+      },
+      "face_center_y": {
+        "n": 77,
+        "mean": 0.805586,
+        "std": 0.000813,
+        "cv": 0.001009,
+        "min": 0.804167,
+        "max": 0.806802,
+        "range": 0.002635
+      }
+    }
+  },
+  {
+    "label": "recline",
+    "n_frames": 77,
+    "face_detection_rate": 0.013,
+    "shoulder_detection_rate": 0.0,
+    "metrics": {
+      "cheek_distance": null,
+      "eye_distance": null,
+      "face_vertical_length": null,
+      "shoulder_width": null,
+      "vh_ratio": null,
+      "cheek_eye_ratio": null,
+      "shoulder_tilt_deg": null,
+      "eye_line_tilt": null,
+      "chin_occlusion": null,
+      "hand_face_score": null,
+      "eye_symmetry_ratio": null,
+      "cheek_symmetry_ratio": null,
+      "chin_alignment_offset": null,
+      "face_center_x": {
+        "n": 1,
+        "mean": 0.533594,
+        "std": 0.0,
+        "cv": 0.0,
+        "min": 0.533594,
+        "max": 0.533594,
+        "range": 0.0
+      },
+      "face_center_y": {
+        "n": 1,
+        "mean": 0.808333,
+        "std": 0.0,
+        "cv": 0.0,
+        "min": 0.808333,
+        "max": 0.808333,
+        "range": 0.0
+      }
+    }
+  }
+]
