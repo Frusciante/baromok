@@ -1,0 +1,58 @@
+{
+  "version": "v2.0",
+  "timestamp": "2026-05-26T11:22:32.167065",
+  "collection_duration_seconds": 0.0,
+  "frame_count": 77,
+  "shoulder_detection_rate": 1.0,
+  "calibration_quality": "good",
+  "quality_messages": [],
+  "neutral": {
+    "cheek_distance": {
+      "mean": 0.19244411688311688,
+      "std": 0.0008886476223610506,
+      "available": true
+    },
+    "eye_distance": {
+      "mean": 0.12208145454545456,
+      "std": 0.0003915742965926974,
+      "available": true
+    },
+    "cheek_eye_ratio": {
+      "mean": 1.5763512085505031,
+      "std": 0.0022330852676466398,
+      "available": true
+    },
+    "eye_line_tilt": {
+      "mean": -1.9172038961038964,
+      "std": 0.45945425430939496,
+      "available": true
+    },
+    "eye_symmetry_ratio": {
+      "mean": 0.10051202597402598,
+      "std": 0.0037444782029426153,
+      "available": true
+    },
+    "cheek_symmetry_ratio": {
+      "mean": 0.07688385714285713,
+      "std": 0.002290187780619949,
+      "available": true
+    },
+    "shoulder_width": {
+      "mean": 0.3808587402597402,
+      "std": 0.0005696478156139111,
+      "available": true
+    },
+    "shoulder_tilt_deg": {
+      "mean": -2.9977233766233766,
+      "std": 0.5029747874954876,
+      "available": true
+    }
+  },
+  "auto_thresholds": {
+    "forward_cheek_delta_pct": 5.0,
+    "recline_cheek_delta_pct": 15.0,
+    "forward_shoulder_delta_pct": 5.0,
+    "head_tilt_deg_abs": 5.0,
+    "chin_rest_score_threshold": 0.5
+  }
+}

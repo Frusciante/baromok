@@ -142,7 +142,12 @@ class DetectionScreen(QWidget):
                 return
 
             set_recognition_message(self.recognition_label, False)
-            self._update_posture_status(frame_data.get("state", "NORMAL"), frame_data.get("posture_type", "normal"), frame_data.get("probability", 0.0))
+            self._update_posture_status(
+                frame_data.get("state", "NORMAL"),
+                frame_data.get("posture_type", "normal"),
+                frame_data.get("probability", 0.0),
+                frame_data.get("display_label", ""),
+            )
 
             # 광대 거리 정보 업데이트
             current_cheek = indicators.cheek_distance
@@ -158,9 +163,19 @@ class DetectionScreen(QWidget):
         except Exception as e:
             logger.error(f"프레임 처리 오류: {e}")
 
-    def _update_posture_status(self, state: str, posture_type: str, probability: float):
-        posture_map = {"normal": "바른 자세", "forward_head": "거북목", "recline": "기댄 자세", "chin_rest_estimated": "턱 받침", "baseline": "자세 맞춤 중"}
-        self.posture_label.setText(f"{posture_map.get(posture_type, '알 수 없음')} ({probability:.1%})")
+    def _update_posture_status(self, state: str, posture_type: str, probability: float, display_label: str = ""):
+        posture_map = {
+            # V1
+            "normal": "바른 자세", "forward_head": "거북목", "recline": "기댄 자세",
+            "chin_rest_estimated": "턱 받침", "baseline": "자세 맞춤 중",
+            # V2
+            "neutral": "바른 자세", "forward_head_only": "거북목 경향",
+            "forward_head_full": "몸 기울어진 거북목", "head_tilt": "고개 기울임",
+            "chin_rest": "턱 괸 자세",
+        }
+        # V2는 display_label 이 이미 한국어이므로 우선 사용
+        korean_label = display_label if display_label else posture_map.get(posture_type, posture_type)
+        self.posture_label.setText(f"{korean_label} ({probability:.1%})")
         state_text = {"normal": "바른 자세", "warning": "경고", "bad_posture": "나쁜 자세", "NORMAL": "바른 자세", "WARNING": "경고", "BAD_POSTURE": "나쁜 자세"}
         self.status_label.setText(state_text.get(state, "상태 알 수 없음"))
         state_colors = {"normal": "status_normal", "warning": "status_warning", "bad_posture": "status_bad", "NORMAL": "status_normal", "WARNING": "status_warning", "BAD_POSTURE": "status_bad"}

@@ -257,6 +257,7 @@ class StatisticsLineChart(QWidget):
                             "good_posture_percentage", 0
                         ),
                         "time_ratio_text": session.get("good_posture_time_text", ""),
+                        "session_count": session.get("session_count", 1),
                     }
                 )
             self._last_hovered_index = None
@@ -474,11 +475,12 @@ class StatisticsLineChart(QWidget):
         session_label = payload.get("session_label", "-")
         percentage = self._coerce_float(payload.get("good_posture_percentage", 0))
         ratio_text = payload.get("time_ratio_text", "")
+        session_count = int(payload.get("session_count", 1))
 
-        lines = [
-            f"세션: {session_label}",
-            f"유지율: {percentage:.1f}%",
-        ]
+        lines = [f"날짜: {session_label}"]
+        if session_count > 1:
+            lines.append(f"{session_count}개 세션 합산")
+        lines.append(f"유지율: {percentage:.1f}%")
 
         if ratio_text:
             lines.append(f"유지시간/총시간: {ratio_text}")
@@ -502,6 +504,7 @@ class StatisticsLineChart(QWidget):
                     "session_label": session_label,
                     "duration_text": self._format_duration_text(session),
                     "good_posture_time_text": self._format_time_ratio_text(session),
+                    "session_count": session.get("session_count", 1),
                 }
             )
 
@@ -558,12 +561,11 @@ class StatisticsLineChart(QWidget):
         return f"{hours:02d}:{minutes:02d}:{remaining_seconds:02d}"
 
     def _extract_session_meta(self, session: dict) -> str:
-        duration_text = session.get("good_posture_time_text", "")
+        parts = []
+        session_count = int(session.get("session_count", 1))
+        if session_count > 1:
+            parts.append(f"{session_count}개 세션 합산")
+        duration_text = session.get("good_posture_time_text", "") or session.get("duration_text", "")
         if duration_text:
-            return duration_text
-
-        fallback_duration = session.get("duration_text", "")
-        if fallback_duration:
-            return fallback_duration
-
-        return ""
+            parts.append(duration_text)
+        return "\n".join(parts)
