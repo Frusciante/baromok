@@ -104,7 +104,7 @@ class CalibrationV2Manager:
         capture = baseline_config.get("capture", {}) if isinstance(baseline_config, dict) else {}
         self.wait_seconds: float = float(capture.get("wait_seconds_v2", 3.0))
         self.collect_seconds: float = float(capture.get("collect_seconds_v2", 10.0))
-        self.minimum_valid_frames: int = int(capture.get("minimum_valid_frames_v2", 100))
+        self.minimum_valid_frames: int = int(capture.get("minimum_valid_frames", 60))
 
         logger.info(
             f"CalibrationV2Manager 초기화 (wait={self.wait_seconds}s, collect={self.collect_seconds}s, "

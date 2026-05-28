@@ -54,8 +54,9 @@ class BaselineManager:
         # MediaPipe 3개 모델을 동시에 돌리면 실제 처리 FPS가 낮을 수 있으므로,
         # 6단계(총 30초 수집) 데이터를 충분히 확보하기 위해 최소 유효 프레임을 설정에서 가져온다.
         baseline_config = self.config.get_baseline_config()
-        self.minimum_valid_frame_count = baseline_config.get(
-            "minimum_valid_frames", 120
+        capture_config = baseline_config.get("capture", {})
+        self.minimum_valid_frame_count = capture_config.get(
+            "minimum_valid_frames", 60
         )
 
         self.ransac_model = RansacQuadraticModel(
