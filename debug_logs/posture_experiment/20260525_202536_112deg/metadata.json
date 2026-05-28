@@ -1,0 +1,16 @@
+{
+  "started_at": "2026-05-25T20:25:40.176078",
+  "screen_angle": "112deg",
+  "postures": [
+    "neutral",
+    "forward_head_only",
+    "recline"
+  ],
+  "baseline_label": "neutral",
+  "duration_per_condition_s": 15.0,
+  "settle_s": 3.0,
+  "camera_id": 0,
+  "frame_width": 1280,
+  "frame_height": 720,
+  "confidence_threshold": 0.5
+}
