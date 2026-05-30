@@ -106,6 +106,12 @@ class CalibrationV2Manager:
         self.collect_seconds: float = float(capture.get("collect_seconds_v2", 10.0))
         self.minimum_valid_frames: int = int(capture.get("minimum_valid_frames_v2", 100))
 
+        self.total_frames_seen: int = 0
+        self.valid_frames_seen: int = 0
+
+        self.progress: float = 0.0
+        self.quality_score: float = 0.0
+
         logger.info(
             f"CalibrationV2Manager 초기화 (wait={self.wait_seconds}s, collect={self.collect_seconds}s, "
             f"min_frames={self.minimum_valid_frames})"
@@ -115,18 +121,45 @@ class CalibrationV2Manager:
 
     def start_collection(self) -> None:
         """neutral 자세 수집 시작"""
+        logger.warning("V2 START_COLLECTION CALLED")
         self._is_collecting = True
         self._frames = []
+        self.total_frames_seen = 0
+        self.valid_frames_seen = 0
+
+        self.progress = 0.0
+        self.quality_score = 0.0
         self._collection_start_time = time.time()
         logger.info("V2 캘리브레이션 수집 시작")
 
+    
     def add_frame(self, indicators: PostureIndicators) -> None:
         """수집 중 프레임 추가"""
+
         if not self._is_collecting:
             return
+
+        self.total_frames_seen += 1
+
         if indicators is None:
             return
+
         self._frames.append(indicators)
+        self.valid_frames_seen += 1
+
+        # 진행률 계산
+        self.progress = min(
+            1.0,
+            self.valid_frames_seen / self.minimum_valid_frames
+        )
+
+        # 품질 점수 계산
+        if self.total_frames_seen > 0:
+            self.quality_score = (
+                self.valid_frames_seen / self.total_frames_seen
+            )
+        else:
+            self.quality_score = 0.0
 
     def finish_collection(self) -> bool:
         """
@@ -166,6 +199,14 @@ class CalibrationV2Manager:
             f"shoulder_rate={calibration.shoulder_detection_rate:.2f})"
         )
         return True
+    
+    def get_collection_status(self) -> dict:
+        return {
+            "progress": self.progress,
+            "quality_score": self.quality_score,
+            "valid_frames": self.valid_frames_seen,
+            "required_frames": self.minimum_valid_frames,
+        }
 
     # ─── 통계 ──────────────────────────────────────────────────────────
 

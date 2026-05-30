@@ -128,6 +128,7 @@ class baromokApp:
             level = "low"
 
         self.judgment_engine_v2.set_sensitivity(level)
+        logger.info(f"V2 엔진 감도 설정: {level} (forward_head={fwd:.3f})")
 
         logger.info("✓ 엔진 컴포넌트 준비 완료")
 

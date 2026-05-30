@@ -90,8 +90,9 @@ class CameraWorker(QThread):
 
         # V2 엔진 (옵셔널 — set_v2_components 로 주입)
         self.engine_mode: str = "v1"
-        self._engine_v2 = None
-        self._cal_mgr_v2 = None
+        self._engine_v2 = judgment_engine_v2
+        self._cal_mgr_v2 = cal_mgr_v2
+
 
         logger.info(
             f"CameraWorker 초기화: {camera_width}x{camera_height} @ {camera_fps} FPS"
@@ -223,6 +224,7 @@ class CameraWorker(QThread):
                 'frame_number': int
             }
         """
+
         timestamp = datetime.now()
         current_timestamp_seconds = timestamp.timestamp()
 
