@@ -191,6 +191,14 @@ class JudgmentEngineV2:
         self._reset_judgment_state()
         logger.info(f"V2 민감도 변경: {level}")
 
+    def _get_sensitivity_scale(self):
+        if self.sensitivity == "high":
+            return 1.2   # more sensitive → easier to trigger
+        elif self.sensitivity == "medium":
+            return 1.0
+        else:  # low
+            return 0.8   # less sensitive → harder to trigger
+
     def reset_filters(self) -> None:
         """자세별 EMA 필터, 자세 타이머, 상태 추적, 어깨 이력까지 모두 초기화.
 
@@ -285,6 +293,15 @@ class JudgmentEngineV2:
                 deltas=self._compute_debug_deltas(indicators, neutral),
                 candidates=[],
             )
+        
+        logger.info(f"[V2] sensitivity={self.sensitivity}, scale={scale}")
+        
+        # sensitivity scaling (NEW)
+        scale = self._get_sensitivity_scale()
+
+        for c in candidates:
+            logger.info(f"{c.type} raw={c.deviation_score / scale:.3f}, scaled={c.deviation_score:.3f}")
+            c.deviation_score *= scale
 
         # deviation_score 최대인 자세 1개 선택 (V2 spec section 3.2)
         best = max(candidates, key=lambda c: c.deviation_score)

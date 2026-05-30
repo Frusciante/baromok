@@ -116,6 +116,19 @@ class baromokApp:
             logger.info("V2 캘리브레이션 없음 — 기준자세설정 시 자동 생성됩니다")
         self.judgment_engine_v2 = JudgmentEngineV2(self.config, self.cal_mgr_v2)
 
+        sensitivities = self.config.get_frame_scoring_config().get("sensitivities", {})
+
+        fwd = sensitivities.get("forward_head", 0.10)
+
+        if fwd <= 0.05:
+            level = "high"
+        elif fwd <= 0.09:
+            level = "medium"
+        else:
+            level = "low"
+
+        self.judgment_engine_v2.set_sensitivity(level)
+
         logger.info("✓ 엔진 컴포넌트 준비 완료")
 
         # 비즈니스 로직 초기화 (Phase 4)
@@ -129,11 +142,11 @@ class baromokApp:
             self.landmark_extractor,
             self.indicator_calculator,
             self.judgment_engine,
+            self.judgment_engine_v2,
+            self.cal_mgr_v2,
             self.state_machine,
             self.config,
         )
-        # V2 컴포넌트를 카메라 워커에 주입
-        self.camera_worker.set_v2_components(self.judgment_engine_v2, self.cal_mgr_v2)
         logger.info("✓ 카메라 워커 준비 완료")
 
         # 설정 로드 (ConfigManager를 전달하여 기본값 처리)
@@ -742,6 +755,20 @@ class baromokApp:
             self.settings_config.forward_head_sensitivity,
             self.settings_config.recline_sensitivity,
         )
+
+        fwd = self.settings_config.forward_head_sensitivity
+
+        #V2 엔진에 감도 레벨 적용
+        if fwd <= 0.05:
+            level = "high"
+        elif fwd <= 0.09:
+            level = "medium"
+        else:
+            level = "low"
+
+        self.judgment_engine_v2.set_sensitivity(level)
+
+        logger.info(f"V2 민감도 적용: {level}")
 
         if not self.settings_config.notification_enabled:
             self.alert_hide_timer.stop()
