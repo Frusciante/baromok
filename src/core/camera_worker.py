@@ -15,6 +15,8 @@ from src.utils.logger import get_logger
 from src.core.landmark_extractor import LandmarkExtractor, ExtractedLandmarks
 from src.core.indicator_calculator import IndicatorCalculator, PostureIndicators
 from src.core.judgment_engine import JudgmentEngine, PostureJudgmentResult
+from src.core.judgment_engine_v2 import JudgmentEngineV2
+from src.core.calibration_v2 import CalibrationV2Manager
 from src.core.state_machine import StateMachine, PostureState
 
 logger = get_logger(__name__)
@@ -33,6 +35,8 @@ class CameraWorker(QThread):
         landmark_extractor: LandmarkExtractor,
         indicator_calculator: IndicatorCalculator,
         judgment_engine: JudgmentEngine,
+        judgment_engine_v2: JudgmentEngineV2,
+        cal_mgr_v2: CalibrationV2Manager,
         state_machine: StateMachine,
         camera_index: int = 0,
         camera_fps: int = 30,
@@ -57,6 +61,8 @@ class CameraWorker(QThread):
         self.landmark_extractor = landmark_extractor
         self.indicator_calculator = indicator_calculator
         self.judgment_engine = judgment_engine
+        self.judgment_engine_v2 = judgment_engine_v2
+        self.cal_mgr_v2 = cal_mgr_v2
         self.state_machine = state_machine
 
         self.camera_index = camera_index
@@ -84,8 +90,9 @@ class CameraWorker(QThread):
 
         # V2 엔진 (옵셔널 — set_v2_components 로 주입)
         self.engine_mode: str = "v1"
-        self._engine_v2 = None
-        self._cal_mgr_v2 = None
+        self._engine_v2 = judgment_engine_v2
+        self._cal_mgr_v2 = cal_mgr_v2
+
 
         logger.info(
             f"CameraWorker 초기화: {camera_width}x{camera_height} @ {camera_fps} FPS"
@@ -217,6 +224,7 @@ class CameraWorker(QThread):
                 'frame_number': int
             }
         """
+
         timestamp = datetime.now()
         current_timestamp_seconds = timestamp.timestamp()
 
@@ -622,6 +630,8 @@ def create_camera_worker(
     landmark_extractor: LandmarkExtractor,
     indicator_calculator: IndicatorCalculator,
     judgment_engine: JudgmentEngine,
+    judgment_engine_v2: JudgmentEngineV2,
+    cal_mgr_v2: CalibrationV2Manager,
     state_machine: StateMachine,
     config=None,
 ) -> CameraWorker:
@@ -643,6 +653,8 @@ def create_camera_worker(
         landmark_extractor,
         indicator_calculator,
         judgment_engine,
+        judgment_engine_v2,
+        cal_mgr_v2,
         state_machine,
         camera_index=camera_index,
         camera_fps=camera_fps,

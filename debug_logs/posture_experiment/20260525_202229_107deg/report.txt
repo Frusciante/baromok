@@ -1,0 +1,139 @@
+====================================================================================================
+ 자세별 지표 변화 측정 — 요약 리포트
+ 생성 시각: 2026-05-25T20:23:39
+ 화면 각도 태그: 107deg
+ 기준(baseline) 자세: neutral
+====================================================================================================
+
+[검출률]
+  자세                          N    face_det%    shoulder_det%
+  neutral                   280       100.0%           100.0%
+  forward_head_only         285       100.0%           100.0%
+  recline                   351       100.0%           100.0%
+
+[cheek_distance]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.13755        0.00002      0.01%         base
+  forward_head_only             0.14426        0.00325      2.25%       +4.87%
+  recline                       0.14330        0.00670      4.67%       +4.18%
+
+[eye_distance]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.09328        0.00012      0.13%         base
+  forward_head_only             0.09746        0.00243      2.49%       +4.48%
+  recline                       0.09635        0.00514      5.33%       +3.29%
+
+[face_vertical_length]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.00000        0.00000        N/A         base
+  forward_head_only             0.00000        0.00000        N/A          N/A
+  recline                       0.00000        0.00000        N/A          N/A
+
+[shoulder_width]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.31481        0.00159      0.50%         base
+  forward_head_only             0.31605        0.00052      0.17%       +0.39%
+  recline                       0.30362        0.00588      1.94%       -3.55%
+
+[vh_ratio]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.00000        0.00000        N/A         base
+  forward_head_only             0.00000        0.00000        N/A          N/A
+  recline                       0.00000        0.00000        N/A          N/A
+
+[cheek_eye_ratio]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       1.47461        0.00181      0.12%         base
+  forward_head_only             1.48030        0.00358      0.24%       +0.39%
+  recline                       1.48779        0.00968      0.65%       +0.89%
+
+[shoulder_tilt_deg]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                      -5.53549        0.43913      7.93%         base
+  forward_head_only            -4.22683        0.17453      4.13%      +23.64%
+  recline                      -2.29916        0.14535      6.32%      +58.47%
+
+[eye_line_tilt]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.91000        0.21122     23.21%         base
+  forward_head_only            -0.57072        0.58661    102.78%     -162.72%
+  recline                       0.79097        0.43700     55.25%      -13.08%
+
+[chin_occlusion]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.00000        0.00000        N/A         base
+  forward_head_only             0.00000        0.00000        N/A          N/A
+  recline                       0.00000        0.00000        N/A          N/A
+
+[hand_face_score]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.00000        0.00000        N/A         base
+  forward_head_only             0.00000        0.00000        N/A          N/A
+  recline                       0.00000        0.00000        N/A          N/A
+
+[eye_symmetry_ratio]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.00000        0.00000        N/A         base
+  forward_head_only             0.00000        0.00000        N/A          N/A
+  recline                       0.00000        0.00000        N/A          N/A
+
+[cheek_symmetry_ratio]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.00000        0.00000        N/A         base
+  forward_head_only             0.00000        0.00000        N/A          N/A
+  recline                       0.00000        0.00000        N/A          N/A
+
+[chin_alignment_offset]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.00000        0.00000        N/A         base
+  forward_head_only             0.00000        0.00000        N/A          N/A
+  recline                       0.00000        0.00000        N/A          N/A
+
+[face_center_x]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.54120        0.00038      0.07%         base
+  forward_head_only             0.53630        0.00127      0.24%       -0.91%
+  recline                       0.53027        0.00164      0.31%       -2.02%
+
+[face_center_y]  (Δ% = baseline 대비 평균 변화율, CV = std/|mean|)
+  자세                               mean            std         CV           Δ%
+  neutral                       0.58332        0.00108      0.18%         base
+  forward_head_only             0.60214        0.00788      1.31%       +3.23%
+  recline                       0.60553        0.01127      1.86%       +3.81%
+
+====================================================================================================
+ 자세 판별 매트릭스 — 각 자세에서 가장 크게 변한 지표 (Top 5)
+====================================================================================================
+
+  ▸ forward_head_only
+    지표                                 Δ%         CV  안정성
+    eye_line_tilt                -162.72%   102.78%  불안정
+    shoulder_tilt_deg             +23.64%     4.13%  안정
+    cheek_distance                 +4.87%     2.25%  안정
+    eye_distance                   +4.48%     2.49%  안정
+    face_center_y                  +3.23%     1.31%  안정
+
+  ▸ recline
+    지표                                 Δ%         CV  안정성
+    shoulder_tilt_deg             +58.47%     6.32%  보통
+    eye_line_tilt                 -13.08%    55.25%  불안정
+    cheek_distance                 +4.18%     4.67%  안정
+    face_center_y                  +3.81%     1.86%  안정
+    shoulder_width                 -3.55%     1.94%  안정
+
+====================================================================================================
+ 임계값 후보 — |Δ%| > 10% 이고 CV < 5% 인 지표 (판정 신호로 적합)
+====================================================================================================
+
+  ▸ forward_head_only
+    지표                             baseline           관측         Δ%         CV
+    shoulder_tilt_deg              -5.53549     -4.22683    +23.64%     4.13%
+
+  ▸ recline: 적합한 지표 없음
+
+해석 팁:
+  - Δ% 부호가 자세 방향을 알려줍니다 (예: cheek_distance +면 가까워짐)
+  - 같은 자세에서 CV < 5%인 지표는 임계값 설정에 안정적
+  - 'forward_head_only'와 'forward_head_full'을 구별하는 지표가
+    있는지 확인하면 노트북 거북목 판정 로직 설계 핵심
+  - yaw_turn에서 |Δ%| > 10%인 지표는 yaw 게이트로 가려야 함
