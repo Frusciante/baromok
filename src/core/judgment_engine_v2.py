@@ -294,13 +294,12 @@ class JudgmentEngineV2:
                 candidates=[],
             )
         
-        logger.info(f"[V2] sensitivity={self.sensitivity}, scale={scale}")
-        
-        # sensitivity scaling (NEW)
+        # sensitivity scaling
         scale = self._get_sensitivity_scale()
+        logger.info(f"[V2] sensitivity={self.sensitivity}, scale={scale}")
 
         for c in candidates:
-            logger.info(f"{c.type} raw={c.deviation_score / scale:.3f}, scaled={c.deviation_score:.3f}")
+            logger.info(f"{c.posture} raw={c.deviation_score / scale:.3f}, scaled={c.deviation_score:.3f}")
             c.deviation_score *= scale
 
         # deviation_score 최대인 자세 1개 선택 (V2 spec section 3.2)

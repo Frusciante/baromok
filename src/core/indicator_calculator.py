@@ -298,9 +298,7 @@ class IndicatorCalculator:
         모든 자세 지표 계산
         """
         if (landmarks.get('left_cheek') is None or
-            landmarks.get('right_cheek') is None or
-            landmarks.get('left_shoulder') is None or
-            landmarks.get('right_shoulder') is None):
+            landmarks.get('right_cheek') is None):
             return None
 
         # 필터 계수 조정
