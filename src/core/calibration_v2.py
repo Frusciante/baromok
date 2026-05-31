@@ -180,6 +180,11 @@ class CalibrationV2Manager:
                 f"수집된 프레임 부족: {len(self._frames)} < {self.minimum_valid_frames}"
             )
             return False
+    
+        logger.info(
+            f"V2 calibration completed successfully "
+            f"({len(self._frames)} frames, {duration:.2f}s)"
+        )
 
         # 통계 계산
         calibration = self._compute_statistics(duration)
