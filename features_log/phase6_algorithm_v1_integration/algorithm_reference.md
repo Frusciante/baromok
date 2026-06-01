@@ -7,31 +7,31 @@
 시스템은 다음 파이프라인을 거쳐 프레임 단위 데이터를 처리합니다.
 1. **Inference:** MediaPipe Tasks (Face, Pose, Hand Landmarkers) 동시 실행
 2. **Coordinate Extraction:** 주요 Keypoint 추출
-3. **1st Stage Filtering:** 원시 좌표에 대한 **One Euro Filter** 적용
+3. **1st Stage Filtering:** (Removed in v1.1) 원시 좌표에 대한 One-Euro 필터 제거 — 현재는 MediaPipe에서 제공하는 원시 정규화 좌표를 그대로 사용합니다. 필요 시 지표(level) 또는 UI 레이어에서 별도 평활화(EMA 등)를 적용할 것을 권장합니다.
 4. **Metric Calculation:** 정규화된 거리, 각도, 비율 연산
-5. **2nd Stage Filtering:** 연산된 지표에 대한 **EMA(Exponential Moving Average) Filter** 적용
+5. **2nd Stage Filtering:** (Removed in v1.1) 연산된 지표에 대한 EMA 평활화는 기본 파이프라인에서 제거되었습니다. 지표 안정화가 필요하면 별도의 모듈이나 시각화 레이어에서 선택적으로 적용하세요.
 6. **Calibration/Prediction:** RANSAC 2차 곡선 모델을 통한 기대 비율(`Expected Ratio`) 예측
 7. **Scoring:** 기준값 대비 오차를 바탕으로 각 자세(거북목, 기댄 자세 등)별 점수 산출
 8. **State Machine:** 시간 지속 조건(Temporal Thresholding)을 통한 최종 상태 확정
 
 ---
 
-## 2. Signal Filtering Algorithms
+## 2. Signal Filtering Algorithms (Updated)
 
-웹캠과 Pose 모델의 특성상 발생하는 미세한 떨림(Jitter)을 제거하기 위해 이중 필터링 아키텍처를 채택했습니다.
+원래 이 프로젝트는 프레임 단위의 미세 떨림을 억제하기 위해 좌표 레벨(One-Euro)과 지표 레벨(EMA)의 이중 필터링을 사용했습니다. 그러나 설계 변경에 따라 2026-06-02부로 기본 파이프라인에서 모든 자동 평활화(One-Euro, EMA)를 제거하고 MediaPipe가 제공하는 원시 정규화 좌표(raw normalized coordinates)를 사용하도록 했습니다.
 
-### 2.1. One Euro Filter (좌표 레벨 필터링)
-- **적용 대상:** 모든 주요 랜드마크의 `(x, y, z)` 좌표
-- **목적:** 가만히 있을 때의 잔떨림은 강력하게 억제하고, 빠른 움직임에는 지연(Lag) 없이 반응.
-- **파라미터 세팅:**
-  - `min_cutoff = 0.05`: 주파수 차단 임계값을 매우 낮게 설정하여 정지 상태의 노이즈 극대화 억제.
-  - `beta = 0.005`: 속도에 따른 컷오프 증가율. 낮게 설정하여 튀는 값을 방지.
+이 변경의 주요 이유:
+- 필터는 반응성(특히 One-Euro의 파라미터)에 따라 지연을 유발할 수 있으며, 특정 사용자/환경에서 보정이 어렵습니다.
+- Baseline(재측정) 수집 시 원시 값을 그대로 수집하는 것이 데이터의 신뢰성과 재현성에 유리합니다.
+- 시스템 복잡도를 낮추고, 평활화가 필요할 경우 상위 레이어(지표 계산 또는 UI)에 책임을 명확히 위임하기 위함입니다.
 
-### 2.2. EMA Filter (지표 및 점수 레벨 필터링)
-- **적용 대상:** 계산된 거리(`cheek_distance` 등), 각도, 비율 및 최종 산출된 자세 판정 점수(`likelihoods`)
-- **목적:** 프레임 단위의 스파이크(Spike)를 평활화하여 UI 및 로직의 안정성 확보.
-- **파라미터 세팅:**
-  - `alpha = 0.15`: 이전 프레임의 데이터를 85% 반영하고, 새 데이터는 15%만 반영하여 매우 묵직하고 부드러운 전환 구현.
+권장 사항:
+- 실시간 UI에서의 시각적 안정성을 위해 필요하면 UI 레이어에서 `EMA(alpha=0.1~0.2)` 같은 경량 평활화를 적용하십시오.
+- 알고리즘 파라미터 튜닝이 필요한 경우, 지표(level) 단위로 선택적 EMA를 적용하거나, 사용자 설정으로 토글 가능한 필터 모듈을 분리해 두는 것이 안전합니다.
+
+히스토리(참고):
+- 이전(버전 v1.0): One-Euro(좌표 레벨) + EMA(지표 레벨)
+- 현재(버전 v1.1): 기본 파이프라인에서 필터 제거, 원시 좌표 사용
 
 ---
 
