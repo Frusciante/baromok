@@ -304,9 +304,9 @@ class TimeHelper:
         return int(seconds * fps)
 
 
-class RansacQuadraticModel:
-    """RANSAC 기반 2차 곡선 적합 모델"""
-    
+class RansacLinearModel:
+    """RANSAC 기반 1차(선형) 모델"""
+
     def __init__(self, min_samples: int = 10, residual_threshold: float = 0.01):
         self.min_samples = min_samples
         self.residual_threshold = residual_threshold
@@ -314,7 +314,7 @@ class RansacQuadraticModel:
         self.model = None
 
     def fit(self, x_data: List[float], y_data: List[float]) -> bool:
-        """2차 곡선 모델 생성 (X: 어깨 너비 등, y: 예상 비율 등)"""
+        """1차(선형) 모델 생성 (X: 어깨 너비 등, y: 예상 비율 등)"""
         if len(x_data) < self.min_samples:
             self.is_fitted = False
             return False
@@ -327,10 +327,10 @@ class RansacQuadraticModel:
             X = np.array(x_data).reshape(-1, 1)
             y = np.array(y_data)
 
-            # PolynomialFeatures(degree=2, include_bias=True) -> [1, x, x^2]
-            # RANSACRegressor(fit_intercept=False) -> bias는 PolynomialFeatures에서 처리
+            # PolynomialFeatures(degree=1, include_bias=True) -> [1, x]
+            # RANSACRegressor을 사용하여 선형 회귀 기반의 강인한 적합 수행
             self.model = make_pipeline(
-                PolynomialFeatures(degree=2, include_bias=True),
+                PolynomialFeatures(degree=1, include_bias=True),
                 RANSACRegressor(
                     residual_threshold=self.residual_threshold,
                     random_state=42,
@@ -348,14 +348,14 @@ class RansacQuadraticModel:
         """적합된 모델을 통한 예측값 반환"""
         if not self.is_fitted or self.model is None:
             return 0.0
-        
+
         X = np.array([[x]])
         try:
             y_pred = self.model.predict(X)
             return float(y_pred[0])
         except Exception:
             return 0.0
-            
+
     def reset(self):
         self.is_fitted = False
         self.model = None

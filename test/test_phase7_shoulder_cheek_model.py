@@ -1,5 +1,5 @@
 """
-Phase 7: Shoulder-Cheek Quadratic Model 자동화 테스트 (개선판)
+Phase 7: Shoulder-Cheek Linear Model 자동화 테스트 (개선판)
 """
 
 import logging
@@ -23,10 +23,12 @@ def test_1_ransac_cheek_model():
         bm.minimum_valid_frame_count = 10
         bm.start_baseline_collection()
         
-        # 2차 함수 데이터 생성: y = 0.5x^2 + 0.2x + 0.05
+        # 1차(선형) 함수 데이터 생성: y = slope * x + intercept
+        slope = 0.8
+        intercept = 0.05
         for i in range(15):
             x = 0.2 + i * 0.02
-            y_clean = 0.5 * (x**2) + 0.2 * x + 0.05
+            y_clean = slope * x + intercept
             # 노이즈 및 이상치 주입
             y = y_clean + (np.random.normal(0, 0.0001) if i % 5 != 0 else 0.5) 
             

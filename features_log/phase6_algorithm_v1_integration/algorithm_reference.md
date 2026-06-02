@@ -35,7 +35,7 @@
 
 ---
 
-## 3. Calibration: RANSAC Quadratic Modeling (원근 왜곡 보정)
+## 3. Calibration: RANSAC Linear Modeling (원근 왜곡 보정)
 
 단일 카메라의 깊이 추정이 부정확한 문제를 해결하기 위해, 픽셀 상의 **어깨 너비(Shoulder Width)**를 깊이의 대리 지표(Depth Proxy)로 사용하는 수학적 모델을 적용했습니다.
 
@@ -45,10 +45,10 @@
 - 사용자가 아주 가까운 거리부터 팔이 닿지 않을 정도의 거리까지 총 6단계로 나누어 이동하며 `(x: shoulder_width, y: face_shoulder_ratio)` 샘플을 수집.
 - 각 단계마다 3초의 이동 대기 시간 후 5초간 가만히 정지한 상태로 데이터를 수집하는 방식으로 진행하여 안정적인 곡선 피팅 데이터 확보.
 
-### 3.2. 알고리즘: RANSAC + Polynomial Features
-- `scikit-learn`의 `RANSACRegressor`와 `PolynomialFeatures(degree=2)` 파이프라인 사용.
+- ### 3.2. 알고리즘: RANSAC + Polynomial Features (Linear)
+- `scikit-learn`의 `RANSACRegressor`와 `PolynomialFeatures(degree=1)` 파이프라인 사용.
 - **이유:** 사용자가 움직이는 과정에서 발생하는 이상치(Outlier)를 RANSAC이 걸러내고, 정상적인 점들만 모아 완벽한 2차 곡선(포물선) `y = ax^2 + bx + c` 를 추정.
-- **결과 예측:** 실시간 측정된 어깨 너비(`x`)를 이 함수에 대입하면, 현재 거리에서 정상적인 정렬을 유지할 때 기대되는 얼굴 비율(`Expected Ratio`)을 정확히 산출함.
+- **결과 예측:** 실시간 측정된 어깨 너비(`x`)를 이 선형 모델에 대입하면, 현재 거리에서 정상적인 정렬을 유지할 때 기대되는 얼굴 비율(`Expected Ratio`)을 정확히 산출함.
 
 ---
 

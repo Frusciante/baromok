@@ -4,11 +4,11 @@
 
 ## 핵심 통합 포인트
 
-- `baromok_prototype/posture_monitor_app/monitor.py`의 계산 아이디어(OneEuroFilter, EMA, RANSAC 기반 2차 모델, 점수화 공식을)가 `src`의 핵심 모듈로 통합되어 있습니다.
+- `baromok_prototype/posture_monitor_app/monitor.py`의 계산 아이디어(OneEuroFilter, EMA, RANSAC 기반 1차(선형) 모델, 점수화 공식을)가 `src`의 핵심 모듈로 통합되어 있습니다.
   - 좌표/지표 필터: `src/utils/helpers.py`의 `OneEuroFilter`, `EMAFilter`
   - 랜드마크 추출: `src/core/landmark_extractor.py` (MediaPipe Tasks)
   - 지표 계산: `src/core/indicator_calculator.py`
-  - Baseline / RANSAC 관리: `src/core/baseline_manager.py` (`RansacQuadraticModel` 사용)
+  - Baseline / RANSAC 관리: `src/core/baseline_manager.py` (`RansacLinearModel` 사용)
   - 판정 로직: `src/core/judgment_engine.py` (프로토타입 가중치 및 점수식을 반영)
 
 ## UI 적응
@@ -28,7 +28,7 @@
 
 ## 권장 추가 작업 (선택)
 
-- `baromok_prototype/monitor.py`의 `_fit_quadratic_ransac`에서 사용하는 RANSAC 세부 파라미터(`residual_threshold`, `z_ransac_threshold` 등)를 `src/config.py`로 노출하여 사용자 설정으로 바꾸기.
+- `baromok_prototype/monitor.py`의 `_fit_linear_ransac`에서 사용하는 RANSAC 세부 파라미터(`residual_threshold`, `z_ransac_threshold` 등)를 `src/config.py`로 노출하여 사용자 설정으로 바꾸기.
 - `baromok_prototype/algorithm_reference.md`의 수식과 파라미터를 `docs/` 하위로 옮겨 프로젝트 문서와 버전 관리를 통합하기.
 
 ## 실행 및 테스트 팁
