@@ -44,6 +44,10 @@ class StateMachine:
         self.config = config
         self.current_state = PostureState.NORMAL
         self.state_enter_time = time.time()
+
+        # 상태 전이 대기 변수 (Hysteresis 방어용)
+        self.pending_posture: Optional[str] = None
+        self.pending_since: Optional[float] = None
         
         # 상태 전이 콜백
         self.state_transition_callbacks: List[Callable[[StateTransitionEvent], None]] = []
@@ -95,10 +99,29 @@ class StateMachine:
                 return self.current_state
             
             if self.current_state == PostureState.NORMAL:
+                """
                 if confirmed_posture is not None:
                     self._transition_to(PostureState.WARNING, confirmed_posture)
                     logger.info(f"상태 전이: NORMAL → WARNING (자세: {confirmed_posture})")
-            
+                """
+
+                # 새 pending posture 시작
+                if self.pending_posture != confirmed_posture:
+                    self.pending_posture = confirmed_posture
+                    self.pending_since = time.time()
+
+                elif self.pending_posture == confirmed_posture and self.pending_posture is not None:
+                    pending_duration = time.time() - self.pending_since
+
+                    # posture가 일정 시간 지속되면 WARNING 진입
+                    if pending_duration >= 0.5:
+                        self._transition_to(PostureState.WARNING, confirmed_posture)
+
+                else:
+                    # posture 사라지면 pending 초기화
+                    self.pending_posture = None
+                    self.pending_since = None
+
             elif self.current_state == PostureState.WARNING:
                 if confirmed_posture is None:
                     self._transition_to(PostureState.NORMAL, None)
