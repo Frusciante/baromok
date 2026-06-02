@@ -272,7 +272,8 @@ class CameraWorker(QThread):
             indicators = self.indicator_calculator.calculate_all_indicators(
                 normalized_landmarks,
                 timestamp=current_timestamp_seconds,
-                low_latency=True # 속도 향상을 위해 항상 low_latency 적용
+                low_latency=True, # 속도 향상을 위해 항상 low_latency 적용
+                baseline_mode=self.is_baseline_mode
             )
 
             # 자세 맞춤 단계 정보 주입 (디버그용)
@@ -447,6 +448,25 @@ class CameraWorker(QThread):
         }
         state_text = state_text_map.get(state, "알 수 없음")
 
+        # Iris visualization (debugging)
+        if normalized_landmarks:
+            for side in ['left', 'right']:
+                center_key = f"{side}_iris_center"
+                center = normalized_landmarks.get(center_key)
+                if center:
+                    pixel_center = (int(center[0] * frame_width), int(center[1] * frame_height))
+                    # Draw iris point
+                    cv2.circle(annotated, pixel_center, 3, (255, 255, 0), -1)
+                    # Draw rhombus
+                    size = 15
+                    pts = np.array([
+                        [pixel_center[0], pixel_center[1] - size],
+                        [pixel_center[0] + size, pixel_center[1]],
+                        [pixel_center[0], pixel_center[1] + size],
+                        [pixel_center[0] - size, pixel_center[1]]
+                    ], np.int32)
+                    cv2.polylines(annotated, [pts], True, (255, 255, 0), 2)
+
         # 상단 정보 표시
         info_text = f"{state_text} | {posture_type} | Prob: {probability:.2f}"
         cv2.putText(
@@ -480,6 +500,12 @@ class CameraWorker(QThread):
                 detail_text = f"ShldTilt: {indicators.shoulder_tilt_deg:+.1f}deg | EyeTilt: {indicators.eye_line_tilt:+.1f}deg"
                 cv2.putText(annotated, detail_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 y_offset += 20
+
+                if indicators.eye_screen_distance_cm is not None:
+                    dist_text = f"EyeDist: {indicators.eye_screen_distance_cm:.1f}cm"
+                    dist_color = (0, 0, 255) if indicators.eye_close_warning else (0, 255, 255)
+                    cv2.putText(annotated, dist_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, dist_color, 2)
+                    y_offset += 20
                 
                 hand_text = f"HandFace: {indicators.hand_face_score:.2f} | ChinOcc: {indicators.chin_occlusion:.2f}"
                 cv2.putText(annotated, hand_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)

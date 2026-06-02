@@ -23,7 +23,7 @@
     "h_fov_deg": 60.0,
     "focal_length_px": null,
     "iris_diameter_cm": 1.17,
-    "close_threshold_cm": 40.0,
+    "close_threshold_cm": 45.0,
     "close_sustain_seconds": 2.0
   },
   "filters": {
@@ -157,7 +157,7 @@
       "primary_conditions": {
         "distance_threshold_cm": {
           "operator": "<=",
-          "threshold": 40.0
+          "threshold": 45.0
         }
       },
       "sustain_seconds": 2.0
@@ -198,7 +198,7 @@
   "eye_monitoring": {
     "iris_diameter_mm": 11.7,
     "camera_horizontal_fov_deg": 60.0,
-    "distance_threshold_cm": 40.0,
+    "distance_threshold_cm": 45.0,
     "sustain_seconds": 2.0
   },
   "event_judgment": {

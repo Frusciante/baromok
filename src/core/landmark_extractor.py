@@ -345,13 +345,13 @@ class LandmarkExtractor:
                     mp_image, timestamp_ms
                 )
                 face_list = self._extract_landmark_list(
-                    face_result,
-                    (
-                        "landmarks",
-                        "face_landmarks",
-                        "keypoints",
-                        "landmark",
-                    ),
+                face_result,
+                (
+                    "landmarks",
+                    "face_landmarks",
+                    "keypoints",
+                    "landmark",
+                ),
                 )
                 if face_list:
                     landmarks = (
@@ -359,6 +359,7 @@ class LandmarkExtractor:
                         if isinstance(face_list, list) and len(face_list) > 0
                         else face_list
                     )
+                    logger.debug(f"Detected face landmarks count: {len(landmarks)}")
                     face_data = self._build_landmark_data(landmarks, timestamp_ms)
             except Exception as e:
                 logger.debug(f"Face 추출 실패: {e}")
@@ -528,6 +529,14 @@ class LandmarkExtractor:
             landmarks['left_iris_diameter_px'] = left_iris_diam_px
             landmarks['right_iris_diameter_px'] = right_iris_diam_px
 
+            # iris centers (index 468 for left, 473 for right?)
+            # Wait, 468 is center of left eye in MediaPipe Mesh, 473 is right.
+            # Let's use 468 and 473 as centers.
+            left_iris_center = _get_face_point(468, "left_iris_center")
+            right_iris_center = _get_face_point(473, "right_iris_center")
+            landmarks['left_iris_center'] = left_iris_center
+            landmarks['right_iris_center'] = right_iris_center
+
         # 디버그: 필수 face 포인트 신뢰도 로깅(존재하지 않거나 낮으면 원인 파악에 도움됨)
         try:
             if extracted.face is not None:
@@ -679,6 +688,8 @@ class LandmarkExtractor:
             # iris diameter (pixels)
             "left_iris_diameter_px",
             "right_iris_diameter_px",
+            "left_iris_center",
+            "right_iris_center",
         ]
 
         # Lazy init deques for each ghost key
@@ -768,10 +779,7 @@ class LandmarkExtractor:
             "right_shoulder",
         ]
         # Scalar (1D) keys such as iris diameters (pixels)
-        scalar_scalar_keys = [
-            "left_iris_diameter_px",
-            "right_iris_diameter_px",
-        ]
+        scalar_scalar_keys = []
 
         t_sec = float(ts) / 1000.0
         for k in ghost_keys:
@@ -779,6 +787,18 @@ class LandmarkExtractor:
             # preserve raw per-frame normalized under a `_raw` suffix
             normalized_key_raw = f"{k}_raw"
             normalized[normalized_key_raw] = deepcopy(raw_snapshot.get(k))
+            
+            # v1.1: If baseline_mode is True, skip OneEuro filtering and use representative values (ghosted) directly.
+            # This follows the requirement: "remove filtering, only keep logic to fill in if missing".
+            if baseline_mode:
+                if k in scalar_vector_keys:
+                    normalized[k] = (float(rep[0]), float(rep[1])) if rep is not None else None
+                elif k in scalar_scalar_keys:
+                    normalized[k] = float(rep) if rep is not None else None
+                else:
+                    normalized[k] = deepcopy(rep) if rep is not None else []
+                continue
+
             if k in scalar_vector_keys:
                 if rep is None:
                     normalized[k] = None

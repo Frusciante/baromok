@@ -81,13 +81,14 @@ class IndicatorCalculator:
         except Exception:
             self._eye_monitoring_cfg = {}
 
-        self._iris_diameter_mm = float(self._eye_monitoring_cfg.get("iris_diameter_mm", 11.7))
+        self._iris_diameter_mm = float(self._eye_monitoring_cfg.get("iris_diameter_mm", 11.5))
         self._camera_hfov_deg = float(self._eye_monitoring_cfg.get("camera_horizontal_fov_deg", 60.0))
         self._eye_distance_threshold_cm = float(self._eye_monitoring_cfg.get("distance_threshold_cm", 40.0))
         self._eye_sustain_seconds = float(self._eye_monitoring_cfg.get("sustain_seconds", 2.0))
         self._eye_close_start_time: Optional[float] = None
         # frame width for focal length calculation (pixels)
         try:
+            # 기본값 1280, 하지만 실제 프레임 너비가 다를 수 있으므로 나중에 업데이트됨
             self._camera_frame_width = int(self.config.get_app_setting('camera_resolution_width', 1280)) if self.config else 1280
         except Exception:
             self._camera_frame_width = 1280
@@ -328,7 +329,8 @@ class IndicatorCalculator:
         self,
         landmarks: Dict[str, any],
         timestamp: float = 0.0,
-        low_latency: bool = False
+        low_latency: bool = False,
+        baseline_mode: bool = False
     ) -> Optional[PostureIndicators]:
         """
         모든 자세 지표 계산
@@ -361,22 +363,35 @@ class IndicatorCalculator:
             
             shoulder_w_raw = self.calculate_shoulder_width(landmarks['left_shoulder'], landmarks['right_shoulder'])
             
-            cheek_dist = self.ema_filters['cheek_distance'].process(cheek_dist_raw)
-            shoulder_w = self.ema_filters['shoulder_width'].process(shoulder_w_raw)
-            eye_dist = self.ema_filters['eye_distance'].process(eye_dist_raw)
-            face_v_len = self.ema_filters['face_vertical_length'].process(face_v_len_raw)
+            # v1.1: If baseline_mode is True, skip EMA filtering.
+            if baseline_mode:
+                cheek_dist = cheek_dist_raw
+                shoulder_w = shoulder_w_raw
+                eye_dist = eye_dist_raw
+                face_v_len = face_v_len_raw
+            else:
+                cheek_dist = self.ema_filters['cheek_distance'].process(cheek_dist_raw)
+                shoulder_w = self.ema_filters['shoulder_width'].process(shoulder_w_raw)
+                eye_dist = self.ema_filters['eye_distance'].process(eye_dist_raw)
+                face_v_len = self.ema_filters['face_vertical_length'].process(face_v_len_raw)
             
-            shoulder_tilt = self.calculate_shoulder_tilt_degree(landmarks['left_shoulder'], landmarks['right_shoulder'])
-            try:
-                self._shoulder_tilt_history.append(shoulder_tilt)
-                if len(self._shoulder_tilt_history) > 0:
-                    shoulder_tilt = float(np.median(list(self._shoulder_tilt_history)))
-            except Exception:
-                pass
+            shoulder_tilt_raw = self.calculate_shoulder_tilt_degree(landmarks['left_shoulder'], landmarks['right_shoulder'])
             
-            neck_off = self.calculate_neck_offset(landmarks.get('face_center'), landmarks['left_shoulder'], landmarks['right_shoulder'])
-            eye_tilt = self.calculate_eye_line_tilt(landmarks.get('left_eye'), landmarks.get('right_eye'))
-            chin_occ = self.calculate_chin_occlusion(landmarks.get('chin_points', []), {
+            # v1.1: If baseline_mode is True, skip median smoothing.
+            if baseline_mode:
+                shoulder_tilt = shoulder_tilt_raw
+            else:
+                shoulder_tilt = shoulder_tilt_raw
+                try:
+                    self._shoulder_tilt_history.append(shoulder_tilt)
+                    if len(self._shoulder_tilt_history) > 0:
+                        shoulder_tilt = float(np.median(list(self._shoulder_tilt_history)))
+                except Exception:
+                    pass
+            
+            neck_off_raw = self.calculate_neck_offset(landmarks.get('face_center'), landmarks['left_shoulder'], landmarks['right_shoulder'])
+            eye_tilt_raw = self.calculate_eye_line_tilt(landmarks.get('left_eye'), landmarks.get('right_eye'))
+            chin_occ_raw = self.calculate_chin_occlusion(landmarks.get('chin_points', []), {
                 'right_hand_tips': landmarks.get('right_hand_tips', []),
                 'left_hand_tips': landmarks.get('left_hand_tips', [])
             })
@@ -426,14 +441,21 @@ class IndicatorCalculator:
             
             hand_face_score_raw = (
                 hf_weights.get("near_score", 0.5) * near_score + 
-                hf_weights.get("occlusion_score", 0.5) * chin_occ
+                hf_weights.get("occlusion_score", 0.5) * chin_occ_raw
             )
             
-            shoulder_tilt = self.ema_filters['shoulder_tilt_deg'].process(shoulder_tilt)
-            neck_off = self.ema_filters['neck_offset'].process(neck_off)
-            eye_tilt = self.ema_filters['eye_line_tilt'].process(eye_tilt)
-            chin_occ = self.ema_filters['chin_occlusion'].process(chin_occ)
-            hand_face_score = self.ema_filters['hand_face_score'].process(hand_face_score_raw)
+            if baseline_mode:
+                shoulder_tilt = shoulder_tilt
+                neck_off = neck_off_raw
+                eye_tilt = eye_tilt_raw
+                chin_occ = chin_occ_raw
+                hand_face_score = hand_face_score_raw
+            else:
+                shoulder_tilt = self.ema_filters['shoulder_tilt_deg'].process(shoulder_tilt)
+                neck_off = self.ema_filters['neck_offset'].process(neck_off_raw)
+                eye_tilt = self.ema_filters['eye_line_tilt'].process(eye_tilt_raw)
+                chin_occ = self.ema_filters['chin_occlusion'].process(chin_occ_raw)
+                hand_face_score = self.ema_filters['hand_face_score'].process(hand_face_score_raw)
 
             # --- Iris-based eye-screen absolute distance estimation (cm) ---
             eye_screen_cm = None
@@ -466,7 +488,10 @@ class IndicatorCalculator:
                 # choose conservative (closer) estimate if available
                 vals = [v for v in (left_cm, right_cm) if v is not None]
                 if vals:
-                    eye_screen_cm = float(min(vals))
+                    # Apply -20cm offset correction as requested by user
+                    eye_screen_cm = float(min(vals)) - 20.0
+                    # Ensure the distance is not negative
+                    eye_screen_cm = max(0.0, eye_screen_cm)
 
                 # sustained warning logic
                 now = float(timestamp) if timestamp and timestamp > 0 else time.time()

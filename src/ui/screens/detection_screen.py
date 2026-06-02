@@ -98,6 +98,12 @@ class DetectionScreen(QWidget):
         self.cheek_detail_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
         layout.addWidget(self.cheek_detail_label)
 
+        self.distance_label = QLabel("화면 거리: - cm")
+        self.distance_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.distance_label.setFont(app_font(self.theme_manager.scale_pixel(16), QFont.Weight.Bold))
+        self.distance_label.setStyleSheet(f"color: {Colors.GRAY_MEDIUM.value};")
+        layout.addWidget(self.distance_label)
+
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
 
@@ -152,6 +158,13 @@ class DetectionScreen(QWidget):
                 self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (예상: {expected_cheek:.3f}, 편차: {deviation*100:+.1f}%)")
             else:
                 self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f}")
+
+            # 화면 거리 업데이트
+            dist_cm = indicators.eye_screen_distance_cm
+            if dist_cm is not None:
+                self.distance_label.setText(f"화면 거리: {dist_cm:.1f} cm")
+            else:
+                self.distance_label.setText("화면 거리: - cm")
 
             if self.session_manager and getattr(self.session_manager, "current_session", None) is not None:
                 self.session_manager.add_frame_data(frame_data)
