@@ -21,8 +21,9 @@
   },
   "filters": {
     "one_euro": {
-      "min_cutoff": 0.05,
-      "beta": 0.005
+      "min_cutoff": 0.7,
+      "beta": 0.005,
+      "d_cutoff": 1.0
     },
     "ema": {
       "alpha": 0.15

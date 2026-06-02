@@ -134,6 +134,16 @@ class ConfigManager:
         except KeyError as e:
             raise ValueError(f"'mediapipe' 키를 찾을 수 없습니다: {e}")
 
+    def get_filters_config(self) -> Dict[str, Any]:
+        """필터 설정 조회
+
+        posture_definition_criteria.json 내의 `filters` 항목을 반환합니다.
+        """
+        try:
+            return self.posture_criteria.get("filters", {})
+        except KeyError as e:
+            raise ValueError(f"'filters' 키를 찾을 수 없습니다: {e}")
+
     def get_baseline_config(self) -> Dict[str, Any] :
         """Baseline 설정 조회"""
         try:

@@ -8,6 +8,7 @@ import mediapipe as mp
 import numpy as np
 import cv2
 import time
+from src.utils.helpers import OneEuroFilter
 from typing import Dict, Tuple, Optional, List
 from collections import deque
 from copy import deepcopy
@@ -55,12 +56,25 @@ class LandmarkExtractor:
         self.hand_landmarker = None
         self.one_euro_filter = None
         # ghosting: sliding window (ms) for retaining recent landmark values
-        self._ghost_window_ms = 200  # 1 second
+        self._ghost_window_ms = 1000  # 1 second
         self._ghost_windows: Dict[str, deque] = {}
+        # OneEuro filters for representative scalar points (applied between representative values)
+        self._one_euro_filters: Dict[str, OneEuroFilter] = {}
 
         # 설정 로드
         self.config = get_config()
         self.mp_config = self.config.get_mediapipe_config()
+        # 필터 설정 로드 (posture_definition_criteria.json의 filters)
+        try:
+            self._filters_config = self.config.get_filters_config()
+        except Exception:
+            # 호환성: fallback to raw posture criteria
+            self._filters_config = self.config.get_posture_criteria().get("filters", {})
+
+        one_euro_cfg = self._filters_config.get("one_euro", {}) if self._filters_config else {}
+        self._one_euro_min_cutoff = float(one_euro_cfg.get("min_cutoff", 0.05))
+        self._one_euro_beta = float(one_euro_cfg.get("beta", 0.005))
+        self._one_euro_d_cutoff = float(one_euro_cfg.get("d_cutoff", 1.0))
 
         self._initialize_models()
         logger.info("LandmarkExtractor 초기화 완료")
@@ -625,6 +639,9 @@ class LandmarkExtractor:
         # timestamp for this frame (ms)
         ts = int(time.time() * 1000) if timestamp_ms is None else int(timestamp_ms)
 
+        # take a snapshot of raw normalized values (per-frame) so we can preserve them
+        raw_snapshot = {k: deepcopy(v) for k, v in normalized.items()}
+
         # Helper: is value present (non-empty)
         def _has_value(k, v):
             if v is None:
@@ -654,31 +671,25 @@ class LandmarkExtractor:
             while dq and dq[0][0] < cutoff:
                 dq.popleft()
 
-        # Build output: for scalar/list keys use most recent in window if current missing
+        # Build representative values from window (do not yet apply OneEuro)
+        rep_values: Dict[str, any] = {}
         for k in ghost_keys:
-            val = normalized.get(k)
+            val = raw_snapshot.get(k)
             if _has_value(k, val):
-                # already present, keep as-is (ensure scalar tuples are floats)
-                if isinstance(val, tuple) and len(val) >= 2:
-                    try:
-                        normalized[k] = (float(val[0]), float(val[1]))
-                    except Exception:
-                        normalized[k] = val
-                else:
-                    normalized[k] = deepcopy(val)
+                # use current frame's normalized (raw) value as representative
+                rep_values[k] = deepcopy(val)
             else:
                 dq = self._ghost_windows.get(k, deque())
                 if dq:
                     # use the most recent stored value
-                    normalized[k] = deepcopy(dq[-1][1])
+                    rep_values[k] = deepcopy(dq[-1][1])
                 else:
-                    normalized[k] = None
+                    rep_values[k] = None
 
-        # Special handling: choose shoulder pair within window that maximizes shoulder width
+        # Shoulder selection: choose pair within window that maximizes shoulder width
         l_dq = self._ghost_windows.get("left_shoulder", deque())
         r_dq = self._ghost_windows.get("right_shoulder", deque())
         if l_dq and r_dq:
-            # extract candidate points
             l_cands = [entry[1] for entry in l_dq if entry[1] is not None]
             r_cands = [entry[1] for entry in r_dq if entry[1] is not None]
             best_pair = (None, None)
@@ -694,11 +705,49 @@ class LandmarkExtractor:
                         best_pair = (lpt, rpt)
 
             if best_pair[0] is not None and best_pair[1] is not None:
-                normalized["left_shoulder"] = (float(best_pair[0][0]), float(best_pair[0][1]))
-                normalized["right_shoulder"] = (float(best_pair[1][0]), float(best_pair[1][1]))
-        else:
-            # fallback: if one side missing, keep last seen or None (already set above)
-            pass
+                rep_values["left_shoulder"] = (float(best_pair[0][0]), float(best_pair[0][1]))
+                rep_values["right_shoulder"] = (float(best_pair[1][0]), float(best_pair[1][1]))
+
+        # Apply OneEuro filtering between representative values for scalar points only
+        scalar_keys = [
+            "face_center",
+            "left_eye",
+            "right_eye",
+            "left_cheek",
+            "right_cheek",
+            "left_shoulder",
+            "right_shoulder",
+        ]
+
+        t_sec = float(ts) / 1000.0
+        for k in ghost_keys:
+            rep = rep_values.get(k)
+            # preserve raw per-frame normalized under a `_raw` suffix
+            normalized_key_raw = f"{k}_raw"
+            normalized[normalized_key_raw] = deepcopy(raw_snapshot.get(k))
+
+            if k in scalar_keys:
+                if rep is None:
+                    normalized[k] = None
+                else:
+                    # ensure OneEuroFilter exists for this key (use config params)
+                    if k not in self._one_euro_filters:
+                        min_cutoff = getattr(self, "_one_euro_min_cutoff", 0.05)
+                        beta = getattr(self, "_one_euro_beta", 0.005)
+                        d_cutoff = getattr(self, "_one_euro_d_cutoff", 1.0)
+                        self._one_euro_filters[k] = OneEuroFilter(
+                            min_cutoff=min_cutoff, beta=beta, d_cutoff=d_cutoff
+                        )
+                    try:
+                        vec = np.array([float(rep[0]), float(rep[1])], dtype=float)
+                        filtered = self._one_euro_filters[k].process(t_sec, vec)
+                        normalized[k] = (float(filtered[0]), float(filtered[1]))
+                    except Exception:
+                        # fallback to representative without filtering
+                        normalized[k] = (float(rep[0]), float(rep[1]))
+            else:
+                # lists (chin_points, hand tips): keep representative list as-is
+                normalized[k] = deepcopy(rep) if rep is not None else []
 
         return normalized
 
