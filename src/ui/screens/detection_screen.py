@@ -179,6 +179,7 @@ class DetectionScreen(QWidget):
             "chin_rest_estimated": "턱 받침",
             "eye_close": "화면 가까움",
             "turned_head": "고개 돌린 자세",
+            "side_tilt": "고개 기울인 자세",
             "baseline": "자세 맞춤 중"
         }
         self.posture_label.setText(f"{posture_map.get(posture_type, '알 수 없음')} ({probability:.1%})")

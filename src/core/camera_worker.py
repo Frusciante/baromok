@@ -352,6 +352,7 @@ class CameraWorker(QThread):
                         "chin_rest_estimated": judgment_result.chin_rest_likelihood,
                         "eye_close": judgment_result.eye_close_likelihood,
                         "turned_head": judgment_result.turned_head_likelihood,
+                        "side_tilt": judgment_result.side_tilt_likelihood,
                     }
                     probability = float(likelihood_map.get(posture_type, 0.0))
 
@@ -458,6 +459,7 @@ class CameraWorker(QThread):
             "chin_rest_estimated": "턱 받침",
             "eye_close": "화면 가까움",
             "turned_head": "고개 돌린 자세",
+            "side_tilt": "고개 기울인 자세",
             "baseline": "자세 맞춤 중"
         }
         display_posture = posture_name_map.get(posture_type, posture_type)

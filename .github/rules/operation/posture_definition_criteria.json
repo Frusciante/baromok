@@ -170,6 +170,16 @@
         "cheek_symmetry": 0.4,
         "chin_alignment": 0.3
       }
+    },
+    "side_tilt": {
+      "display_label": "고개 기울인 자세",
+      "primary_conditions": {
+        "eye_line_tilt_deg": {
+          "operator": ">=",
+          "threshold": 10.0
+        }
+      },
+      "sustain_seconds": 2.0
     }
   },
   "frame_scoring": {

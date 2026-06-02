@@ -26,6 +26,7 @@ class PostureType(Enum):
     CHIN_REST = "chin_rest_estimated"  # 턱 괸 자세
     EYE_CLOSE = "eye_close"  # 화면과 눈 거리 가까움 (홍채 기반)
     TURNED_HEAD = "turned_head"  # 고개 돌린 자세 (Yaw)
+    SIDE_TILT = "side_tilt"  # 고개 기울인 자세 (Roll)
 
 
 @dataclass
@@ -42,6 +43,8 @@ class PostureJudgmentResult:
     eye_close_triggered: bool
     turned_head_likelihood: float
     turned_head_triggered: bool
+    side_tilt_likelihood: float
+    side_tilt_triggered: bool
     dominant_posture: Optional[str]  # triggered된 자세 중 가장 확률이 높은 자세
     timestamp: float
 
@@ -146,6 +149,7 @@ class JudgmentEngine:
         chin_rest_raw = self._judge_chin_rest(indicators)
         eye_close_raw = self._judge_eye_close(indicators)
         turned_head_raw = self._judge_turned_head(indicators)
+        side_tilt_raw = self._judge_side_tilt(indicators)
         
         # Likelihood Smoothing
         forward_head_like = self.likes_filters[PostureType.FORWARD_HEAD.value].process(forward_head_raw["likelihood"])
@@ -153,6 +157,7 @@ class JudgmentEngine:
         chin_rest_like = self.likes_filters[PostureType.CHIN_REST.value].process(chin_rest_raw["likelihood"])
         eye_close_like = self.likes_filters[PostureType.EYE_CLOSE.value].process(eye_close_raw["likelihood"])
         turned_head_like = self.likes_filters[PostureType.TURNED_HEAD.value].process(turned_head_raw["likelihood"])
+        side_tilt_like = self.likes_filters[PostureType.SIDE_TILT.value].process(side_tilt_raw["likelihood"])
 
         warning_threshold = self.config.get_state_machine_config().get("thresholds", {}).get("warning", 0.45)
 
@@ -162,6 +167,7 @@ class JudgmentEngine:
             PostureType.CHIN_REST.value: {"likelihood": chin_rest_like, "triggered": chin_rest_like >= warning_threshold},
             PostureType.EYE_CLOSE.value: {"likelihood": eye_close_like, "triggered": eye_close_like >= warning_threshold},
             PostureType.TURNED_HEAD.value: {"likelihood": turned_head_like, "triggered": turned_head_like >= warning_threshold},
+            PostureType.SIDE_TILT.value: {"likelihood": side_tilt_like, "triggered": side_tilt_like >= warning_threshold},
         }
 
         triggered_candidates = {
@@ -172,16 +178,17 @@ class JudgmentEngine:
 
         dominant_posture = None
         if triggered_candidates:
-            # 여러 자세가 트리거된 경우 가장 높은 확률 선택 (turned_head 우선권 제거)
+            # 여러 자세가 트리거된 경우 가장 높은 확률 선택
             dominant_posture = max(triggered_candidates, key=triggered_candidates.get)
         else:
-            # 트리거되지 않았더라도 정보 제공을 위해 가장 높은 가능성 선택 (0.2 이상으로 상향 조정)
+            # 트리거되지 않았더라도 정보 제공을 위해 가장 높은 가능성 선택 (0.2 이상)
             likes = {
                 PostureType.FORWARD_HEAD.value: forward_head_like,
                 PostureType.RECLINE.value: recline_like,
                 PostureType.CHIN_REST.value: chin_rest_like,
                 PostureType.EYE_CLOSE.value: eye_close_like,
                 PostureType.TURNED_HEAD.value: turned_head_like,
+                PostureType.SIDE_TILT.value: side_tilt_like,
             }
             best_posture = max(likes, key=likes.get)
             if likes[best_posture] >= 0.2:
@@ -198,6 +205,8 @@ class JudgmentEngine:
             eye_close_triggered=candidates[PostureType.EYE_CLOSE.value]["triggered"],
             turned_head_likelihood=turned_head_like,
             turned_head_triggered=candidates[PostureType.TURNED_HEAD.value]["triggered"],
+            side_tilt_likelihood=side_tilt_like,
+            side_tilt_triggered=candidates[PostureType.SIDE_TILT.value]["triggered"],
             dominant_posture=dominant_posture,
             timestamp=indicators.timestamp,
         )
@@ -347,6 +356,27 @@ class JudgmentEngine:
             logger.error(f"고개 돌린 자세 판정 실패: {e}")
             return {"likelihood": 0.0, "triggered": False}
 
+    def _judge_side_tilt(self, indicators: PostureIndicators) -> Dict[str, Any]:
+        """고개 기울인 자세 판정 (Roll)"""
+        try:
+            # 설정에서 임계값 로드
+            criteria = self.config.get_posture_type_config(PostureType.SIDE_TILT.value)
+            primary_th = criteria.get("primary_conditions", {}).get("eye_line_tilt_deg", {}).get("threshold", 10.0)
+            
+            tilt = abs(indicators.eye_line_tilt)
+            
+            if tilt < 3.0: # 미세한 기울임은 무시
+                return {"likelihood": 0.0, "triggered": False}
+                
+            # 점수 계산 (임계값 대비 비율)
+            score = tilt / primary_th
+            
+            return {"likelihood": float(np.clip(score, 0.0, 1.0)), "triggered": False}
+
+        except Exception as e:
+            logger.error(f"고개 기울인 자세 판정 실패: {e}")
+            return {"likelihood": 0.0, "triggered": False}
+
     def accumulate_frame(self, judgment: PostureJudgmentResult, current_timestamp: Optional[float] = None):
         """프레임 판정 결과 누적"""
         if current_timestamp is None:
@@ -358,6 +388,7 @@ class JudgmentEngine:
             PostureType.CHIN_REST.value: judgment.chin_rest_triggered,
             PostureType.EYE_CLOSE.value: judgment.eye_close_triggered,
             PostureType.TURNED_HEAD.value: judgment.turned_head_triggered,
+            PostureType.SIDE_TILT.value: judgment.side_tilt_triggered,
         }
 
         for posture_type, is_triggered in triggered_map.items():

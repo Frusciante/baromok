@@ -110,6 +110,8 @@ class StateMachine:
                         # 상태 유지 (WARNING 유지)
                         return self.current_state
 
+                    # [수정] side_tilt(고개 기울인 자세)는 일반 자세와 동일하게 BAD_POSTURE로 전이되도록 놔둔다.
+
                     # 나쁜 자세 지정된 시간(min_duration) 이상 지속 시 BAD_POSTURE로 전이
                     if time_in_previous_state >= min_duration:
                         self._transition_to(PostureState.BAD_POSTURE, confirmed_posture)
