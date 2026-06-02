@@ -25,6 +25,7 @@ class PostureType(Enum):
     RECLINE = "recline"  # 기댄 자세
     CHIN_REST = "chin_rest_estimated"  # 턱 괸 자세
     EYE_CLOSE = "eye_close"  # 화면과 눈 거리 가까움 (홍채 기반)
+    TURNED_HEAD = "turned_head"  # 고개 돌린 자세 (Yaw)
 
 
 @dataclass
@@ -39,6 +40,8 @@ class PostureJudgmentResult:
     chin_rest_triggered: bool
     eye_close_likelihood: float
     eye_close_triggered: bool
+    turned_head_likelihood: float
+    turned_head_triggered: bool
     dominant_posture: Optional[str]  # triggered된 자세 중 가장 확률이 높은 자세
     timestamp: float
 
@@ -124,6 +127,8 @@ class JudgmentEngine:
                 chin_rest_triggered=False,
                 eye_close_likelihood=0.0,
                 eye_close_triggered=False,
+                turned_head_likelihood=0.0,
+                turned_head_triggered=False,
                 dominant_posture=None,
                 timestamp=indicators.timestamp,
             )
@@ -140,12 +145,14 @@ class JudgmentEngine:
         recline_raw = self._judge_recline(indicators, deviation)
         chin_rest_raw = self._judge_chin_rest(indicators)
         eye_close_raw = self._judge_eye_close(indicators)
+        turned_head_raw = self._judge_turned_head(indicators)
         
         # Likelihood Smoothing
         forward_head_like = self.likes_filters[PostureType.FORWARD_HEAD.value].process(forward_head_raw["likelihood"])
         recline_like = self.likes_filters[PostureType.RECLINE.value].process(recline_raw["likelihood"])
         chin_rest_like = self.likes_filters[PostureType.CHIN_REST.value].process(chin_rest_raw["likelihood"])
         eye_close_like = self.likes_filters[PostureType.EYE_CLOSE.value].process(eye_close_raw["likelihood"])
+        turned_head_like = self.likes_filters[PostureType.TURNED_HEAD.value].process(turned_head_raw["likelihood"])
 
         warning_threshold = self.config.get_state_machine_config().get("thresholds", {}).get("warning", 0.45)
 
@@ -154,6 +161,7 @@ class JudgmentEngine:
             PostureType.RECLINE.value: {"likelihood": recline_like, "triggered": recline_like >= warning_threshold},
             PostureType.CHIN_REST.value: {"likelihood": chin_rest_like, "triggered": chin_rest_like >= warning_threshold},
             PostureType.EYE_CLOSE.value: {"likelihood": eye_close_like, "triggered": eye_close_like >= warning_threshold},
+            PostureType.TURNED_HEAD.value: {"likelihood": turned_head_like, "triggered": turned_head_like >= warning_threshold},
         }
 
         triggered_candidates = {
@@ -164,7 +172,20 @@ class JudgmentEngine:
 
         dominant_posture = None
         if triggered_candidates:
+            # 여러 자세가 트리거된 경우 가장 높은 확률 선택 (turned_head 우선권 제거)
             dominant_posture = max(triggered_candidates, key=triggered_candidates.get)
+        else:
+            # 트리거되지 않았더라도 정보 제공을 위해 가장 높은 가능성 선택 (0.2 이상으로 상향 조정)
+            likes = {
+                PostureType.FORWARD_HEAD.value: forward_head_like,
+                PostureType.RECLINE.value: recline_like,
+                PostureType.CHIN_REST.value: chin_rest_like,
+                PostureType.EYE_CLOSE.value: eye_close_like,
+                PostureType.TURNED_HEAD.value: turned_head_like,
+            }
+            best_posture = max(likes, key=likes.get)
+            if likes[best_posture] >= 0.2:
+                dominant_posture = best_posture
 
         return PostureJudgmentResult(
             forward_head_likelihood=forward_head_like,
@@ -175,6 +196,8 @@ class JudgmentEngine:
             chin_rest_triggered=candidates[PostureType.CHIN_REST.value]["triggered"],
             eye_close_likelihood=eye_close_like,
             eye_close_triggered=candidates[PostureType.EYE_CLOSE.value]["triggered"],
+            turned_head_likelihood=turned_head_like,
+            turned_head_triggered=candidates[PostureType.TURNED_HEAD.value]["triggered"],
             dominant_posture=dominant_posture,
             timestamp=indicators.timestamp,
         )
@@ -194,10 +217,10 @@ class JudgmentEngine:
             side_tilt_excessive = abs(indicators.eye_line_tilt) > guards.get("max_eye_tilt", 12.0)
             shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > guards.get("max_shoulder_tilt", 10.0)
             
-            # 눈/광대 대칭 확인
-            eye_sym_excessive = indicators.eye_symmetry_ratio > guards.get("max_eye_symmetry_ratio", 0.15)
-            cheek_sym_excessive = indicators.cheek_symmetry_ratio > guards.get("max_cheek_symmetry_ratio", 0.15)
-            chin_offset_excessive = indicators.chin_alignment_offset > guards.get("max_chin_alignment_offset", 0.05)
+            # 눈/광대 대칭 확인 (0.08 -> 0.12로 완화하여 너무 민감하게 차단되지 않도록 함)
+            eye_sym_excessive = indicators.eye_symmetry_ratio > 0.12
+            cheek_sym_excessive = indicators.cheek_symmetry_ratio > 0.12
+            chin_offset_excessive = indicators.chin_alignment_offset > 0.05
             
             if side_tilt_excessive or shoulder_tilt_excessive or eye_sym_excessive or cheek_sym_excessive or chin_offset_excessive:
                 return {"likelihood": 0.0, "triggered": False}
@@ -226,10 +249,10 @@ class JudgmentEngine:
             side_tilt_excessive = abs(indicators.eye_line_tilt) > guards.get("max_eye_tilt", 12.0)
             shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > guards.get("max_shoulder_tilt", 10.0)
             
-            # 눈/광대 대칭 및 턱 정렬 확인
-            eye_sym_excessive = indicators.eye_symmetry_ratio > guards.get("max_eye_symmetry_ratio", 0.15)
-            cheek_sym_excessive = indicators.cheek_symmetry_ratio > guards.get("max_cheek_symmetry_ratio", 0.15)
-            chin_offset_excessive = indicators.chin_alignment_offset > guards.get("max_chin_alignment_offset", 0.05)
+            # 눈/광대 대칭 및 턱 정렬 확인 (0.08 -> 0.12로 완화)
+            eye_sym_excessive = indicators.eye_symmetry_ratio > 0.12
+            cheek_sym_excessive = indicators.cheek_symmetry_ratio > 0.12
+            chin_offset_excessive = indicators.chin_alignment_offset > 0.05
 
             if side_tilt_excessive or shoulder_tilt_excessive or eye_sym_excessive or cheek_sym_excessive or chin_offset_excessive:
                 return {"likelihood": 0.0, "triggered": False}
@@ -299,6 +322,31 @@ class JudgmentEngine:
             logger.error(f"eye_close 판정 실패: {e}")
             return {"likelihood": 0.0, "triggered": False}
 
+    def _judge_turned_head(self, indicators: PostureIndicators) -> Dict[str, Any]:
+        """고개 돌린 자세 판정 (Yaw)"""
+        try:
+            # 설정에서 임계값 로드 (없으면 기본값 사용)
+            criteria = self.config.get_posture_type_config(PostureType.TURNED_HEAD.value)
+            th_config = criteria.get("thresholds", {})
+            
+            eye_th = th_config.get("eye_symmetry", 0.4)
+            cheek_th = th_config.get("cheek_symmetry", 0.4)
+            chin_th = th_config.get("chin_alignment", 0.3)
+            
+            # 각 지표별 점수 계산
+            eye_score = self._normalize_score(indicators.eye_symmetry_ratio / eye_th, min_val=0.0, max_val=2.0)
+            cheek_score = self._normalize_score(indicators.cheek_symmetry_ratio / cheek_th, min_val=0.0, max_val=2.0)
+            chin_score = self._normalize_score(indicators.chin_alignment_offset / chin_th, min_val=0.0, max_val=2.0)
+            
+            # 가중 합산 (전체적인 균형 중시)
+            likelihood = 0.4 * eye_score + 0.4 * cheek_score + 0.2 * chin_score
+            
+            return {"likelihood": float(np.clip(likelihood, 0.0, 1.0)), "triggered": False}
+
+        except Exception as e:
+            logger.error(f"고개 돌린 자세 판정 실패: {e}")
+            return {"likelihood": 0.0, "triggered": False}
+
     def accumulate_frame(self, judgment: PostureJudgmentResult, current_timestamp: Optional[float] = None):
         """프레임 판정 결과 누적"""
         if current_timestamp is None:
@@ -309,6 +357,7 @@ class JudgmentEngine:
             PostureType.RECLINE.value: judgment.recline_triggered,
             PostureType.CHIN_REST.value: judgment.chin_rest_triggered,
             PostureType.EYE_CLOSE.value: judgment.eye_close_triggered,
+            PostureType.TURNED_HEAD.value: judgment.turned_head_triggered,
         }
 
         for posture_type, is_triggered in triggered_map.items():

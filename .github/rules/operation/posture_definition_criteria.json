@@ -161,6 +161,15 @@
         }
       },
       "sustain_seconds": 2.0
+    },
+    "turned_head": {
+      "display_label": "고개 돌린 자세",
+      "sustain_seconds": 1.5,
+      "thresholds": {
+        "eye_symmetry": 0.4,
+        "cheek_symmetry": 0.4,
+        "chin_alignment": 0.3
+      }
     }
   },
   "frame_scoring": {

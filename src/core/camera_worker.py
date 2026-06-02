@@ -350,6 +350,8 @@ class CameraWorker(QThread):
                         "forward_head": judgment_result.forward_head_likelihood,
                         "recline": judgment_result.recline_likelihood,
                         "chin_rest_estimated": judgment_result.chin_rest_likelihood,
+                        "eye_close": judgment_result.eye_close_likelihood,
+                        "turned_head": judgment_result.turned_head_likelihood,
                     }
                     probability = float(likelihood_map.get(posture_type, 0.0))
 
@@ -443,10 +445,22 @@ class CameraWorker(QThread):
         # 상태 텍스트
         state_text_map = {
             PostureState.NORMAL: "정상",
-            PostureState.WARNING: "경고",
+            PostureState.WARNING: "주의",
             PostureState.BAD_POSTURE: "나쁜자세",
         }
         state_text = state_text_map.get(state, "알 수 없음")
+
+        # 자세 유형 한글 매핑
+        posture_name_map = {
+            "normal": "바른 자세",
+            "forward_head": "거북목",
+            "recline": "기댄 자세",
+            "chin_rest_estimated": "턱 받침",
+            "eye_close": "화면 가까움",
+            "turned_head": "고개 돌린 자세",
+            "baseline": "자세 맞춤 중"
+        }
+        display_posture = posture_name_map.get(posture_type, posture_type)
 
         # Iris visualization (debugging)
         if normalized_landmarks:
@@ -468,7 +482,7 @@ class CameraWorker(QThread):
                     cv2.polylines(annotated, [pts], True, (255, 255, 0), 2)
 
         # 상단 정보 표시
-        info_text = f"{state_text} | {posture_type} | Prob: {probability:.2f}"
+        info_text = f"{state_text} | {display_posture} | {probability:.1%}"
         cv2.putText(
             annotated,
             info_text,
