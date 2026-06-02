@@ -24,6 +24,7 @@ class PostureType(Enum):
     FORWARD_HEAD = "forward_head"  # 거북목
     RECLINE = "recline"  # 기댄 자세
     CHIN_REST = "chin_rest_estimated"  # 턱 괸 자세
+    EYE_CLOSE = "eye_close"  # 화면과 눈 거리 가까움 (홍채 기반)
 
 
 @dataclass
@@ -36,6 +37,8 @@ class PostureJudgmentResult:
     recline_triggered: bool
     chin_rest_likelihood: float
     chin_rest_triggered: bool
+    eye_close_likelihood: float
+    eye_close_triggered: bool
     dominant_posture: Optional[str]  # triggered된 자세 중 가장 확률이 높은 자세
     timestamp: float
 
@@ -60,7 +63,8 @@ class JudgmentEngine:
         self.weights = scoring_config.get("likelihood_weights", {
             "forward_head": {"deviation": 1.0},
             "recline": {"deviation": 1.0},
-            "chin_rest": {"eye": 0.35, "shoulder": 0.2, "neck": 0.15, "hand": 0.3}
+            "chin_rest": {"eye": 0.35, "shoulder": 0.2, "neck": 0.15, "hand": 0.3},
+            "eye_close": {"distance": 1.0}
         })
         
         # 기본 감도 및 보정 계수
@@ -74,35 +78,25 @@ class JudgmentEngine:
         # 스코어링 앵커 (감도 도달 시 부여할 점수)
         self.warning_anchor = scoring_config.get("warning_anchor", 0.5)
 
-        # 자세별 프레임 누적 횟수
+        # 자세별 프레임 누적 횟수 / 시작시간 / 활성 지속시간 초기화
         self.posture_history: Dict[str, int] = {
-            PostureType.FORWARD_HEAD.value: 0,
-            PostureType.RECLINE.value: 0,
-            PostureType.CHIN_REST.value: 0,
+            pt.value: 0 for pt in PostureType
         }
 
-        # 자세별 실제 지속 시간 계산용 타임스탬프
         self.posture_start_times: Dict[str, Optional[float]] = {
-            PostureType.FORWARD_HEAD.value: None,
-            PostureType.RECLINE.value: None,
-            PostureType.CHIN_REST.value: None,
+            pt.value: None for pt in PostureType
         }
 
         self.posture_active_durations: Dict[str, float] = {
-            PostureType.FORWARD_HEAD.value: 0.0,
-            PostureType.RECLINE.value: 0.0,
-            PostureType.CHIN_REST.value: 0.0,
+            pt.value: 0.0 for pt in PostureType
         }
 
         self.last_confirmed_posture: Optional[str] = None
         
         # EMA 필터 (설정에서 alpha 값 로드)
         ema_alpha = self.config.get_posture_criteria().get("filters", {}).get("ema", {}).get("alpha", 0.15)
-        self.likes_filters = {
-            PostureType.FORWARD_HEAD.value: EMAFilter(alpha=ema_alpha),
-            PostureType.RECLINE.value: EMAFilter(alpha=ema_alpha),
-            PostureType.CHIN_REST.value: EMAFilter(alpha=ema_alpha),
-        }
+        # EMA 필터을 모든 정의된 자세 유형에 대해 동적으로 생성
+        self.likes_filters = {pt.value: EMAFilter(alpha=ema_alpha) for pt in PostureType}
 
         logger.info("JudgmentEngine 초기화 완료")
 
@@ -121,7 +115,18 @@ class JudgmentEngine:
         # Baseline 정보
         baseline = self.baseline_manager.get_baseline_metrics()
         if not baseline or not baseline.metrics:
-            return PostureJudgmentResult(0, False, 0, False, 0, False, None, indicators.timestamp)
+            return PostureJudgmentResult(
+                forward_head_likelihood=0.0,
+                forward_head_triggered=False,
+                recline_likelihood=0.0,
+                recline_triggered=False,
+                chin_rest_likelihood=0.0,
+                chin_rest_triggered=False,
+                eye_close_likelihood=0.0,
+                eye_close_triggered=False,
+                dominant_posture=None,
+                timestamp=indicators.timestamp,
+            )
 
         # RANSAC 모델을 통한 기대 광대 거리 산출
         expected_cheek = max(1e-6, self.baseline_manager.get_expected_cheek(indicators.shoulder_width))
@@ -134,11 +139,13 @@ class JudgmentEngine:
         forward_head_raw = self._judge_forward_head(indicators, deviation)
         recline_raw = self._judge_recline(indicators, deviation)
         chin_rest_raw = self._judge_chin_rest(indicators)
+        eye_close_raw = self._judge_eye_close(indicators)
         
         # Likelihood Smoothing
         forward_head_like = self.likes_filters[PostureType.FORWARD_HEAD.value].process(forward_head_raw["likelihood"])
         recline_like = self.likes_filters[PostureType.RECLINE.value].process(recline_raw["likelihood"])
         chin_rest_like = self.likes_filters[PostureType.CHIN_REST.value].process(chin_rest_raw["likelihood"])
+        eye_close_like = self.likes_filters[PostureType.EYE_CLOSE.value].process(eye_close_raw["likelihood"])
 
         warning_threshold = self.config.get_state_machine_config().get("thresholds", {}).get("warning", 0.45)
 
@@ -146,6 +153,7 @@ class JudgmentEngine:
             PostureType.FORWARD_HEAD.value: {"likelihood": forward_head_like, "triggered": forward_head_like >= warning_threshold},
             PostureType.RECLINE.value: {"likelihood": recline_like, "triggered": recline_like >= warning_threshold},
             PostureType.CHIN_REST.value: {"likelihood": chin_rest_like, "triggered": chin_rest_like >= warning_threshold},
+            PostureType.EYE_CLOSE.value: {"likelihood": eye_close_like, "triggered": eye_close_like >= warning_threshold},
         }
 
         triggered_candidates = {
@@ -165,6 +173,8 @@ class JudgmentEngine:
             recline_triggered=candidates[PostureType.RECLINE.value]["triggered"],
             chin_rest_likelihood=chin_rest_like,
             chin_rest_triggered=candidates[PostureType.CHIN_REST.value]["triggered"],
+            eye_close_likelihood=eye_close_like,
+            eye_close_triggered=candidates[PostureType.EYE_CLOSE.value]["triggered"],
             dominant_posture=dominant_posture,
             timestamp=indicators.timestamp,
         )
@@ -263,6 +273,32 @@ class JudgmentEngine:
             logger.error(f"턱 괸 자세 판정 실패: {e}")
             return {"likelihood": 0.0, "triggered": False}
 
+    def _judge_eye_close(self, indicators: PostureIndicators) -> Dict[str, Any]:
+        """화면과 눈 거리 가까움 판단 (홍채 기반 거리 측정)"""
+        try:
+            # 즉시 경고 플래그가 켜져 있으면 높은 우선순위
+            if indicators.eye_close_warning:
+                return {"likelihood": 1.0, "triggered": True}
+
+            dist_cm = indicators.eye_screen_distance_cm
+            # 구성에서 임계값 확인
+            try:
+                cfg = self.config.get_posture_criteria().get("eye_monitoring", {})
+                threshold = float(cfg.get("distance_threshold_cm", 40.0))
+            except Exception:
+                threshold = 40.0
+
+            if dist_cm is None:
+                return {"likelihood": 0.0, "triggered": False}
+
+            # 거리 임계값보다 작을수록 심각: normalize (threshold - d)/threshold
+            severity = max(0.0, (threshold - float(dist_cm)) / max(1e-6, threshold))
+            return {"likelihood": float(np.clip(severity, 0.0, 1.0)), "triggered": False}
+
+        except Exception as e:
+            logger.error(f"eye_close 판정 실패: {e}")
+            return {"likelihood": 0.0, "triggered": False}
+
     def accumulate_frame(self, judgment: PostureJudgmentResult, current_timestamp: Optional[float] = None):
         """프레임 판정 결과 누적"""
         if current_timestamp is None:
@@ -272,6 +308,7 @@ class JudgmentEngine:
             PostureType.FORWARD_HEAD.value: judgment.forward_head_triggered,
             PostureType.RECLINE.value: judgment.recline_triggered,
             PostureType.CHIN_REST.value: judgment.chin_rest_triggered,
+            PostureType.EYE_CLOSE.value: judgment.eye_close_triggered,
         }
 
         for posture_type, is_triggered in triggered_map.items():

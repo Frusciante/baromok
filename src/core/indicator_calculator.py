@@ -4,6 +4,8 @@
 랜드마크로부터 자세 관련 지표를 계산 (거리, 비율, 각도 등)
 """
 import numpy as np
+import math
+import time
 from dataclasses import dataclass
 from typing import Tuple, Dict, Optional
 from src.utils.helpers import GeometryHelper, NormalizationHelper, EMAFilter
@@ -34,7 +36,12 @@ class PostureIndicators:
     cheek_symmetry_ratio: float # 광대 중앙 정렬 비율
     chin_alignment_offset: float # 턱의 수평 이탈 정도
     
-    timestamp: float  # 타임스탬프
+    # Absolute eye-screen distance (cm) measured via iris; None if unavailable
+    eye_screen_distance_cm: Optional[float] = None
+    # Warning flag: eye closer than configured threshold continuously for sustain_seconds
+    eye_close_warning: bool = False
+    
+    timestamp: float = 0.0  # 타임스탬프
     step_index: int = 0 # 자세 맞춤 단계 (디버그용)
 
 
@@ -66,6 +73,24 @@ class IndicatorCalculator:
             'hand_face_score': EMAFilter(alpha=alpha),
         }
         logger.info(f"IndicatorCalculator 초기화 완료 (alpha={alpha})")
+        # Eye monitoring / iris-based absolute distance settings
+        self._eye_monitoring_cfg = {}
+        try:
+            if self.config:
+                self._eye_monitoring_cfg = self.config.get_posture_criteria().get("eye_monitoring", {})
+        except Exception:
+            self._eye_monitoring_cfg = {}
+
+        self._iris_diameter_mm = float(self._eye_monitoring_cfg.get("iris_diameter_mm", 11.7))
+        self._camera_hfov_deg = float(self._eye_monitoring_cfg.get("camera_horizontal_fov_deg", 60.0))
+        self._eye_distance_threshold_cm = float(self._eye_monitoring_cfg.get("distance_threshold_cm", 40.0))
+        self._eye_sustain_seconds = float(self._eye_monitoring_cfg.get("sustain_seconds", 2.0))
+        self._eye_close_start_time: Optional[float] = None
+        # frame width for focal length calculation (pixels)
+        try:
+            self._camera_frame_width = int(self.config.get_app_setting('camera_resolution_width', 1280)) if self.config else 1280
+        except Exception:
+            self._camera_frame_width = 1280
     
     def calculate_cheek_distance(
         self, 
@@ -409,6 +434,54 @@ class IndicatorCalculator:
             eye_tilt = self.ema_filters['eye_line_tilt'].process(eye_tilt)
             chin_occ = self.ema_filters['chin_occlusion'].process(chin_occ)
             hand_face_score = self.ema_filters['hand_face_score'].process(hand_face_score_raw)
+
+            # --- Iris-based eye-screen absolute distance estimation (cm) ---
+            eye_screen_cm = None
+            eye_warning = False
+            try:
+                # prefer raw per-frame iris diameters if available
+                left_px = None
+                right_px = None
+                if landmarks.get('left_iris_diameter_px_raw') is not None:
+                    left_px = landmarks.get('left_iris_diameter_px_raw')
+                elif landmarks.get('left_iris_diameter_px') is not None:
+                    left_px = landmarks.get('left_iris_diameter_px')
+
+                if landmarks.get('right_iris_diameter_px_raw') is not None:
+                    right_px = landmarks.get('right_iris_diameter_px_raw')
+                elif landmarks.get('right_iris_diameter_px') is not None:
+                    right_px = landmarks.get('right_iris_diameter_px')
+
+                def _compute_z_cm(d_px: float) -> Optional[float]:
+                    if d_px is None or d_px <= 0:
+                        return None
+                    hfov_rad = math.radians(self._camera_hfov_deg)
+                    f_px = float(self._camera_frame_width) / (2.0 * math.tan(hfov_rad / 2.0))
+                    z_mm = (self._iris_diameter_mm * f_px) / float(d_px)
+                    return float(z_mm / 10.0)
+
+                left_cm = _compute_z_cm(left_px)
+                right_cm = _compute_z_cm(right_px)
+
+                # choose conservative (closer) estimate if available
+                vals = [v for v in (left_cm, right_cm) if v is not None]
+                if vals:
+                    eye_screen_cm = float(min(vals))
+
+                # sustained warning logic
+                now = float(timestamp) if timestamp and timestamp > 0 else time.time()
+                if eye_screen_cm is not None and eye_screen_cm <= self._eye_distance_threshold_cm:
+                    if self._eye_close_start_time is None:
+                        self._eye_close_start_time = now
+                    elapsed = now - float(self._eye_close_start_time)
+                    if elapsed >= float(self._eye_sustain_seconds):
+                        eye_warning = True
+                else:
+                    self._eye_close_start_time = None
+                    eye_warning = False
+            except Exception:
+                eye_screen_cm = None
+                eye_warning = False
             
             return PostureIndicators(
                 cheek_distance=cheek_dist,
@@ -424,6 +497,8 @@ class IndicatorCalculator:
                 eye_symmetry_ratio=eye_sym,
                 cheek_symmetry_ratio=cheek_sym,
                 chin_alignment_offset=chin_offset,
+                eye_screen_distance_cm=eye_screen_cm,
+                eye_close_warning=eye_warning,
                 timestamp=timestamp
             )
         except Exception as e:

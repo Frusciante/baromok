@@ -482,6 +482,52 @@ class LandmarkExtractor:
             if chin_point is not None:
                 landmarks["chin_points"].append(chin_point)
 
+            # 홍채(Iris) 추출: MediaPipe FaceMesh의 iris 인덱스 영역(468-477) 사용
+            left_iris_diam_px = None
+            right_iris_diam_px = None
+            try:
+                iris_candidates = []
+                for idx in range(468, 478):
+                    if len(face_lms) > idx and len(face_conf) > idx and face_conf[idx] > confidence_threshold:
+                        pt = self._get_pixel_point(face_lms[idx], face_conf[idx], frame_width, frame_height)
+                        iris_candidates.append((idx, (pt[0], pt[1])))
+
+                if iris_candidates:
+                    # 좌/우로 클러스터링: 눈 중심의 x값을 기준으로 분할
+                    mid_x = None
+                    if landmarks.get('left_eye') and landmarks.get('right_eye'):
+                        mid_x = (landmarks['left_eye'][0] + landmarks['right_eye'][0]) / 2.0
+                    if mid_x is None:
+                        xs = [p[1][0] for p in iris_candidates]
+                        mid_x = float(np.median(xs)) if xs else None
+
+                    left_pts = []
+                    right_pts = []
+                    for (_i, p) in iris_candidates:
+                        if mid_x is not None and p[0] <= mid_x:
+                            left_pts.append(p)
+                        else:
+                            right_pts.append(p)
+
+                    def _compute_diam(pts):
+                        if not pts or len(pts) < 3:
+                            return None
+                        arr = np.array(pts, dtype=float)
+                        cen = arr.mean(axis=0)
+                        dists = np.linalg.norm(arr - cen, axis=1)
+                        diam = 2.0 * float(np.mean(dists))
+                        return diam
+
+                    left_iris_diam_px = _compute_diam(left_pts)
+                    right_iris_diam_px = _compute_diam(right_pts)
+            except Exception:
+                # 안전하게 실패 허용
+                left_iris_diam_px = None
+                right_iris_diam_px = None
+
+            landmarks['left_iris_diameter_px'] = left_iris_diam_px
+            landmarks['right_iris_diameter_px'] = right_iris_diam_px
+
         # 디버그: 필수 face 포인트 신뢰도 로깅(존재하지 않거나 낮으면 원인 파악에 도움됨)
         try:
             if extracted.face is not None:
@@ -630,6 +676,9 @@ class LandmarkExtractor:
             "chin_points",
             "left_hand_tips",
             "right_hand_tips",
+            # iris diameter (pixels)
+            "left_iris_diameter_px",
+            "right_iris_diameter_px",
         ]
 
         # Lazy init deques for each ghost key
@@ -708,8 +757,8 @@ class LandmarkExtractor:
                 rep_values["left_shoulder"] = (float(best_pair[0][0]), float(best_pair[0][1]))
                 rep_values["right_shoulder"] = (float(best_pair[1][0]), float(best_pair[1][1]))
 
-        # Apply OneEuro filtering between representative values for scalar points only
-        scalar_keys = [
+        # Apply OneEuro filtering between representative values for scalar/vector points only
+        scalar_vector_keys = [
             "face_center",
             "left_eye",
             "right_eye",
@@ -718,6 +767,11 @@ class LandmarkExtractor:
             "left_shoulder",
             "right_shoulder",
         ]
+        # Scalar (1D) keys such as iris diameters (pixels)
+        scalar_scalar_keys = [
+            "left_iris_diameter_px",
+            "right_iris_diameter_px",
+        ]
 
         t_sec = float(ts) / 1000.0
         for k in ghost_keys:
@@ -725,8 +779,7 @@ class LandmarkExtractor:
             # preserve raw per-frame normalized under a `_raw` suffix
             normalized_key_raw = f"{k}_raw"
             normalized[normalized_key_raw] = deepcopy(raw_snapshot.get(k))
-
-            if k in scalar_keys:
+            if k in scalar_vector_keys:
                 if rep is None:
                     normalized[k] = None
                 else:
@@ -743,8 +796,25 @@ class LandmarkExtractor:
                         filtered = self._one_euro_filters[k].process(t_sec, vec)
                         normalized[k] = (float(filtered[0]), float(filtered[1]))
                     except Exception:
-                        # fallback to representative without filtering
                         normalized[k] = (float(rep[0]), float(rep[1]))
+            elif k in scalar_scalar_keys:
+                # scalar values (e.g., iris diameters in pixels)
+                if rep is None:
+                    normalized[k] = None
+                else:
+                    if k not in self._one_euro_filters:
+                        min_cutoff = getattr(self, "_one_euro_min_cutoff", 0.05)
+                        beta = getattr(self, "_one_euro_beta", 0.005)
+                        d_cutoff = getattr(self, "_one_euro_d_cutoff", 1.0)
+                        self._one_euro_filters[k] = OneEuroFilter(
+                            min_cutoff=min_cutoff, beta=beta, d_cutoff=d_cutoff
+                        )
+                    try:
+                        val = np.array([float(rep)], dtype=float)
+                        filtered = self._one_euro_filters[k].process(t_sec, val)
+                        normalized[k] = float(filtered[0])
+                    except Exception:
+                        normalized[k] = float(rep)
             else:
                 # lists (chin_points, hand tips): keep representative list as-is
                 normalized[k] = deepcopy(rep) if rep is not None else []

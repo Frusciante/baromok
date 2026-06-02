@@ -546,7 +546,24 @@ class baromokApp:
             return
 
         alert_type = "danger"
+        # 기본 문구
         message_text = "나쁜 자세가 지속되고 있습니다. 즉시 자세를 바르게 해주세요."
+
+        # 확정된 자세가 있고, 설정에 표시 레이블이 있으면 레이블 기반 문구 사용
+        try:
+            confirmed = event.confirmed_posture
+            if confirmed:
+                cfg = self.config.get_posture_type_config(confirmed)
+                display_label = cfg.get("display_label") if cfg else None
+                if display_label:
+                    # 사용자 요청: UI 스타일 유지, 자세 이름은 정확히 display_label 사용
+                    if confirmed == "eye_close":
+                        message_text = f"{display_label}: 화면과 눈의 거리가 너무 가깝습니다. 잠시 물러나 주세요."
+                    else:
+                        message_text = display_label
+        except Exception:
+            # 실패 시 기본 메시지 유지
+            pass
 
         now = time.time()
         if (
