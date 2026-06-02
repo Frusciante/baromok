@@ -208,9 +208,12 @@ class IndicatorCalculator:
         """
         손과 턱의 겹침 정도 계산
         """
-        if not chin_points or not hand_tips:
+        # 방어: None 값이 들어올 수 있으므로 빈 리스트/딕셔너리로 대체
+        if not chin_points:
             return 0.0
-        
+        if not hand_tips or (not (hand_tips.get('right_hand_tips') or hand_tips.get('left_hand_tips'))):
+            return 0.0
+
         threshold = 0.1
         if self.config:
             # 설정에서 임계값 로드 시도
@@ -221,10 +224,14 @@ class IndicatorCalculator:
         
         occlusion_score = 0.0
         for hand_key in ['right_hand_tips', 'left_hand_tips']:
-            hand_points = hand_tips.get(hand_key, [])
+            hand_points = hand_tips.get(hand_key) or []
             for hand_point in hand_points:
+                if hand_point is None:
+                    continue
                 hand = np.array(hand_point[:2])
                 for chin_point in chin_points:
+                    if chin_point is None:
+                        continue
                     chin = np.array(chin_point)
                     distance = self.geometry_helper.calculate_distance(chin, hand)
                     if distance < threshold:
@@ -241,7 +248,7 @@ class IndicatorCalculator:
         """
         손이 얼굴 근처에 있는지 판단
         """
-        if face_center is None or not hand_tips:
+        if face_center is None:
             return False
         
         if threshold is None:
@@ -254,8 +261,10 @@ class IndicatorCalculator:
         
         face = np.array(face_center)
         for hand_key in ['right_hand_tips', 'left_hand_tips']:
-            hand_points = hand_tips.get(hand_key, [])
+            hand_points = hand_tips.get(hand_key) or []
             for hand_point in hand_points:
+                if hand_point is None:
+                    continue
                 hand = np.array(hand_point[:2])
                 distance = self.geometry_helper.calculate_distance(hand, face)
                 if distance < threshold:
@@ -270,14 +279,16 @@ class IndicatorCalculator:
         """
         손이 얼굴 근처에 있는 정도를 점수로 계산
         """
-        if face_center is None or not hand_tips:
+        if face_center is None:
             return 0.0
-            
+
         min_distance = 1.0
         face = np.array(face_center)
         for hand_key in ['right_hand_tips', 'left_hand_tips']:
-            hand_points = hand_tips.get(hand_key, [])
+            hand_points = hand_tips.get(hand_key) or []
             for hand_point in hand_points:
+                if hand_point is None:
+                    continue
                 hand = np.array(hand_point[:2])
                 distance = self.geometry_helper.calculate_distance(hand, face)
                 if distance < min_distance:

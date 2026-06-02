@@ -244,24 +244,53 @@ class CameraWorker(QThread):
                 frame_width=frame_width,
                 frame_height=frame_height,
                 timestamp_ms=landmarks.frame_timestamp_ms,
-                low_latency=True # 속도 향상을 위해 항상 low_latency 적용
+                low_latency=False, # 더 엄격한 필터 적용을 위해 low_latency 비활성화
+                baseline_mode=self.is_baseline_mode,
             )
             logger.debug(f"정규화된 랜드마크: {normalized_landmarks}")
+
+            # 보강: 정규화된 랜드마크에 필수 키가 빠져 있으면
+            # 원래 픽셀 좌표인 `relevant_landmarks`에서 값을 가져와 정규화하여 채웁니다.
+            # 이렇게 하면 시각화 및 지표 계산에서 누락으로 인한 None 반환을 방지합니다.
+            try:
+                essential = ["left_cheek", "right_cheek", "left_shoulder", "right_shoulder", "chin_points"]
+                for key in essential:
+                    val = normalized_landmarks.get(key)
+                    if val is None or (isinstance(val, list) and len(val) == 0):
+                        raw = relevant_landmarks.get(key)
+                        if raw:
+                            # raw는 픽셀 좌표(튜플) 또는 리스트일 수 있음
+                            if isinstance(raw, tuple) and len(raw) >= 2:
+                                normalized_landmarks[key] = (raw[0] / frame_width, raw[1] / frame_height)
+                            elif isinstance(raw, list) and len(raw) > 0:
+                                normalized_landmarks[key] = [
+                                    (p[0] / frame_width, p[1] / frame_height) for p in raw
+                                ]
+            except Exception as e:
+                logger.debug(f"정규화 보강 중 예외: {e}")
 
             indicators = self.indicator_calculator.calculate_all_indicators(
                 normalized_landmarks,
                 timestamp=current_timestamp_seconds,
                 low_latency=True # 속도 향상을 위해 항상 low_latency 적용
             )
-            
+
             # 자세 맞춤 단계 정보 주입 (디버그용)
             if indicators:
                 indicators.step_index = self.current_step
 
             if indicators is None:
+                # 어떤 키가 빠진지 로깅하여 원인 진단을 쉽게 함
+                try:
+                    missing = [
+                        k for k in ("left_cheek", "right_cheek", "left_shoulder", "right_shoulder")
+                        if not normalized_landmarks.get(k)
+                    ]
+                except Exception:
+                    missing = None
+
                 logger.debug(
-                    "IndicatorCalculator returned None (필수 랜드마크 누락). "
-                    f"relevant_landmarks={relevant_landmarks}"
+                    f"IndicatorCalculator returned None (필수 랜드마크 누락). missing={missing} normalized={normalized_landmarks} relevant={relevant_landmarks}"
                 )
 
         except Exception as e:
@@ -482,6 +511,38 @@ class CameraWorker(QThread):
                         vis_landmarks[key] = [(int(p[0] * frame_width), int(p[1] * frame_height)) for p in val]
                     else:
                         vis_landmarks[key] = val
+
+                # 보강: normalized_landmarks에 일부 키가 비어있을 경우 원시 픽셀 좌표로 채워서 시각화를 보장
+                try:
+                    raw_relevant = self.landmark_extractor.get_relevant_landmarks(
+                        landmarks, frame_width=frame_width, frame_height=frame_height
+                    )
+                    fill_keys = [
+                        "left_shoulder",
+                        "right_shoulder",
+                        "left_cheek",
+                        "right_cheek",
+                        "chin_points",
+                        "left_hand_tips",
+                        "right_hand_tips",
+                    ]
+                    for k in fill_keys:
+                        if not vis_landmarks.get(k):
+                            raw_val = raw_relevant.get(k)
+                            if raw_val:
+                                # raw_val은 픽셀 좌표(튜플) 또는 리스트
+                                if isinstance(raw_val, tuple) and len(raw_val) >= 2:
+                                    vis_landmarks[k] = (int(raw_val[0]), int(raw_val[1]))
+                                elif isinstance(raw_val, list) and len(raw_val) > 0:
+                                    converted = []
+                                    for p in raw_val:
+                                        if isinstance(p, (list, tuple)) and len(p) >= 2:
+                                            converted.append((int(p[0]), int(p[1])))
+                                    if converted:
+                                        vis_landmarks[k] = converted
+                except Exception as e:
+                    logger.debug(f"시각화 보강 실패: {e}")
+
                 relevant_landmarks = vis_landmarks
             else:
                 relevant_landmarks = self.landmark_extractor.get_relevant_landmarks(

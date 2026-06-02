@@ -9,6 +9,8 @@ import numpy as np
 import cv2
 import time
 from typing import Dict, Tuple, Optional, List
+from collections import deque
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from src.utils.logger import get_logger
@@ -52,6 +54,9 @@ class LandmarkExtractor:
         self.face_landmarker = None
         self.hand_landmarker = None
         self.one_euro_filter = None
+        # ghosting: sliding window (ms) for retaining recent landmark values
+        self._ghost_window_ms = 200  # 1 second
+        self._ghost_windows: Dict[str, deque] = {}
 
         # 설정 로드
         self.config = get_config()
@@ -599,9 +604,8 @@ class LandmarkExtractor:
             else:
                 normalized[key] = value
 
-        # One Euro Filter 및 EMA Filter 적용 (주요 2D 좌표들)
-        # 사용자의 요청에 따라 뺨(cheek)과 어깨(shoulder)의 안정성에 집중한다.
-        filter_keys = [
+        # Keys we keep ghosted (including lists)
+        ghost_keys = [
             "face_center",
             "left_eye",
             "right_eye",
@@ -609,13 +613,93 @@ class LandmarkExtractor:
             "right_cheek",
             "left_shoulder",
             "right_shoulder",
+            "chin_points",
+            "left_hand_tips",
+            "right_hand_tips",
         ]
 
-        # Baseline(재측정) 모드: 필터나 안전장치 없이 원시 정규화 좌표만 사용합니다.
-        if baseline_mode:
-            return normalized
+        # Lazy init deques for each ghost key
+        if not hasattr(self, "_ghost_windows") or not self._ghost_windows:
+            self._ghost_windows = {k: deque() for k in ghost_keys}
 
-        # No filtering: MediaPipe에서 얻은 원시 정규화 좌표만 사용합니다.
+        # timestamp for this frame (ms)
+        ts = int(time.time() * 1000) if timestamp_ms is None else int(timestamp_ms)
+
+        # Helper: is value present (non-empty)
+        def _has_value(k, v):
+            if v is None:
+                return False
+            if isinstance(v, list):
+                return len(v) > 0
+            return True
+
+        # Append current values to their windows (if present) and prune old entries
+        for k in ghost_keys:
+            val = normalized.get(k)
+            present = _has_value(k, val)
+            if present:
+                # store a safe copy
+                stored = deepcopy(val)
+                # for scalar points ensure tuple of floats
+                if isinstance(stored, tuple) and len(stored) >= 2:
+                    try:
+                        stored = (float(stored[0]), float(stored[1]))
+                    except Exception:
+                        pass
+                self._ghost_windows.setdefault(k, deque()).append((ts, stored))
+
+            # prune older than window
+            dq = self._ghost_windows.setdefault(k, deque())
+            cutoff = ts - int(self._ghost_window_ms)
+            while dq and dq[0][0] < cutoff:
+                dq.popleft()
+
+        # Build output: for scalar/list keys use most recent in window if current missing
+        for k in ghost_keys:
+            val = normalized.get(k)
+            if _has_value(k, val):
+                # already present, keep as-is (ensure scalar tuples are floats)
+                if isinstance(val, tuple) and len(val) >= 2:
+                    try:
+                        normalized[k] = (float(val[0]), float(val[1]))
+                    except Exception:
+                        normalized[k] = val
+                else:
+                    normalized[k] = deepcopy(val)
+            else:
+                dq = self._ghost_windows.get(k, deque())
+                if dq:
+                    # use the most recent stored value
+                    normalized[k] = deepcopy(dq[-1][1])
+                else:
+                    normalized[k] = None
+
+        # Special handling: choose shoulder pair within window that maximizes shoulder width
+        l_dq = self._ghost_windows.get("left_shoulder", deque())
+        r_dq = self._ghost_windows.get("right_shoulder", deque())
+        if l_dq and r_dq:
+            # extract candidate points
+            l_cands = [entry[1] for entry in l_dq if entry[1] is not None]
+            r_cands = [entry[1] for entry in r_dq if entry[1] is not None]
+            best_pair = (None, None)
+            best_width = -1.0
+            for lpt in l_cands:
+                for rpt in r_cands:
+                    try:
+                        width = float(rpt[0]) - float(lpt[0])
+                    except Exception:
+                        continue
+                    if width > best_width:
+                        best_width = width
+                        best_pair = (lpt, rpt)
+
+            if best_pair[0] is not None and best_pair[1] is not None:
+                normalized["left_shoulder"] = (float(best_pair[0][0]), float(best_pair[0][1]))
+                normalized["right_shoulder"] = (float(best_pair[1][0]), float(best_pair[1][1]))
+        else:
+            # fallback: if one side missing, keep last seen or None (already set above)
+            pass
+
         return normalized
 
 
