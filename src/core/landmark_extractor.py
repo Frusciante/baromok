@@ -552,25 +552,66 @@ class LandmarkExtractor:
         except Exception:
             logger.debug("Face confidences 로깅 중 예외")
 
-        # Pose 랜드마크 (어깨)
+        # Pose 랜드마크 (어깨) - 신뢰도 및 해부학적 가드 강화
         if extracted.pose is not None and extracted.pose.landmarks:
             pose_lms = extracted.pose.landmarks
             pose_conf = extracted.pose.confidences
 
-            # 왼쪽 어깨 (11), 오른쪽 어깨 (12)
-            if len(pose_lms) > 11 and pose_conf[11] > confidence_threshold:
-                left_shoulder = self._get_pixel_point(
-                    pose_lms[11], pose_conf[11], frame_width, frame_height
-                )
-                landmarks["left_shoulder"] = (left_shoulder[0], left_shoulder[1])
-                landmarks["confidences"]["left_shoulder"] = left_shoulder[2]
+            # v1.1: 신뢰도 임계값 유지 (0.8)
+            shoulder_confidence_threshold = 0.8
+            
+            l_sh_ok = len(pose_lms) > 11 and pose_conf[11] > shoulder_confidence_threshold
+            r_sh_ok = len(pose_lms) > 12 and pose_conf[12] > shoulder_confidence_threshold
+            
+            if l_sh_ok and r_sh_ok:
+                l_y = pose_lms[11][1]
+                r_y = pose_lms[12][1]
+                
+                # 턱 Y 좌표 추출 (정규화)
+                chin_y = landmarks["chin_points"][0][1] / frame_height if landmarks.get("chin_points") else None
+                
+                # 설정에서 가드 임계값 로드
+                sg_cfg = self.config.get_posture_criteria().get("shoulder_guard", {})
+                sh_bottom_th = sg_cfg.get("shoulder_bottom_threshold", 0.98)
+                chin_low_th = sg_cfg.get("chin_low_threshold", 0.75)
+                sh_top_th = sg_cfg.get("shoulder_top_threshold", 0.01)
+                
+                # 새로운 가드 로직 (사용자 제안): 어깨가 바닥에 붙어있으면서 턱 위치가 낮을 때 (AND 조건)
+                is_invalid = False
+                
+                # 1. 하단 절단 감지: 어깨가 화면 하단 끝에 걸림 AND 턱이 화면 하단부에 위치
+                is_bottom_cut_off = False
+                if chin_y is not None:
+                    shoulder_at_bottom = l_y > sh_bottom_th or r_y > sh_bottom_th
+                    chin_is_low = chin_y > chin_low_th
+                    if shoulder_at_bottom and chin_is_low:
+                        is_bottom_cut_off = True
+                
+                # 2. 상단 튀는 현상 방지 (추측 오류)
+                is_on_top = l_y < sh_top_th or r_y < sh_top_th
+                
+                if is_bottom_cut_off or is_on_top:
+                    is_invalid = True
+                    logger.debug(f"어깨 가드 발동: bottom_cut={is_bottom_cut_off}, top={is_on_top} (sh_y={max(l_y, r_y):.3f}, chin_y={chin_y})")
 
-            if len(pose_lms) > 12 and pose_conf[12] > confidence_threshold:
-                right_shoulder = self._get_pixel_point(
-                    pose_lms[12], pose_conf[12], frame_width, frame_height
-                )
-                landmarks["right_shoulder"] = (right_shoulder[0], right_shoulder[1])
-                landmarks["confidences"]["right_shoulder"] = right_shoulder[2]
+                if not is_invalid:
+                    left_shoulder = self._get_pixel_point(
+                        pose_lms[11], pose_conf[11], frame_width, frame_height
+                    )
+                    landmarks["left_shoulder"] = (left_shoulder[0], left_shoulder[1])
+                    landmarks["confidences"]["left_shoulder"] = pose_conf[11]
+
+                    right_shoulder = self._get_pixel_point(
+                        pose_lms[12], pose_conf[12], frame_width, frame_height
+                    )
+                    landmarks["right_shoulder"] = (right_shoulder[0], right_shoulder[1])
+                    landmarks["confidences"]["right_shoulder"] = pose_conf[12]
+                else:
+                    landmarks["left_shoulder"] = None
+                    landmarks["right_shoulder"] = None
+            else:
+                landmarks["left_shoulder"] = None
+                landmarks["right_shoulder"] = None
 
         # 어깨 좌표가 이미지 좌표계상 좌/우가 반전되어 들어오는 경우 교정
         try:

@@ -230,5 +230,10 @@
       "턱 괸 자세 의심",
       "거북목 경향"
     ]
+  },
+  "shoulder_guard": {
+    "shoulder_bottom_threshold": 0.98,
+    "chin_low_threshold": 0.83,
+    "shoulder_top_threshold": 0.01
   }
 }
