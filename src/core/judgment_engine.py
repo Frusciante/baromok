@@ -137,15 +137,25 @@ class JudgmentEngine:
             )
 
         # RANSAC 모델을 통한 기대 광대 거리 산출
-        expected_cheek = max(1e-6, self.baseline_manager.get_expected_cheek(indicators.shoulder_width))
-        measured_cheek = indicators.cheek_distance
+        has_shoulders = indicators.shoulder_width is not None
+        expected_cheek = 0.0
+        deviation = 0.0
         
-        # 편차 계산 (Deviation)
-        deviation = (measured_cheek - expected_cheek) / expected_cheek
+        if has_shoulders:
+            expected_cheek = max(1e-6, self.baseline_manager.get_expected_cheek(indicators.shoulder_width))
+            measured_cheek = indicators.cheek_distance
+            # 편차 계산 (Deviation)
+            deviation = (measured_cheek - expected_cheek) / expected_cheek
 
         # 각 자세별 판정
-        forward_head_raw = self._judge_forward_head(indicators, deviation)
-        recline_raw = self._judge_recline(indicators, deviation)
+        # 어깨가 필요한 자세는 어깨가 있을 때만 판정
+        if has_shoulders:
+            forward_head_raw = self._judge_forward_head(indicators, deviation)
+            recline_raw = self._judge_recline(indicators, deviation)
+        else:
+            forward_head_raw = {"likelihood": 0.0, "triggered": False}
+            recline_raw = {"likelihood": 0.0, "triggered": False}
+            
         chin_rest_raw = self._judge_chin_rest(indicators)
         eye_close_raw = self._judge_eye_close(indicators)
         turned_head_raw = self._judge_turned_head(indicators)
@@ -280,7 +290,9 @@ class JudgmentEngine:
         try:
             criteria = self.config.get_posture_type_config(PostureType.CHIN_REST.value)
             eye_threshold = criteria["primary_conditions"]["eye_line_tilt_deg"]["threshold"]
-            shoulder_threshold = criteria["primary_conditions"]["shoulder_tilt_deg"]["threshold"]
+            
+            # 어깨 관련 임계값 (어깨가 있을 때만 사용)
+            shoulder_threshold = criteria["primary_conditions"].get("shoulder_tilt_deg", {}).get("threshold", 10.0)
 
             # 손 관련 트리거
             hand_triggered = (indicators.hand_near_face or indicators.chin_occlusion > 0.25)
@@ -288,18 +300,35 @@ class JudgmentEngine:
                 return {"likelihood": 0.0, "triggered": False}
 
             eye_score = self._normalize_score(abs(indicators.eye_line_tilt) / eye_threshold, min_val=0, max_val=2.0)
-            shoulder_score = self._normalize_score(abs(indicators.shoulder_tilt_deg) / shoulder_threshold, min_val=0, max_val=2.0)
             
-            neck_offset_change = self.baseline_manager.calculate_change_percentage(indicators.neck_offset, "neck_offset")
-            neck_offset_score = self._normalize_score(neck_offset_change / self.neck_offset_sensitivity, min_val=0.0, max_val=2.0) if neck_offset_change > 0 else 0.0
+            # 어깨 기반 지표 (Optional 처리)
+            shoulder_score = 0.0
+            neck_offset_score = 0.0
+            
+            if indicators.shoulder_tilt_deg is not None:
+                shoulder_score = self._normalize_score(abs(indicators.shoulder_tilt_deg) / shoulder_threshold, min_val=0, max_val=2.0)
+            
+            if indicators.neck_offset is not None:
+                neck_offset_change = self.baseline_manager.calculate_change_percentage(indicators.neck_offset, "neck_offset")
+                if neck_offset_change > 0:
+                    neck_offset_score = self._normalize_score(neck_offset_change / self.neck_offset_sensitivity, min_val=0.0, max_val=2.0)
             
             w = self.weights.get("chin_rest", {})
-            likelihood = (w.get("eye", 0.35) * eye_score + 
-                          w.get("shoulder", 0.2) * shoulder_score + 
-                          w.get("neck", 0.15) * neck_offset_score + 
-                          w.get("hand", 0.3) * indicators.hand_face_score)
+            
+            # 가중치 재계산 (어깨가 없으면 얼굴/손 비중을 높임)
+            has_sh = indicators.shoulder_width is not None
+            w_eye = w.get("eye", 0.35)
+            w_sh = w.get("shoulder", 0.2) if has_sh else 0.0
+            w_neck = w.get("neck", 0.15) if has_sh else 0.0
+            w_hand = w.get("hand", 0.3)
+            
+            total_w = w_eye + w_sh + w_neck + w_hand
+            if total_w > 0:
+                likelihood = (w_eye * eye_score + w_sh * shoulder_score + w_neck * neck_offset_score + w_hand * indicators.hand_face_score) / total_w
+            else:
+                likelihood = 0.0
 
-            return {"likelihood": likelihood, "triggered": False}
+            return {"likelihood": float(np.clip(likelihood, 0.0, 1.0)), "triggered": False}
 
         except Exception as e:
             logger.error(f"턱 괸 자세 판정 실패: {e}")

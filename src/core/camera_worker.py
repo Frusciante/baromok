@@ -501,42 +501,47 @@ class CameraWorker(QThread):
             
             # Baseline 정보 (RANSAC 기대값 포함)
             baseline = self.judgment_engine.baseline_manager.get_baseline_metrics()
-            if baseline and not self.is_baseline_mode:
-                expected_cheek = self.judgment_engine.baseline_manager.get_expected_cheek(indicators.shoulder_width)
-                deviation = (indicators.cheek_distance - expected_cheek) / expected_cheek
-                
-                debug_text = f"Cheek: {indicators.cheek_distance:.3f} (Exp: {expected_cheek:.3f})"
-                cv2.putText(annotated, debug_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            # indicators.shoulder_width가 None이 아님을 확실히 체크 (TypeError 방지)
+            if baseline and not self.is_baseline_mode and getattr(indicators, 'shoulder_width', None) is not None:
+                try:
+                    sh_w = float(indicators.shoulder_width)
+                    expected_cheek = self.judgment_engine.baseline_manager.get_expected_cheek(sh_w)
+                    
+                    # expected_cheek가 0일 경우 제로 나누기 방지
+                    if expected_cheek > 0:
+                        deviation = (indicators.cheek_distance - expected_cheek) / expected_cheek
+                    else:
+                        deviation = 0.0
+                    
+                    debug_text = f"Cheek: {indicators.cheek_distance:.3f} (Exp: {expected_cheek:.3f})"
+                    cv2.putText(annotated, debug_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    y_offset += 20
+                    
+                    delta_text = f"Dev: {deviation*100:+.1f}%"
+                    cv2.putText(annotated, delta_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+                    y_offset += 20
+                    
+                    shld_tilt = indicators.shoulder_tilt_deg if indicators.shoulder_tilt_deg is not None else 0.0
+                    detail_text = f"ShldTilt: {shld_tilt:+.1f}deg | EyeTilt: {indicators.eye_line_tilt:+.1f}deg"
+                    cv2.putText(annotated, detail_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    y_offset += 20
+                except (TypeError, ValueError) as e:
+                    logger.debug(f"Annotation formatting error (shoulders): {e}")
+            else:
+                # 어깨가 없을 경우의 대체 정보 표시
+                indicator_text = f"Cheek: {indicators.cheek_distance:.2f} | EyeTilt: {indicators.eye_line_tilt:+.1f}deg"
+                cv2.putText(annotated, indicator_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
                 y_offset += 20
                 
-                delta_text = f"Dev: {deviation*100:+.1f}%"
-                cv2.putText(annotated, delta_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-                y_offset += 20
-                
-                detail_text = f"ShldTilt: {indicators.shoulder_tilt_deg:+.1f}deg | EyeTilt: {indicators.eye_line_tilt:+.1f}deg"
-                cv2.putText(annotated, detail_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                y_offset += 20
-
-                if indicators.eye_screen_distance_cm is not None:
-                    dist_text = f"EyeDist: {indicators.eye_screen_distance_cm:.1f}cm"
+            # 화면 거리 정보 (어깨와 무관)
+            if indicators.eye_screen_distance_cm is not None:
+                try:
+                    dist_cm = float(indicators.eye_screen_distance_cm)
+                    dist_text = f"EyeDist: {dist_cm:.1f}cm"
                     dist_color = (0, 0, 255) if indicators.eye_close_warning else (0, 255, 255)
                     cv2.putText(annotated, dist_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, dist_color, 2)
                     y_offset += 20
-                
-                hand_text = f"HandFace: {indicators.hand_face_score:.2f} | ChinOcc: {indicators.chin_occlusion:.2f}"
-                cv2.putText(annotated, hand_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                y_offset += 20
-            else:
-                indicator_text = f"Cheek: {indicators.cheek_distance:.2f} | Sh: {indicators.shoulder_width:.2f}"
-                cv2.putText(
-                    annotated,
-                    indicator_text,
-                    (10, y_offset),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (200, 200, 200),
-                    1,
-                )
+                except (TypeError, ValueError): pass
 
         # 랜드마크 시각화
         try:

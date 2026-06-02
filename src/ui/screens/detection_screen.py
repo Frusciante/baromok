@@ -143,6 +143,7 @@ class DetectionScreen(QWidget):
 
             indicators = frame_data.get("indicators")
             if indicators is None:
+                # 얼굴(광대) 랜드마크도 감지되지 않는 경우에만 메시지 표시
                 self.posture_label.setText(RECOGNITION_DIFFICULT_MESSAGE)
                 self.cheek_detail_label.setText("광대 거리: - (예상: -)")
                 return
@@ -152,12 +153,12 @@ class DetectionScreen(QWidget):
 
             # 광대 거리 정보 업데이트
             current_cheek = indicators.cheek_distance
-            if self.baseline_manager:
+            if self.baseline_manager and indicators.shoulder_width is not None:
                 expected_cheek = self.baseline_manager.get_expected_cheek(indicators.shoulder_width)
                 deviation = (current_cheek - expected_cheek) / expected_cheek if expected_cheek > 0 else 0
                 self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (예상: {expected_cheek:.3f}, 편차: {deviation*100:+.1f}%)")
             else:
-                self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f}")
+                self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (어깨 미감지)")
 
             # 화면 거리 업데이트
             dist_cm = indicators.eye_screen_distance_cm
