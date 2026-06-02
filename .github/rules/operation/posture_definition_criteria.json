@@ -176,7 +176,7 @@
       "primary_conditions": {
         "eye_line_tilt_deg": {
           "operator": ">=",
-          "threshold": 10.0
+          "threshold": 27.0
         }
       },
       "sustain_seconds": 2.0
