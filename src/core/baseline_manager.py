@@ -55,7 +55,7 @@ class BaselineManager:
         # 6단계(총 30초 수집) 데이터를 충분히 확보하기 위해 최소 유효 프레임을 설정에서 가져온다.
         baseline_config = self.config.get_baseline_config()
         self.minimum_valid_frame_count = baseline_config.get(
-            "minimum_valid_frames", 120
+            "minimum_valid_frames", 50
         )
 
         self.ransac_model = RansacLinearModel(
