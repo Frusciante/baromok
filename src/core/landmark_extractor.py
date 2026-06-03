@@ -614,14 +614,31 @@ class LandmarkExtractor:
         if self.one_euro_filter is None or not hasattr(self, "ema_filters_x"):
             # key별로 독립적인 필터 인스턴스를 관리한다.
             # 1. One Euro Filter: 잔떨림 억제를 위해 min_cutoff를 더 낮춤 (0.01)
-            self.one_euro_filters: Dict[str, OneEuroFilter] = {
-                key: OneEuroFilter(min_cutoff=0.01, beta=0.005) for key in filter_keys
-            }
+            # 2. 어깨(shoulder)는 더 강한 필터 적용 (min_cutoff=0.005, beta=0.003)
+            self.one_euro_filters: Dict[str, OneEuroFilter] = {}
+            for key in filter_keys:
+                if 'shoulder' in key:
+                    # 어깨 전용: 더 강한 필터 파라미터
+                    self.one_euro_filters[key] = OneEuroFilter(min_cutoff=0.005, beta=0.003)
+                else:
+                    # 기타 landmark: 기본 파라미터
+                    self.one_euro_filters[key] = OneEuroFilter(min_cutoff=0.01, beta=0.005)
+            
             # 2. EMA Filter: 프로토타입과 동일한 alpha=0.15 적용
+            # 3. 어깨는 더 강한 EMA 필터 적용 (alpha=0.25)
             from src.utils.helpers import EMAFilter
 
-            self.ema_filters_x = {k: EMAFilter(alpha=0.15) for k in filter_keys}
-            self.ema_filters_y = {k: EMAFilter(alpha=0.15) for k in filter_keys}
+            self.ema_filters_x = {}
+            self.ema_filters_y = {}
+            for k in filter_keys:
+                if 'shoulder' in k:
+                    # 어깨 전용: 더 강한 EMA 필터
+                    self.ema_filters_x[k] = EMAFilter(alpha=0.25)
+                    self.ema_filters_y[k] = EMAFilter(alpha=0.25)
+                else:
+                    # 기타: 기본 필터
+                    self.ema_filters_x[k] = EMAFilter(alpha=0.15)
+                    self.ema_filters_y[k] = EMAFilter(alpha=0.15)
             self.one_euro_filter = True  # 초기화 완료 플래그
 
         # 타임스탬프 처리 (ms -> s)
@@ -637,11 +654,19 @@ class LandmarkExtractor:
             if val is not None:
                 # 필터 계수 동적 업데이트
                 filter_obj = self.one_euro_filters[key]
-                filter_obj.min_cutoff = current_min_cutoff
-                filter_obj.beta = current_beta
+                
+                # 어깨는 더 강한 파라미터 사용
+                if 'shoulder' in key:
+                    filter_obj.min_cutoff = 0.5 if low_latency else 0.005
+                    filter_obj.beta = 0.01 if low_latency else 0.003
+                    shoulder_alpha = 0.5 if low_latency else 0.25
+                else:
+                    filter_obj.min_cutoff = current_min_cutoff
+                    filter_obj.beta = current_beta
+                    shoulder_alpha = current_alpha
 
-                self.ema_filters_x[key].alpha = current_alpha
-                self.ema_filters_y[key].alpha = current_alpha
+                self.ema_filters_x[key].alpha = shoulder_alpha if 'shoulder' in key else current_alpha
+                self.ema_filters_y[key].alpha = shoulder_alpha if 'shoulder' in key else current_alpha
 
                 # 1. One Euro Filter 적용 (좌표 벡터)
                 one_euro_filtered = filter_obj.process(t_sec, np.array(val))

@@ -79,7 +79,7 @@ class StateMachine:
           - confirmed_posture가 있음 → BAD_POSTURE 유지
         
         Args:
-            confirmed_posture: 확정된 자세 (또는 None)
+            confirmed_posture: 현재 후보 자세 이름 (triggered posture string) 또는 None
             fps: FPS
             
         Returns:
@@ -99,49 +99,50 @@ class StateMachine:
                 return self.current_state
             
             if self.current_state == PostureState.NORMAL:
-                """
                 if confirmed_posture is not None:
                     self._transition_to(PostureState.WARNING, confirmed_posture)
-                    logger.info(f"상태 전이: NORMAL → WARNING (자세: {confirmed_posture})")
-                """
-
-                # 새 pending posture 시작
-                if self.pending_posture != confirmed_posture:
-                    self.pending_posture = confirmed_posture
-                    self.pending_since = time.time()
-
-                elif self.pending_posture == confirmed_posture and self.pending_posture is not None:
-                    pending_duration = time.time() - self.pending_since
-
-                    # posture가 일정 시간 지속되면 WARNING 진입
-                    if pending_duration >= 0.5:
-                        self._transition_to(PostureState.WARNING, confirmed_posture)
-
-                else:
-                    # posture 사라지면 pending 초기화
-                    self.pending_posture = None
-                    self.pending_since = None
+                    logger.warning(f"상태 전이: NORMAL → WARNING (자세: {confirmed_posture})")
 
             elif self.current_state == PostureState.WARNING:
                 if confirmed_posture is None:
-                    self._transition_to(PostureState.NORMAL, None)
-                    logger.info("상태 전이: WARNING → NORMAL (자세 정상화)")
+                    if self.pending_posture != confirmed_posture or self.pending_since is None:
+                        self.pending_posture = confirmed_posture
+                        self.pending_since = time.time()
+                        return self.current_state
+
+                    pending_duration = time.time() - self.pending_since
+                    if pending_duration >= min_hold:
+                        self._transition_to(PostureState.NORMAL, None)
+                        logger.info(
+                            f"상태 전이: WARNING → NORMAL (자세 정상 유지, {pending_duration:.1f}초)"
+                        )
                 else:
-                    # 나쁜 자세 지정된 시간(min_duration) 이상 지속 시 BAD_POSTURE로 전이
+                    if self.pending_posture != confirmed_posture:
+                        self.pending_posture = confirmed_posture
+                        self.pending_since = time.time()
                     if time_in_previous_state >= min_duration:
                         self._transition_to(PostureState.BAD_POSTURE, confirmed_posture)
                         logger.warning(
-                            f"상태 전이: WARNING → BAD_POSTURE (자세: {confirmed_posture}, "
-                            f"지속시간: {time_in_previous_state:.1f}초)"
+                            f"상태 전이: WARNING → BAD_POSTURE (자세: {confirmed_posture})"
                         )
-            
+
             elif self.current_state == PostureState.BAD_POSTURE:
                 if confirmed_posture is None:
-                    # 나쁜 자세 완화 (min_duration 시간 동안 완전히 정상 유지 시 WARNING으로 강등)
-                    if time_in_previous_state >= min_duration:
+                    if self.pending_posture != confirmed_posture or self.pending_since is None:
+                        self.pending_posture = confirmed_posture
+                        self.pending_since = time.time()
+                        return self.current_state
+
+                    pending_duration = time.time() - self.pending_since
+                    if pending_duration >= min_hold:
                         self._transition_to(PostureState.WARNING, None)
-                        logger.info(f"상태 전이: BAD_POSTURE → WARNING (자세 개선, {time_in_previous_state:.1f}초)")
+                        logger.warning(
+                            f"상태 전이: BAD_POSTURE → WARNING (자세 개선, {pending_duration:.1f}초 정상 유지)"
+                        )
                 else:
+                    if self.pending_posture != confirmed_posture:
+                        self.pending_posture = confirmed_posture
+                        self.pending_since = time.time()
                     self._transition_to(PostureState.BAD_POSTURE, confirmed_posture)
         
         except Exception as e:
@@ -166,6 +167,8 @@ class StateMachine:
         
         self.current_state = new_state
         self.state_enter_time = time.time()
+        self.pending_posture = None
+        self.pending_since = None
         
         # 이벤트 발생
         event = StateTransitionEvent(
@@ -235,6 +238,8 @@ class StateMachine:
         """상태를 NORMAL으로 초기화"""
         self.current_state = PostureState.NORMAL
         self.state_enter_time = time.time()
+        self.pending_posture = None
+        self.pending_since = None
         logger.info("상태 머신 초기화 (NORMAL으로 전환)")
     
     def get_state_name(self) -> str:

@@ -7,8 +7,8 @@
   "popup_auto_close": true,
   "popup_auto_close_time": 8,
   "auto_start_detection": false,
-  "forward_head_sensitivity": 0.05358301471285025,
-  "recline_sensitivity": 0.026791507356425125,
-  "recommended_forward_head": 0.05358301471285025,
-  "recommended_recline": 0.026791507356425125
+  "forward_head_sensitivity": 0.10985803773691982,
+  "recline_sensitivity": 0.05492901886845991,
+  "recommended_forward_head": 0.10985803773691982,
+  "recommended_recline": 0.05492901886845991
 }

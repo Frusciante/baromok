@@ -121,7 +121,6 @@ class CalibrationV2Manager:
 
     def start_collection(self) -> None:
         """neutral 자세 수집 시작"""
-        logger.warning("V2 START_COLLECTION CALLED")
         self._is_collecting = True
         self._frames = []
         self.total_frames_seen = 0
@@ -185,6 +184,13 @@ class CalibrationV2Manager:
             f"V2 calibration completed successfully "
             f"({len(self._frames)} frames, {duration:.2f}s)"
         )
+        cheek_distance = self.calibration.neutral.get("cheek_distance")
+        if cheek_distance:
+            logger.warning(
+                f"CHEEK BASELINE: mean={cheek_distance.mean}, "
+                f"std={cheek_distance.std}, "
+                f"cv={cheek_distance.std/cheek_distance.mean*100:.2f}%"
+            )
 
         # 통계 계산
         calibration = self._compute_statistics(duration)

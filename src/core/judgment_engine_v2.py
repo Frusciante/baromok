@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Deque, Dict, Iterable, List, Optional, Tuple
 
+from cv2.gapi import threshold
 import numpy as np
 
 from src.config import ConfigManager
@@ -393,12 +394,14 @@ class JudgmentEngineV2:
             return None
         cd_pct = _pct_change(ind.cheek_distance, cheek.mean)
         threshold = th.get("recline_cheek_delta_pct", 8.0)
-        if cd_pct is None or cd_pct <= threshold:
+
+        if cd_pct >= -threshold:
             return None
 
         ratio = cd_pct / threshold
         deviation = abs(cd_pct)
 
+        
         return PostureCandidate(
             posture=PostureTypeV2.RECLINE.value,
             deviation_score=deviation,
@@ -471,7 +474,7 @@ class JudgmentEngineV2:
             raw_score=score,
             threshold_ratio=ratio,
         )
-
+    
     # ─── Guards ────────────────────────────────────────────────────────
 
     def _apply_guards(

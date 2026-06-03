@@ -65,6 +65,11 @@ class IndicatorCalculator:
             'chin_occlusion': EMAFilter(alpha=alpha),
             'hand_face_score': EMAFilter(alpha=alpha),
         }
+        
+        # 어깨 너비 전용 강화 필터 (요동침 추가 억제용)
+        # alpha=0.3: 과거 데이터를 70% 반영하여 더 강한 평활화
+        self._shoulder_width_boost_filter = EMAFilter(alpha=0.3)
+        
         logger.info(f"IndicatorCalculator 초기화 완료 (alpha={alpha})")
     
     def calculate_cheek_distance(
@@ -325,6 +330,8 @@ class IndicatorCalculator:
             
             cheek_dist = self.ema_filters['cheek_distance'].process(cheek_dist_raw)
             shoulder_w = self.ema_filters['shoulder_width'].process(shoulder_w_raw)
+            # 어깨 너비 추가 강화 필터: 요동침 추가 억제
+            shoulder_w = self._shoulder_width_boost_filter.process(shoulder_w)
             eye_dist = self.ema_filters['eye_distance'].process(eye_dist_raw)
             face_v_len = self.ema_filters['face_vertical_length'].process(face_v_len_raw)
             

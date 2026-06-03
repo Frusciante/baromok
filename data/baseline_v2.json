@@ -1,58 +1,58 @@
 {
   "version": "v2.0",
-  "timestamp": "2026-05-28T21:55:21.640490",
-  "collection_duration_seconds": 50.76981782913208,
-  "frame_count": 778,
+  "timestamp": "2026-06-03T11:23:46.045962",
+  "collection_duration_seconds": 78.33615231513977,
+  "frame_count": 1846,
   "shoulder_detection_rate": 1.0,
   "calibration_quality": "good",
   "quality_messages": [],
   "neutral": {
     "cheek_distance": {
-      "mean": 0.16927133926325472,
-      "std": 0.009806551445073176,
+      "mean": 0.173286223235264,
+      "std": 0.00857450442152619,
       "available": true
     },
     "eye_distance": {
-      "mean": 0.11600522900057596,
-      "std": 0.00781184650305392,
+      "mean": 0.1198727216299672,
+      "std": 0.007194017736335415,
       "available": true
     },
     "cheek_eye_ratio": {
-      "mean": 1.4601386923026582,
-      "std": 0.019054583565231896,
+      "mean": 1.4466092675221105,
+      "std": 0.024043151766285967,
       "available": true
     },
     "eye_line_tilt": {
-      "mean": 1.835456715881364,
-      "std": 1.8162951349795804,
+      "mean": 2.440976947635921,
+      "std": 1.7870259255534173,
       "available": true
     },
     "eye_symmetry_ratio": {
-      "mean": 0.07691862047123878,
-      "std": 0.018668902009177254,
+      "mean": 0.04821590615662784,
+      "std": 0.024481456686238173,
       "available": true
     },
     "cheek_symmetry_ratio": {
-      "mean": 0.12568493898244343,
-      "std": 0.0330319596837864,
+      "mean": 0.07576288072387892,
+      "std": 0.03401795739987893,
       "available": true
     },
     "shoulder_width": {
-      "mean": 0.3699414217944207,
-      "std": 0.022969432967732607,
+      "mean": 0.3163549468299422,
+      "std": 0.09166441827842166,
       "available": true
     },
     "shoulder_tilt_deg": {
-      "mean": -2.236468423997703,
-      "std": 2.0422108364817455,
+      "mean": -2.642853402038935,
+      "std": 1.470475655091853,
       "available": true
     }
   },
   "auto_thresholds": {
-    "forward_cheek_delta_pct": 17.38,
-    "recline_cheek_delta_pct": 52.14,
-    "forward_shoulder_delta_pct": 18.63,
-    "head_tilt_deg_abs": 5.45,
+    "forward_cheek_delta_pct": 14.84,
+    "recline_cheek_delta_pct": 44.53,
+    "forward_shoulder_delta_pct": 86.93,
+    "head_tilt_deg_abs": 5.36,
     "chin_rest_score_threshold": 0.5
   }
 }
