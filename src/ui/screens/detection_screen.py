@@ -15,6 +15,8 @@ class DetectionScreen(QWidget):
 
     detection_paused_signal = pyqtSignal()
     detection_stopped_signal = pyqtSignal()
+    detection_restart_signal = pyqtSignal()
+    view_results_signal = pyqtSignal()
     open_settings_signal = pyqtSignal()
     open_baseline_signal = pyqtSignal()
 
@@ -125,6 +127,24 @@ class DetectionScreen(QWidget):
         button_layout.addWidget(self.stop_btn)
 
         layout.addLayout(button_layout)
+
+        # 세션 종료 후 표시되는 액션 버튼들 (기본 숨김)
+        self.post_stop_button_layout = QHBoxLayout()
+        self.post_stop_button_layout.setSpacing(10)
+        self.restart_btn = QPushButton("다시 시작")
+        self.restart_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
+        self.restart_btn.clicked.connect(self.detection_restart_signal.emit)
+        self.results_btn = QPushButton("결과 보기")
+        self.results_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
+        self.results_btn.clicked.connect(self.view_results_signal.emit)
+        self.post_stop_button_layout.addStretch()
+        self.post_stop_button_layout.addWidget(self.restart_btn)
+        self.post_stop_button_layout.addWidget(self.results_btn)
+        self.post_stop_button_layout.addStretch()
+        # initially hidden
+        self.restart_btn.hide()
+        self.results_btn.hide()
+        layout.addLayout(self.post_stop_button_layout)
         self.setLayout(layout)
 
     def _on_frame_processed(self, frame_data: dict):
@@ -247,6 +267,12 @@ class DetectionScreen(QWidget):
         self.pause_btn.setEnabled(True)
         self.recalibrate_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
+        # hide post-stop actions if visible
+        try:
+            self.restart_btn.hide()
+            self.results_btn.hide()
+        except Exception:
+            pass
         self._update_elapsed_time()
         self.time_timer.start(1000)
 
@@ -261,9 +287,15 @@ class DetectionScreen(QWidget):
         self.status_label.setText("세션 종료됨")
         self.status_label.setObjectName("status_warning")
         self.status_label.style().polish(self.status_label)
-        self.posture_label.setText("감지가 종료되었습니다. 허브에서 다시 시작하세요.")
+        self.posture_label.setText("감지가 종료되었습니다. 아래 버튼으로 다시 시작하거나 결과를 확인하세요.")
         self.cheek_detail_label.setText("광대 거리: - (예상: -)")
         self.distance_label.setText("화면 거리: - cm")
+        # show post-stop actions
+        try:
+            self.restart_btn.show()
+            self.results_btn.show()
+        except Exception:
+            pass
 
     def showEvent(self, event):
         super().showEvent(event)

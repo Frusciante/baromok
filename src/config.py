@@ -255,6 +255,30 @@ class SettingsConfig:
     @classmethod
     def load_from_json(cls, file_path: str, config_manager: Optional[ConfigManager] = None) -> "SettingsConfig":
         """JSON 파일에서 설정 로드"""
+        def _apply_sensitivity_defaults(instance: "SettingsConfig") -> "SettingsConfig":
+            if config_manager:
+                scoring_config = config_manager.get_frame_scoring_config()
+                sensitivities = scoring_config.get("sensitivities", {})
+
+                if instance.forward_head_sensitivity is None:
+                    instance.forward_head_sensitivity = sensitivities.get("forward_head", 0.075)
+                if instance.recline_sensitivity is None:
+                    instance.recline_sensitivity = sensitivities.get("recline", 0.01)
+                if instance.recommended_forward_head is None:
+                    instance.recommended_forward_head = sensitivities.get("forward_head", 0.075)
+                if instance.recommended_recline is None:
+                    instance.recommended_recline = sensitivities.get("recline", 0.01)
+            else:
+                if instance.forward_head_sensitivity is None:
+                    instance.forward_head_sensitivity = 0.075
+                if instance.recline_sensitivity is None:
+                    instance.recline_sensitivity = 0.01
+                if instance.recommended_forward_head is None:
+                    instance.recommended_forward_head = instance.forward_head_sensitivity
+                if instance.recommended_recline is None:
+                    instance.recommended_recline = instance.recline_sensitivity
+            return instance
+
         try:
             instance = cls()
             
@@ -270,28 +294,11 @@ class SettingsConfig:
                 if k in field_names:
                     setattr(instance, k, v)
             
-            # 민감도 기본값 적용 (JSON 기준 파일에서 로드)
-            if config_manager:
-                scoring_config = config_manager.get_frame_scoring_config()
-                sensitivities = scoring_config.get("sensitivities", {})
-                
-                # 현재 설정값이 없으면 기본값(Factory Default) 사용
-                if instance.forward_head_sensitivity is None:
-                    instance.forward_head_sensitivity = sensitivities.get("forward_head", 0.075)
-                if instance.recline_sensitivity is None:
-                    instance.recline_sensitivity = sensitivities.get("recline", 0.01)
-
-                # 권장값이 없으면 역시 기본값으로 초기화
-                if instance.recommended_forward_head is None:
-                    instance.recommended_forward_head = sensitivities.get("forward_head", 0.075)
-                if instance.recommended_recline is None:
-                    instance.recommended_recline = sensitivities.get("recline", 0.01)
-                    
-            return instance
+            return _apply_sensitivity_defaults(instance)
             
         except Exception as e:
             logger.warning("설정 파일 로드 실패, 기본값 사용: %s", e)
-            return cls()
+            return _apply_sensitivity_defaults(cls())
 
     def save_to_json(self, file_path: str) -> None:
         """JSON 파일에 설정 저장"""

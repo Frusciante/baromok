@@ -140,6 +140,7 @@ class baromokApp:
         self.settings_config = SettingsConfig.load_from_json(
             "data/config.json", self.config
         )
+        self._settings_dirty = False
         logger.info("사용자 설정 로드 완료")
 
         # 로드된 감도를 판정 엔진에 적용
@@ -260,6 +261,9 @@ class baromokApp:
             lambda: self.switch_screen(1)  # Hub
         )
         self.detection_screen.detection_stopped_signal.connect(self._stop_detection)
+        # DetectionScreen의 추가 액션 신호 연결
+        self.detection_screen.detection_restart_signal.connect(self._start_detection)
+        self.detection_screen.view_results_signal.connect(lambda: self.switch_screen(3))
 
         # 초기 화면: Hub
         self.main_window.stacked_widget.setCurrentWidget(self.hub_screen)
@@ -277,6 +281,34 @@ class baromokApp:
                 widget.setCursor(Qt.CursorShape.PointingHandCursor)
             else:
                 widget.setCursor(Qt.CursorShape.ArrowCursor)
+
+    def _settings_to_dict(self) -> dict:
+        """현재 설정 dataclass를 dict 형태로 변환한다."""
+        return vars(self.settings_config)
+
+    def _refresh_settings_screen_values(self):
+        """설정 화면 위젯을 앱의 최신 설정값으로 동기화한다."""
+        settings_dict = self._settings_to_dict()
+        if hasattr(self.settings_screen, "update_settings"):
+            self.settings_screen.update_settings(settings_dict)
+            return
+
+        for widget in self.settings_screen.category_widgets:
+            widget.blockSignals(True)
+            widget.set_value(settings_dict)
+            widget.blockSignals(False)
+
+    def _persist_settings_if_dirty(self, force: bool = False, reason: str = ""):
+        """dirty 정책에 따라 설정을 단일 경로로 저장한다."""
+        if not force and not self._settings_dirty:
+            return
+
+        self.settings_config.save_to_json("data/config.json")
+        self._settings_dirty = False
+        if reason:
+            logger.info("설정 저장 완료 (%s)", reason)
+        else:
+            logger.info("설정 저장 완료")
 
     # ========== 프로퍼티: 설정값 실시간 반영 ==========
     @property
@@ -331,6 +363,9 @@ class baromokApp:
         if 0 <= screen_index < self.main_window.stacked_widget.count():
             self._previous_screen_index = self.main_window.stacked_widget.currentIndex()
 
+            if self._previous_screen_index == 2 and screen_index != 2:
+                self._persist_settings_if_dirty(reason="settings_screen_exit")
+
             # 이전 화면 정리
             if self._previous_screen_index == 0 and screen_index != 0 and hasattr(self, "baseline_screen"):
                 try:
@@ -354,6 +389,9 @@ class baromokApp:
                     self.baseline_screen.start_camera_preview()
                 except Exception:
                     logger.debug("Baseline 화면 진입 시 카메라 시작 실패")
+
+            if screen_index == 2 and hasattr(self, "settings_screen"):
+                self._refresh_settings_screen_values()
 
             # 자세 맞춤/설정/통계/감지 화면으로 이동할 때는 뒤로가기 버튼을 노출한다.
             if screen_index in (0, 2, 3, 4):
@@ -561,20 +599,19 @@ class baromokApp:
 
         # 엔진 및 UI 즉시 반영
         self._apply_settings()
-        for widget in self.settings_screen.category_widgets:
-            widget.set_value(vars(self.settings_config))
+        self._refresh_settings_screen_values()
 
-        # 파일 저장
-        self.settings_config.save_to_json("data/config.json")
+        self._settings_dirty = True
+        self._persist_settings_if_dirty(force=True, reason="baseline_recommended")
 
     def _stop_detection(self):
         """감지 중지"""
         logger.info("감지 중지")
         if self.camera_worker.isRunning():
-            self.camera_worker.pause()
+            self.camera_worker.stop_capture()
         self.session_manager.end_session()
         self._hide_alert_popup()
-        self.switch_screen(1)  # HubScreen으로 이동
+        self.detection_screen.on_detection_stopped()
 
     def _handle_state_transition(self, event: StateTransitionEvent):
         """상태 전이 이벤트를 알림 팝업 요청으로 변환"""
@@ -706,15 +743,19 @@ class baromokApp:
         """설정 저장"""
         try:
             # 설정값 업데이트
+            any_changed = False
             for key, value in settings_dict.items():
-                if hasattr(self.settings_config, key):
+                if hasattr(self.settings_config, key) and getattr(self.settings_config, key) != value:
                     setattr(self.settings_config, key, value)
-
-            # JSON 파일에 저장
-            self.settings_config.save_to_json("data/config.json")
+                    any_changed = True
 
             # 설정값 즉시 적용
             self._apply_settings()
+
+            if any_changed:
+                self._settings_dirty = True
+
+            self._persist_settings_if_dirty(force=any_changed, reason="settings_save_signal")
 
             logger.info(f"설정 저장 완료: {settings_dict}")
         except Exception as e:
@@ -724,15 +765,12 @@ class baromokApp:
         """설정 초기화 (기본값으로)"""
         try:
             self.settings_config.reset_to_defaults(self.config)
-            # UI 위젯들에 반영
-            for widget in self.settings_screen.category_widgets:
-                widget.set_value(vars(self.settings_config))
+            self._refresh_settings_screen_values()
 
             # 엔진 즉시 반영
-            self.judgment_engine.update_sensitivities(
-                self.settings_config.forward_head_sensitivity,
-                self.settings_config.recline_sensitivity,
-            )
+            self._apply_settings()
+            self._settings_dirty = True
+            self._persist_settings_if_dirty(force=True, reason="settings_reset")
             logger.info("설정이 기본값으로 초기화되었습니다.")
         except Exception as e:
             logger.error(f"설정 초기화 실패: {e}")
@@ -782,9 +820,15 @@ class baromokApp:
         """Settings 위젯의 value_changed_signal을 처리하여 변경을 즉시 반영합니다."""
         try:
             # settings_config에 반영 (메모리상의 설정)
+            any_changed = False
             for k, v in value_dict.items():
-                if hasattr(self.settings_config, k):
+                if hasattr(self.settings_config, k) and getattr(self.settings_config, k) != v:
                     setattr(self.settings_config, k, v)
+                    any_changed = True
+
+            if any_changed:
+                self._apply_settings()
+                self._settings_dirty = True
 
             # 사운드 관련 변경은 즉시 SoundManager에 반영
             if "sound_volume" in value_dict and hasattr(self, "sound_manager"):
@@ -819,9 +863,8 @@ class baromokApp:
         except Exception:
             logger.debug("종료 시 카메라 정지 실패")
 
-        # 종료 전 설정 최종 저장
-        self.settings_config.save_to_json("data/config.json")
-        logger.info("애플리케이션 종료 전 설정 저장 완료")
+        # 종료 전 설정 최종 저장 (dirty일 때만)
+        self._persist_settings_if_dirty(reason="app_exit")
 
         return exit_code
 
