@@ -325,14 +325,19 @@ class CalibrationV2Manager:
 
         # cheek_distance 기반: forward_head_only / recline 공통 베이스
         # 실험 데이터: forward Δ% +3~+12% (U1), recline Δ% +15~+42% (U1)
-        # → forward 와 recline 의 간격을 forward_th × 3 정도로 두면 자연 분리됨
-        FORWARD_RECLINE_RATIO = 3.0
+        # → forward_th 는 10% 로 cap, recline_th = forward_th × 2 (상한 25%)
+        # 캘리브 노이즈가 높을 때 forward_th × 3 이 40%+ 까지 치솟아 recline 미탐 방지
+        FORWARD_RECLINE_RATIO = 2.0
+        MAX_FORWARD_TH = 10.0   # % — 캘리브 노이즈로 인한 과도한 임계값 방지
+        MAX_RECLINE_TH = 25.0   # % — 실험 최대 recline Δ%=42%, 실용 상한
         cheek = neutral.get("cheek_distance")
         if cheek and cheek.mean > 0:
             std_based_pct = (3.0 * cheek.std) / abs(cheek.mean) * 100.0
-            forward_th = max(std_based_pct, MIN_DELTA_PCT_SAFETY)
-            recline_th = max(forward_th * FORWARD_RECLINE_RATIO,
-                             MIN_DELTA_PCT_SAFETY * FORWARD_RECLINE_RATIO)
+            forward_th = min(max(std_based_pct, MIN_DELTA_PCT_SAFETY), MAX_FORWARD_TH)
+            recline_th = min(
+                max(forward_th * FORWARD_RECLINE_RATIO, MIN_DELTA_PCT_SAFETY * FORWARD_RECLINE_RATIO),
+                MAX_RECLINE_TH
+            )
             thresholds["forward_cheek_delta_pct"] = round(forward_th, 2)
             thresholds["recline_cheek_delta_pct"] = round(recline_th, 2)
         else:

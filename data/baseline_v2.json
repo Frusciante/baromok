@@ -49,8 +49,8 @@
     }
   },
   "auto_thresholds": {
-    "forward_cheek_delta_pct": 14.84,
-    "recline_cheek_delta_pct": 44.53,
+    "forward_cheek_delta_pct": 10.0,
+    "recline_cheek_delta_pct": 20.0,
     "forward_shoulder_delta_pct": 86.93,
     "head_tilt_deg_abs": 5.36,
     "chin_rest_score_threshold": 0.5
