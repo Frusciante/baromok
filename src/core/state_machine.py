@@ -104,6 +104,14 @@ class StateMachine:
                     self._transition_to(PostureState.NORMAL, None)
                     logger.info("상태 전이: WARNING → NORMAL (자세 정상화)")
                 else:
+                    # v1.1: "고개 돌린 자세(turned_head)"의 경우 BAD_POSTURE로 전이시키지 않고 WARNING(주의, 노란색) 상태를 유지한다.
+                    # 사용자의 요청: "메시지 경고 창은 띄우지 않되, 주의 정도로 노란색을 유지하도록"
+                    if confirmed_posture == "turned_head":
+                        # 상태 유지 (WARNING 유지)
+                        return self.current_state
+
+                    # [수정] side_tilt(고개 기울인 자세)는 일반 자세와 동일하게 BAD_POSTURE로 전이되도록 놔둔다.
+
                     # 나쁜 자세 지정된 시간(min_duration) 이상 지속 시 BAD_POSTURE로 전이
                     if time_in_previous_state >= min_duration:
                         self._transition_to(PostureState.BAD_POSTURE, confirmed_posture)

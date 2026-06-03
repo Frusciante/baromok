@@ -261,24 +261,54 @@ class CameraWorker(QThread):
                 frame_width=frame_width,
                 frame_height=frame_height,
                 timestamp_ms=landmarks.frame_timestamp_ms,
-                low_latency=True # 속도 향상을 위해 항상 low_latency 적용
+                low_latency=False, # 더 엄격한 필터 적용을 위해 low_latency 비활성화
+                baseline_mode=self.is_baseline_mode,
             )
             logger.debug(f"정규화된 랜드마크: {normalized_landmarks}")
+
+            # 보강: 정규화된 랜드마크에 필수 키가 빠져 있으면
+            # 원래 픽셀 좌표인 `relevant_landmarks`에서 값을 가져와 정규화하여 채웁니다.
+            # 이렇게 하면 시각화 및 지표 계산에서 누락으로 인한 None 반환을 방지합니다.
+            try:
+                essential = ["left_cheek", "right_cheek", "left_shoulder", "right_shoulder", "chin_points"]
+                for key in essential:
+                    val = normalized_landmarks.get(key)
+                    if val is None or (isinstance(val, list) and len(val) == 0):
+                        raw = relevant_landmarks.get(key)
+                        if raw:
+                            # raw는 픽셀 좌표(튜플) 또는 리스트일 수 있음
+                            if isinstance(raw, tuple) and len(raw) >= 2:
+                                normalized_landmarks[key] = (raw[0] / frame_width, raw[1] / frame_height)
+                            elif isinstance(raw, list) and len(raw) > 0:
+                                normalized_landmarks[key] = [
+                                    (p[0] / frame_width, p[1] / frame_height) for p in raw
+                                ]
+            except Exception as e:
+                logger.debug(f"정규화 보강 중 예외: {e}")
 
             indicators = self.indicator_calculator.calculate_all_indicators(
                 normalized_landmarks,
                 timestamp=current_timestamp_seconds,
-                low_latency=True # 속도 향상을 위해 항상 low_latency 적용
+                low_latency=True, # 속도 향상을 위해 항상 low_latency 적용
+                baseline_mode=self.is_baseline_mode
             )
-            
+
             # 자세 맞춤 단계 정보 주입 (디버그용)
             if indicators:
                 indicators.step_index = self.current_step
 
             if indicators is None:
+                # 어떤 키가 빠진지 로깅하여 원인 진단을 쉽게 함
+                try:
+                    missing = [
+                        k for k in ("left_cheek", "right_cheek", "left_shoulder", "right_shoulder")
+                        if not normalized_landmarks.get(k)
+                    ]
+                except Exception:
+                    missing = None
+
                 logger.debug(
-                    "IndicatorCalculator returned None (필수 랜드마크 누락). "
-                    f"relevant_landmarks={relevant_landmarks}"
+                    f"IndicatorCalculator returned None (필수 랜드마크 누락). missing={missing} normalized={normalized_landmarks} relevant={relevant_landmarks}"
                 )
 
         except Exception as e:
@@ -363,9 +393,11 @@ class CameraWorker(QThread):
                             "forward_head": judgment_result.forward_head_likelihood,
                             "recline": judgment_result.recline_likelihood,
                             "chin_rest_estimated": judgment_result.chin_rest_likelihood,
+                            "eye_close": judgment_result.eye_close_likelihood,
+                            "turned_head": judgment_result.turned_head_likelihood,
+                            "side_tilt": judgment_result.side_tilt_likelihood,
                         }
                         probability = float(likelihood_map.get(posture_type, 0.0))
-                    display_label = posture_type  # detection_screen 에서 한국어로 변환
 
                 except Exception as e:
                     logger.debug(f"V1 판정 실패: {e}")
@@ -460,13 +492,45 @@ class CameraWorker(QThread):
         # 상태 텍스트
         state_text_map = {
             PostureState.NORMAL: "정상",
-            PostureState.WARNING: "경고",
+            PostureState.WARNING: "주의",
             PostureState.BAD_POSTURE: "나쁜자세",
         }
         state_text = state_text_map.get(state, "알 수 없음")
 
+        # 자세 유형 한글 매핑
+        posture_name_map = {
+            "normal": "바른 자세",
+            "forward_head": "거북목",
+            "recline": "기댄 자세",
+            "chin_rest_estimated": "턱 받침",
+            "eye_close": "화면 가까움",
+            "turned_head": "고개 돌린 자세",
+            "side_tilt": "고개 기울인 자세",
+            "baseline": "자세 맞춤 중"
+        }
+        display_posture = posture_name_map.get(posture_type, posture_type)
+
+        # Iris visualization (debugging)
+        if normalized_landmarks:
+            for side in ['left', 'right']:
+                center_key = f"{side}_iris_center"
+                center = normalized_landmarks.get(center_key)
+                if center:
+                    pixel_center = (int(center[0] * frame_width), int(center[1] * frame_height))
+                    # Draw iris point
+                    cv2.circle(annotated, pixel_center, 3, (255, 255, 0), -1)
+                    # Draw rhombus
+                    size = 15
+                    pts = np.array([
+                        [pixel_center[0], pixel_center[1] - size],
+                        [pixel_center[0] + size, pixel_center[1]],
+                        [pixel_center[0], pixel_center[1] + size],
+                        [pixel_center[0] - size, pixel_center[1]]
+                    ], np.int32)
+                    cv2.polylines(annotated, [pts], True, (255, 255, 0), 2)
+
         # 상단 정보 표시
-        info_text = f"{state_text} | {posture_type} | Prob: {probability:.2f}"
+        info_text = f"{state_text} | {display_posture} | {probability:.1%}"
         cv2.putText(
             annotated,
             info_text,
@@ -480,23 +544,19 @@ class CameraWorker(QThread):
         # 지표 정보 (상세 버전)
         if indicators is not None:
             y_offset = 60
-
-            if self.engine_mode == "v2":
-                # V2 모드: display_label + Δ 표시
-                v2_text = f"[V2] {display_label} | Conf: {probability:.2f}"
-                cv2.putText(annotated, v2_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-                y_offset += 20
-                cheek_text = f"Cheek: {indicators.cheek_distance:.3f} | EyeTilt: {getattr(indicators, 'eye_line_tilt', 0):.1f}deg"
-                cv2.putText(annotated, cheek_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-            else:
-                # V1 모드: Baseline 정보 (RANSAC 기대값 포함)
+            # Baseline 정보 (RANSAC 기대값 포함)
+            baseline = self.judgment_engine.baseline_manager.get_baseline_metrics()
+            # indicators.shoulder_width가 None이 아님을 확실히 체크 (TypeError 방지)
+            if baseline and not self.is_baseline_mode and getattr(indicators, 'shoulder_width', None) is not None:
                 try:
-                    baseline = self.judgment_engine.baseline_manager.get_baseline_metrics()
-                except Exception:
-                    baseline = None
-                if baseline and not self.is_baseline_mode:
-                    expected_cheek = self.judgment_engine.baseline_manager.get_expected_cheek(indicators.shoulder_width)
-                    deviation = (indicators.cheek_distance - expected_cheek) / expected_cheek
+                    sh_w = float(indicators.shoulder_width)
+                    expected_cheek = self.judgment_engine.baseline_manager.get_expected_cheek(sh_w)
+
+                    # expected_cheek가 0일 경우 제로 나누기 방지
+                    if expected_cheek > 0:
+                        deviation = (indicators.cheek_distance - expected_cheek) / expected_cheek
+                    else:
+                        deviation = 0.0
 
                     debug_text = f"Cheek: {indicators.cheek_distance:.3f} (Exp: {expected_cheek:.3f})"
                     cv2.putText(annotated, debug_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
@@ -506,24 +566,28 @@ class CameraWorker(QThread):
                     cv2.putText(annotated, delta_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
                     y_offset += 20
 
-                    detail_text = f"ShldTilt: {indicators.shoulder_tilt_deg:+.1f}deg | EyeTilt: {indicators.eye_line_tilt:+.1f}deg"
+                    shld_tilt = indicators.shoulder_tilt_deg if indicators.shoulder_tilt_deg is not None else 0.0
+                    detail_text = f"ShldTilt: {shld_tilt:+.1f}deg | EyeTilt: {indicators.eye_line_tilt:+.1f}deg"
                     cv2.putText(annotated, detail_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                     y_offset += 20
+                except (TypeError, ValueError) as e:
+                    logger.debug(f"Annotation formatting error (shoulders): {e}")
+            else:
+                # 어깨가 없을 경우의 대체 정보 표시
+                indicator_text = f"Cheek: {indicators.cheek_distance:.2f} | EyeTilt: {indicators.eye_line_tilt:+.1f}deg"
+                cv2.putText(annotated, indicator_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+                y_offset += 20
 
-                    hand_text = f"HandFace: {indicators.hand_face_score:.2f} | ChinOcc: {indicators.chin_occlusion:.2f}"
-                    cv2.putText(annotated, hand_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            # 화면 거리 정보
+            if indicators.eye_screen_distance_cm is not None:
+                try:
+                    dist_cm = float(indicators.eye_screen_distance_cm)
+                    dist_text = f"EyeDist: {dist_cm:.1f}cm"
+                    dist_color = (0, 0, 255) if indicators.eye_close_warning else (0, 255, 255)
+                    cv2.putText(annotated, dist_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, dist_color, 2)
                     y_offset += 20
-                else:
-                    indicator_text = f"Cheek: {indicators.cheek_distance:.2f} | Sh: {indicators.shoulder_width:.2f}"
-                    cv2.putText(
-                        annotated,
-                        indicator_text,
-                        (10, y_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (200, 200, 200),
-                        1,
-                    )
+                except (TypeError, ValueError):
+                    pass
 
         # 랜드마크 시각화
         try:
@@ -540,6 +604,38 @@ class CameraWorker(QThread):
                         vis_landmarks[key] = [(int(p[0] * frame_width), int(p[1] * frame_height)) for p in val]
                     else:
                         vis_landmarks[key] = val
+
+                # 보강: normalized_landmarks에 일부 키가 비어있을 경우 원시 픽셀 좌표로 채워서 시각화를 보장
+                try:
+                    raw_relevant = self.landmark_extractor.get_relevant_landmarks(
+                        landmarks, frame_width=frame_width, frame_height=frame_height
+                    )
+                    fill_keys = [
+                        "left_shoulder",
+                        "right_shoulder",
+                        "left_cheek",
+                        "right_cheek",
+                        "chin_points",
+                        "left_hand_tips",
+                        "right_hand_tips",
+                    ]
+                    for k in fill_keys:
+                        if not vis_landmarks.get(k):
+                            raw_val = raw_relevant.get(k)
+                            if raw_val:
+                                # raw_val은 픽셀 좌표(튜플) 또는 리스트
+                                if isinstance(raw_val, tuple) and len(raw_val) >= 2:
+                                    vis_landmarks[k] = (int(raw_val[0]), int(raw_val[1]))
+                                elif isinstance(raw_val, list) and len(raw_val) > 0:
+                                    converted = []
+                                    for p in raw_val:
+                                        if isinstance(p, (list, tuple)) and len(p) >= 2:
+                                            converted.append((int(p[0]), int(p[1])))
+                                    if converted:
+                                        vis_landmarks[k] = converted
+                except Exception as e:
+                    logger.debug(f"시각화 보강 실패: {e}")
+
                 relevant_landmarks = vis_landmarks
             else:
                 relevant_landmarks = self.landmark_extractor.get_relevant_landmarks(

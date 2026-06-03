@@ -18,7 +18,7 @@
 
 ## 1. 핵심 설계 철학
 - **Depth Proxy**: 단일 RGB 카메라의 불안정한 깊이 추정 대신, **픽셀 상의 어깨 너비(Shoulder Width)**를 거리(깊이)의 독립 변수($x$)로 사용합니다.
-- **Bi-linear/Non-linear Calibration**: 어깨 너비(거리) 변화에 따른 **광대 너비(얼굴 크기)** 변화를 2차 함수($y = ax^2 + bx + c$)로 모델링하여 정상 자세의 기준점(Expected Value)을 동적으로 산출합니다.
+- **Linear Calibration**: 어깨 너비(거리) 변화에 따른 **광대 너비(얼굴 크기)** 변화를 1차(선형) 함수($y = m x + b$)로 모델링하여 정상 자세의 기준점(Expected Value)을 동적으로 산출합니다.
 - **Outlier Rejection**: 자세 맞춤 시 발생하는 사용자의 불필요한 움직임을 **RANSACRegressor**로 필터링하여, 어깨 너비에 따른 광대 너비의 순수 상관 관계 신호만 추출합니다.
 
 ---
@@ -39,17 +39,17 @@
 
 ---
 
-## 3. 모델 학습 (RANSAC Quadratic Regression)
+## 3. 모델 학습 (RANSAC Linear Regression)
 
 수집된 고밀도 원시 데이터를 바탕으로 `scikit-learn`의 RANSAC 알고리즘을 수행합니다.
 
 ### 3.1. 학습 파이프라인
 ```python
-# PolynomialFeatures(degree=2) + RANSACRegressor
+# PolynomialFeatures(degree=1) + RANSACRegressor (Linear)
 X = shoulder_widths.reshape(-1, 1) # 어깨 너비 (독립 변수)
 y = cheek_distances               # 광대 거리 (종속 변수)
-# 2차 함수 모델: y = ax^2 + bx + c
-model = make_pipeline(PolynomialFeatures(degree=2), RANSACRegressor())
+# 1차 선형 모델: y = m * x + b
+model = make_pipeline(PolynomialFeatures(degree=1), RANSACRegressor())
 model.fit(X, y)
 ```
 
@@ -63,7 +63,7 @@ model.fit(X, y)
 
 ### 4.1. 기대치 계산 (Expected Value)
 실시간 프레임에서 측정된 `shoulder_width`($x$)를 학습된 모델에 대입하여, 현재 거리에서 기대되는 **정상 광대 너비**($y_{expected}$)를 구합니다.
-*   `expected_cheek = a * x^2 + b * x + c`
+*   `expected_cheek = m * x + b`
 *   `deviation (%) = (measured_cheek - expected_cheek) / expected_cheek`
 
 ### 4.2. 자세별 탐지 임계값 (Sensitivity)
@@ -91,6 +91,6 @@ model.fit(X, y)
 ---
 
 ## 6. 에이전트 구현 팁
-- **Calibration 시각화**: `ransac_fit_{현재시간}.png`를 통해 산출된 2차 곡선과 샘플 점들이 선형에 가까운지, 모델이 데이터를 잘 추종하는지 확인하십시오.
+- **Calibration 시각화**: `ransac_fit_{현재시간}.png`를 통해 산출된 선형 곡선과 샘플 점들이 모델을 잘 따르는지 확인하십시오.
 - **Normalization**: 모든 거리는 이미지 해상도에 독립적이도록 MediaPipe의 정규화 좌표(0.0~1.0)를 사용해야 합니다.
 - **Fallback**: `scikit-learn`이 없는 환경을 대비해 `np.polyfit`을 이용한 최소자승법(Least Squares) 백업 로직을 구현하는 것이 좋습니다.
