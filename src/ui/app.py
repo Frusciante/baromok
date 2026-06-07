@@ -30,8 +30,6 @@ from src.core.indicator_calculator import IndicatorCalculator
 from src.core.baseline_manager import BaselineManager
 from src.core.judgment_engine import JudgmentEngine
 from src.core.state_machine import StateMachine, StateTransitionEvent
-from src.core.calibration_v2 import CalibrationV2Manager
-from src.core.judgment_engine_v2 import JudgmentEngineV2
 from src.core.camera_worker import create_camera_worker
 from src.core.session_manager import create_session_manager
 from src.core.sound_manager import SoundManager
@@ -108,14 +106,6 @@ class baromokApp:
         self.state_machine = StateMachine(self.config)
         self.state_machine.register_state_change_callback(self._handle_state_transition)
 
-        # V2 엔진 초기화
-        self.cal_mgr_v2 = CalibrationV2Manager(self.config)
-        if self.cal_mgr_v2.load():
-            logger.info("V2 캘리브레이션 로드 완료")
-        else:
-            logger.info("V2 캘리브레이션 없음 — 기준자세설정 시 자동 생성됩니다")
-        self.judgment_engine_v2 = JudgmentEngineV2(self.config, self.cal_mgr_v2)
-
         logger.info("✓ 엔진 컴포넌트 준비 완료")
 
         # 비즈니스 로직 초기화 (Phase 4)
@@ -132,8 +122,6 @@ class baromokApp:
             self.state_machine,
             self.config,
         )
-        # V2 컴포넌트를 카메라 워커에 주입
-        self.camera_worker.set_v2_components(self.judgment_engine_v2, self.cal_mgr_v2)
         logger.info("✓ 카메라 워커 준비 완료")
 
         # 설정 로드 (ConfigManager를 전달하여 기본값 처리)
@@ -239,7 +227,6 @@ class baromokApp:
         self.hub_screen.open_statistics_signal.connect(
             lambda: self.switch_screen(3)  # Statistics
         )
-        self.hub_screen.engine_mode_changed_signal.connect(self._on_engine_mode_changed)
         self.detection_screen.open_settings_signal.connect(
             lambda: self.switch_screen(2)  # Settings
         )
@@ -545,43 +532,8 @@ class baromokApp:
         self.switch_screen(4)  # DetectionScreen으로 이동
         self.detection_screen.on_detection_started()
 
-    def _on_engine_mode_changed(self, mode: str):
-        """V1/V2 토글 처리"""
-        if mode == "v2" and not self.cal_mgr_v2.is_loaded():
-            # V2 캘리브레이션 없음 → V1로 롤백하고 안내
-            from PyQt6.QtWidgets import QMessageBox
-            msg = QMessageBox(self.main_window)
-            msg.setIcon(QMessageBox.Icon.Information)
-            msg.setWindowTitle("V2 캘리브레이션 필요")
-            msg.setText(
-                "V2 모드는 기준자세설정이 필요합니다.\n\n"
-                "기준자세설정(자세 맞춤)을 한 번 완료하면\n"
-                "V1과 V2 캘리브레이션이 동시에 생성됩니다.\n\n"
-                "기준자세설정 후 다시 V2로 전환해 주세요."
-            )
-            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg.exec()
-            # V1으로 롤백
-            self.hub_screen.update_engine_badge("v1")
-            return
-        self.camera_worker.engine_mode = mode
-        logger.info(f"엔진 모드 변경: {mode}")
-
     def _handle_baseline_captured(self):
         """Baseline 완료 후 다음 동작 처리"""
-        # V2 캘리브레이션 병행 완료
-        try:
-            if self.cal_mgr_v2.is_collecting:
-                success = self.cal_mgr_v2.finish_collection()
-                if success:
-                    self.cal_mgr_v2.save()
-                    self.judgment_engine_v2.reset_filters()
-                    logger.info(f"V2 캘리브레이션 자동 완료 (quality={self.cal_mgr_v2.calibration.calibration_quality})")
-                else:
-                    logger.warning("V2 캘리브레이션 자동 완료 실패 (프레임 부족 또는 오류)")
-        except Exception as e:
-            logger.warning(f"V2 캘리브레이션 병행 완료 중 오류: {e}")
-
         if self.settings_config.auto_start_detection:
             logger.info("자동 감지 시작 설정 활성화: 바로 감지 시작")
             self._start_detection()

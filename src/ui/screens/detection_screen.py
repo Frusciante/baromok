@@ -202,17 +202,11 @@ class DetectionScreen(QWidget):
 
     def _update_posture_status(self, state: str, posture_type: str, probability: float, display_label: str = ""):
         posture_map = {
-            # V1
             "normal": "바른 자세", "forward_head": "거북목", "recline": "기댄 자세",
             "chin_rest_estimated": "턱 받침", "baseline": "자세 맞춤 중",
-            # V2
-            "neutral": "바른 자세", "forward_head_only": "거북목 경향",
-            "forward_head_full": "몸 기울어진 거북목", "head_tilt": "고개 기울임",
-            "chin_rest": "턱 괸 자세",
-            # 기타
             "eye_close": "화면 가까움", "turned_head": "고개 돌린 자세", "side_tilt": "고개 기울인 자세",
         }
-        # V2는 display_label 이 이미 한국어이므로 우선 사용
+        # display_label 이 지정된 경우(예: 자세 맞춤 중) 우선 사용
         korean_label = display_label if display_label else posture_map.get(posture_type, posture_type)
         self.posture_label.setText(f"{korean_label} ({probability:.1%})")
         state_text = {"normal": "바른 자세", "warning": "경고", "bad_posture": "나쁜 자세", "NORMAL": "바른 자세", "WARNING": "경고", "BAD_POSTURE": "나쁜 자세"}

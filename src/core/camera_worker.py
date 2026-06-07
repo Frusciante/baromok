@@ -82,20 +82,9 @@ class CameraWorker(QThread):
         self.frame_count = 0
         self.start_time: Optional[datetime] = None
 
-        # V2 엔진 (옵셔널 — set_v2_components 로 주입)
-        self.engine_mode: str = "v1"
-        self._engine_v2 = None
-        self._cal_mgr_v2 = None
-
         logger.info(
             f"CameraWorker 초기화: {camera_width}x{camera_height} @ {camera_fps} FPS"
         )
-
-    def set_v2_components(self, engine_v2, cal_mgr_v2) -> None:
-        """V2 판정 엔진 및 캘리브레이션 매니저 주입"""
-        self._engine_v2 = engine_v2
-        self._cal_mgr_v2 = cal_mgr_v2
-        logger.info("V2 컴포넌트 설정 완료")
 
     def set_baseline_mode(self, enabled: bool):
         """Baseline 수집 모드 설정"""
@@ -103,13 +92,7 @@ class CameraWorker(QThread):
 
         if enabled:
             self.judgment_engine.reset_history()
-            if self._engine_v2 is not None:
-                self._engine_v2.reset_filters()
             self.state_machine.reset()
-            # V2 캘리브레이션 병행 수집 시작 (이미 수집 중이면 중복 시작 방지)
-            if self._cal_mgr_v2 is not None and not self._cal_mgr_v2.is_collecting:
-                self._cal_mgr_v2.start_collection()
-                logger.info("V2 캘리브레이션 병행 수집 시작")
             logger.info("Baseline 모드 활성화: 판정/상태 머신 업데이트 비활성화")
         else:
             logger.info("Baseline 모드 비활성화: 일반 자세 감지 모드")
@@ -318,10 +301,6 @@ class CameraWorker(QThread):
         # baseline 수집 중에 JudgmentEngine이 baseline 대비 변화율을 계산하려 하면
         # 아직 baseline이 없기 때문에 불필요한 경고와 오탐 이력이 생길 수 있다.
         if self.is_baseline_mode:
-            # V2 캘리브레이션 병행 수집
-            if self._cal_mgr_v2 is not None and self._cal_mgr_v2.is_collecting and indicators is not None:
-                self._cal_mgr_v2.add_frame(indicators)
-
             current_state = self.state_machine.get_current_state()
 
             annotated_frame = self._annotate_frame(
@@ -348,7 +327,7 @@ class CameraWorker(QThread):
                 "frame_number": self.frame_count,
             }
 
-        # 3. 판정 (V1 / V2 분기)
+        # 3. 판정
         posture_type = "normal"
         probability = 0.0
         display_label = "바른 자세"
@@ -356,60 +335,41 @@ class CameraWorker(QThread):
         judgment_result: Optional[PostureJudgmentResult] = None
 
         if indicators is not None:
-            if self.engine_mode == "v2" and self._engine_v2 is not None:
-                # ─── V2 판정 경로 ─────────────────────────────────────────
-                try:
-                    result_v2 = self._engine_v2.judge(indicators)
-                    confirmed_v2 = self._engine_v2.update_sustain(result_v2)
-                    posture_type = result_v2.detected_posture
-                    probability = result_v2.confidence
-                    display_label = result_v2.display_label
-                    try:
-                        if confirmed_v2 and result_v2.detected_posture != "neutral":
-                            self.state_machine.update_state(confirmed_v2)
-                        else:
-                            self.state_machine.update_state(None)
-                    except Exception as e:
-                        logger.debug(f"V2 상태 머신 업데이트 실패: {e}")
-                except Exception as e:
-                    logger.debug(f"V2 판정 실패: {e}")
-            else:
-                # ─── V1 판정 경로 (기존) ──────────────────────────────────
-                try:
-                    judgment_result = self.judgment_engine.judge_single_frame(indicators)
+            try:
+                judgment_result = self.judgment_engine.judge_single_frame(indicators)
 
-                    self.judgment_engine.accumulate_frame(
-                        judgment_result,
-                        current_timestamp=current_timestamp_seconds,
-                    )
+                self.judgment_engine.accumulate_frame(
+                    judgment_result,
+                    current_timestamp=current_timestamp_seconds,
+                )
 
-                    confirmed_posture = self.judgment_engine.get_confirmed_posture(
-                        current_timestamp=current_timestamp_seconds,
-                    )
+                confirmed_posture = self.judgment_engine.get_confirmed_posture(
+                    current_timestamp=current_timestamp_seconds,
+                )
 
-                    if judgment_result.dominant_posture:
-                        posture_type = judgment_result.dominant_posture
-                        likelihood_map = {
-                            "forward_head": judgment_result.forward_head_likelihood,
-                            "recline": judgment_result.recline_likelihood,
-                            "chin_rest_estimated": judgment_result.chin_rest_likelihood,
-                            "eye_close": judgment_result.eye_close_likelihood,
-                            "turned_head": judgment_result.turned_head_likelihood,
-                            "side_tilt": judgment_result.side_tilt_likelihood,
-                        }
-                        probability = float(likelihood_map.get(posture_type, 0.0))
+                if judgment_result.dominant_posture:
+                    posture_type = judgment_result.dominant_posture
+                    likelihood_map = {
+                        "forward_head": judgment_result.forward_head_likelihood,
+                        "recline": judgment_result.recline_likelihood,
+                        "chin_rest_estimated": judgment_result.chin_rest_likelihood,
+                        "eye_close": judgment_result.eye_close_likelihood,
+                        "turned_head": judgment_result.turned_head_likelihood,
+                        "side_tilt": judgment_result.side_tilt_likelihood,
+                    }
+                    probability = float(likelihood_map.get(posture_type, 0.0))
 
-                except Exception as e:
-                    logger.debug(f"V1 판정 실패: {e}")
+            except Exception as e:
+                logger.debug(f"판정 실패: {e}")
 
-                # 4. V1 상태 머신 업데이트
-                try:
-                    if confirmed_posture:
-                        self.state_machine.update_state(confirmed_posture)
-                    else:
-                        self.state_machine.update_state(None)
-                except Exception as e:
-                    logger.debug(f"상태 머신 업데이트 실패: {e}")
+            # 4. 상태 머신 업데이트
+            try:
+                if confirmed_posture:
+                    self.state_machine.update_state(confirmed_posture)
+                else:
+                    self.state_machine.update_state(None)
+            except Exception as e:
+                logger.debug(f"상태 머신 업데이트 실패: {e}")
         else:
             # 필수 지표가 없으면 자세 누적 이력을 초기화한다.
             self.judgment_engine.reset_history()

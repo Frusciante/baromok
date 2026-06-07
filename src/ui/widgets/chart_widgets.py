@@ -203,8 +203,9 @@ class StatisticsLineChart(QWidget):
                 item["good_posture_percentage"] for item in prepared_sessions
             ]
             session_labels = [item["session_label"] for item in prepared_sessions]
-            avg_retention = sum(retention_rates) / len(retention_rates)
-            latest_index = len(prepared_sessions) - 1
+            # 평균은 실제 데이터(>0)가 있는 날만 계산
+            nonzero = [v for v in retention_rates if v > 0]
+            avg_retention = sum(nonzero) / len(nonzero) if nonzero else 0.0
 
             # Figure 초기화
             self.figure.clear()
@@ -232,6 +233,12 @@ class StatisticsLineChart(QWidget):
             )
             self._hover_annotation.set_visible(False)
 
+            # 데이터가 실제로 있는(>0) 마지막 항목을 강조; 없으면 마지막 항목
+            latest_index = next(
+                (i for i in range(len(retention_rates) - 1, -1, -1)
+                 if retention_rates[i] > 0),
+                len(retention_rates) - 1,
+            )
             bar_colors = ["#E0E0FF"] * len(session_nums)
             bar_edge_colors = ["#E0E0FF"] * len(session_nums)
             bar_colors[latest_index] = "#7C3AED"
@@ -282,7 +289,7 @@ class StatisticsLineChart(QWidget):
             ax.set_yticks([0, 25, 50, 75, 100])
 
             # 그리드 및 스파인
-            ax.grid(True, axis="y", linestyle="--", alpha=0.28, color="#C4B5FD")
+            ax.grid(True, axis="y", linestyle="--", alpha=0.28, color="#A9A0D4")
             ax.set_axisbelow(True)
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
@@ -301,7 +308,7 @@ class StatisticsLineChart(QWidget):
                 fontsize=10,
                 frameon=True,
                 facecolor="#FBFBFE",
-                edgecolor="#C4B5FD",
+                edgecolor="#A9A0D4",
             ).set_in_layout(True) # tight_layout()이 이 범례의 위치를 무시하지 못하도록 대처
 
             # 각 세션 값 표기
@@ -310,7 +317,8 @@ class StatisticsLineChart(QWidget):
                 bar_x = bar.get_x() + bar.get_width() / 2
                 bar_height = bar.get_height()
 
-                if idx == latest_index:
+                # 최신 데이터(말풍선 표시) 또는 데이터 없는 날(0%)은 레이블 생략
+                if idx == latest_index or value <= 0:
                     continue
 
                 ax.text(
@@ -578,11 +586,11 @@ class PostureBreakdownChart(QWidget):
     POSTURE_META = {
         "normal":              ("바른 자세",    "#7C3AED"),
         "neutral":             ("바른 자세",    "#7C3AED"),
-        "forward_head":        ("거북목",       "#DC2626"),
-        "forward_head_only":   ("거북목 경향",  "#F97316"),
-        "forward_head_full":   ("기울어진 거북목", "#EF4444"),
-        "recline":             ("기댄 자세",    "#2563EB"),
-        "chin_rest_estimated": ("턱 괸 자세",   "#D97706"),
+        "forward_head":        ("거북목",       "#D97A7A"),
+        "forward_head_only":   ("거북목 경향",  "#D97A7A"),
+        "forward_head_full":   ("기울어진 거북목", "#D97A7A"),
+        "recline":             ("기댄 자세",    "#7E8AA2"),
+        "chin_rest_estimated": ("턱 괸 자세",   "#B89B72"),
         "head_tilt":           ("고개 기울임",  "#7C3AED"),
         "eye_close":           ("눈 가까움",    "#059669"),
     }
@@ -592,7 +600,7 @@ class PostureBreakdownChart(QWidget):
         self.theme_manager = theme_manager
 
         dpi_scale = theme_manager.dpi_scale
-        self.figure = Figure(figsize=(10 * dpi_scale, 2.2 * dpi_scale), dpi=100)
+        self.figure = Figure(figsize=(10 * dpi_scale, 1.6 * dpi_scale), dpi=100)
         self.figure.patch.set_facecolor("#FBFBFE")
         self.canvas = FigureCanvas(self.figure)
 
@@ -655,16 +663,23 @@ class PostureBreakdownChart(QWidget):
                         fontsize=9, fontweight="bold", color="white")
             left += pct
 
-        # 범례
-        from matplotlib.patches import Patch
-        legend_elements = [Patch(facecolor=c, label=f"{l} {p:.1f}%")
-                           for l, p, c in items]
-        ax.legend(handles=legend_elements, loc="upper center",
-                  bbox_to_anchor=(0.5, -0.18), ncol=min(len(items), 5),
-                  fontsize=9, frameon=False)
-
         ax.set_xlim(0, 100)
         ax.set_ylim(-0.5, 0.5)
         ax.axis("off")
-        self.figure.tight_layout(rect=[0, 0.15, 1, 1])
+
+        # figure 레벨 범례 (axes 클리핑 우회)
+        from matplotlib.patches import Patch
+        legend_elements = [Patch(facecolor=c, label=f"{l} {p:.1f}%")
+                           for l, p, c in items]
+        # figure 레벨 범례 (axes 클리핑 우회)
+        from matplotlib.patches import Patch
+        legend_elements = [Patch(facecolor=c, label=f"{l} {p:.1f}%")
+                           for l, p, c in items]
+        self.figure.legend(handles=legend_elements,
+                           loc="lower center",
+                           ncol=min(len(items), 5),
+                           fontsize=9, frameon=False,
+                           bbox_to_anchor=(0.5, 0.02))
+
+        self.figure.subplots_adjust(left=0.01, right=0.99, top=0.98, bottom=0.35)
         self.canvas.draw()
