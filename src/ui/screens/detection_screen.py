@@ -2,7 +2,7 @@ import logging
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+    QFrame, QHBoxLayout, QLabel, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 )
 from src.ui.styles.theme import Colors, ThemeManager
 from src.ui.styles.font_loader import app_font
@@ -36,6 +36,7 @@ class DetectionScreen(QWidget):
         self.elapsed_time = 0
         self.is_detection_paused = False
         self.is_session_stopped = False
+        self._waiting_for_first_frame = False
         self.setup_ui()
 
         if self.camera_worker:
@@ -77,9 +78,23 @@ class DetectionScreen(QWidget):
         self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(300))
         preview_layout = QVBoxLayout()
         preview_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 카메라 대기 스피너 / 실제 프리뷰를 QStackedWidget으로 관리
+        self._preview_stack = QStackedWidget()
+
+        # Page 0: 스피너 레이블
+        self._spinner_label = QLabel("카메라 연결 중...")
+        self._spinner_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._spinner_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value}; font-size: 16px;")
+        self._preview_stack.addWidget(self._spinner_label)  # index 0
+
+        # Page 1: 실제 카메라 프리뷰
         self.preview_label = QLabel("[카메라 프리뷰]")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview_layout.addWidget(self.preview_label)
+        self._preview_stack.addWidget(self.preview_label)  # index 1
+
+        self._preview_stack.setCurrentIndex(1)  # 기본은 프리뷰 표시
+        preview_layout.addWidget(self._preview_stack)
         self.preview_frame.setLayout(preview_layout)
         layout.addWidget(self.preview_frame, 1)
 
@@ -152,6 +167,9 @@ class DetectionScreen(QWidget):
             if self.is_session_stopped:
                 return
             if frame_data.get("posture_type") == "baseline": return
+            if self._waiting_for_first_frame:
+                self._waiting_for_first_frame = False
+                self._preview_stack.setCurrentIndex(1)  # 첫 프레임 도착 → 프리뷰 표시
             annotated_frame = frame_data.get("frame")
             if annotated_frame is not None:
                 pixmap = cv2_to_qpixmap(annotated_frame)
@@ -251,6 +269,8 @@ class DetectionScreen(QWidget):
     def on_detection_started(self):
         self.is_session_stopped = False
         self.is_detection_paused = False
+        self._waiting_for_first_frame = True
+        self._preview_stack.setCurrentIndex(0)  # 스피너 표시
         self.status_label.setText("바른 자세")
         self.status_label.setObjectName("status_normal")
         self.status_label.style().polish(self.status_label)

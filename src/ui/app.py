@@ -89,6 +89,7 @@ class baromokApp:
         self.alert_hide_timer.timeout.connect(self._hide_alert_popup)
         self._last_alert_time = 0.0
         self._last_alert_type = ""
+        self._alert_state_lock = threading.Lock()
         self._previous_screen_index = 1
 
         # 엔진 컴포넌트 초기화 (Phase 2)
@@ -377,6 +378,9 @@ class baromokApp:
                 except Exception:
                     logger.debug("Baseline 화면 진입 시 카메라 시작 실패")
 
+            if screen_index == 1:
+                self._start_camera_warmup()
+
             if screen_index == 2 and hasattr(self, "settings_screen"):
                 self._refresh_settings_screen_values()
 
@@ -532,6 +536,31 @@ class baromokApp:
         self.switch_screen(4)  # DetectionScreen으로 이동
         self.detection_screen.on_detection_started()
 
+    def _start_camera_warmup(self):
+        """허브 화면 진입 시 카메라를 백그라운드에서 예열한다."""
+        try:
+            if not self.camera_worker.isRunning():
+                self.camera_worker.set_baseline_mode(False)
+                self.camera_worker.start()
+                # 2초 후 일시정지 (이미 충분히 예열됨)
+                QTimer.singleShot(2000, self._pause_warmup_camera)
+                logger.debug("카메라 예열 시작")
+            # 이미 running+paused 상태면 그대로 유지 (이미 예열됨)
+        except Exception:
+            logger.debug("카메라 예열 시작 실패")
+
+    def _pause_warmup_camera(self):
+        """예열 완료 후 허브 화면에 있는 경우에만 카메라를 일시정지한다."""
+        try:
+            current_index = self.main_window.stacked_widget.currentIndex()
+            if (current_index == 1
+                    and self.camera_worker.isRunning()
+                    and not self.camera_worker.is_paused):
+                self.camera_worker.pause()
+                logger.debug("카메라 예열 완료, 일시정지 상태로 전환")
+        except Exception:
+            logger.debug("카메라 예열 일시정지 실패")
+
     def _handle_baseline_captured(self):
         """Baseline 완료 후 다음 동작 처리"""
         if self.settings_config.auto_start_detection:
@@ -607,15 +636,16 @@ class baromokApp:
             pass
 
         now = time.time()
-        if (
-            alert_type == self._last_alert_type
-            and now - self._last_alert_time
-            < self.alert_cooldown_seconds  # 프로퍼티 사용
-        ):
-            return
+        with self._alert_state_lock:
+            if (
+                alert_type == self._last_alert_type
+                and now - self._last_alert_time
+                < self.alert_cooldown_seconds  # 프로퍼티 사용
+            ):
+                return
+            self._last_alert_type = alert_type
+            self._last_alert_time = now
 
-        self._last_alert_type = alert_type
-        self._last_alert_time = now
         self.alert_bridge.alert_requested.emit(alert_type, message_text)
 
         # 나쁜 자세로 진입했을 때만 경고음을 별도로 1회 재생한다.
@@ -719,7 +749,7 @@ class baromokApp:
     def _reset_settings(self):
         """설정 초기화 (기본값으로)"""
         try:
-            self.settings_config.reset_to_defaults(self.config)
+            self.settings_config.reset_to_defaults()
             self._refresh_settings_screen_values()
 
             # 엔진 즉시 반영
@@ -821,18 +851,10 @@ class baromokApp:
         # 종료 전 설정 최종 저장 (dirty일 때만)
         self._persist_settings_if_dirty(reason="app_exit")
 
-        return exit_code
+        # DB 연결 종료
+        try:
+            self.session_manager.close()
+        except Exception:
+            logger.debug("종료 시 DB 연결 닫기 실패")
 
-
-def main():
-    """메인 진입점"""
-    try:
-        app = baromokApp()
-        sys.exit(app.run())
-    except Exception as e:
-        logger.error("애플리케이션 오류: %s", e, exc_info=True)
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+        return ex

@@ -269,13 +269,19 @@ class BaselineManager:
         try:
             filepath.parent.mkdir(parents=True, exist_ok=True)
 
+            # RANSAC 원시 샘플 리스트는 저장 불필요 (수백~수천 개 float -> 파일 비대화)
+            _SAMPLE_KEYS = {"ransac_x_samples", "ransac_y_samples", "ransac_s_samples"}
+            metrics_to_save = {
+                k: v for k, v in self.baseline_metrics.metrics.items()
+                if k not in _SAMPLE_KEYS
+            }
             data = {
                 "timestamp": self.baseline_metrics.timestamp,
                 "collection_duration_seconds": (
                     self.baseline_metrics.collection_duration_seconds
                 ),
                 "frame_count": self.baseline_metrics.frame_count,
-                "metrics": self.baseline_metrics.metrics,
+                "metrics": metrics_to_save,
             }
 
             with open(filepath, "w", encoding="utf-8") as f:

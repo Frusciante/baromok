@@ -132,6 +132,8 @@ class JudgmentEngine:
                 eye_close_triggered=False,
                 turned_head_likelihood=0.0,
                 turned_head_triggered=False,
+                side_tilt_likelihood=0.0,
+                side_tilt_triggered=False,
                 dominant_posture=None,
                 timestamp=indicators.timestamp,
             )
@@ -460,7 +462,10 @@ class JudgmentEngine:
 
     def _normalize_score(self, value: float, min_val: float = 0.0, max_val: float = 1.0) -> float:
         """값을 0~1 범위로 정규화"""
-        normalized = (value - min_val) / (max_val - min_val)
+        denom = max_val - min_val
+        if abs(denom) < 1e-9:
+            return 0.0
+        normalized = (value - min_val) / denom
         return float(np.clip(normalized, 0.0, 1.0))
 
     def reset_history(self):

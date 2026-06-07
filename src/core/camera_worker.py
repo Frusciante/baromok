@@ -6,6 +6,7 @@ QThread 기반 실시간 카메라 프레임 처리
 
 import cv2
 import numpy as np
+import threading
 from PyQt6.QtCore import QThread, pyqtSignal
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -68,7 +69,10 @@ class CameraWorker(QThread):
         # 카메라 객체
         self.cap = None
 
-        # 스레드 제어 플래그
+        # 스레드 제어 플래그 (threading.Event으로 스레드 안전성 확보)
+        self._running_event = threading.Event()   # set = 실행 중
+        self._paused_event = threading.Event()    # set = 일시정지 중
+        # 하위 호환용 속성
         self.is_running = False
         self.is_paused = False
 
@@ -101,6 +105,7 @@ class CameraWorker(QThread):
         """스레드 메인 루프"""
         try:
             # 이전 세션에서 남은 일시정지 상태를 제거한다.
+            self._paused_event.clear()
             self.is_paused = False
 
             # 카메라 초기화
@@ -117,6 +122,7 @@ class CameraWorker(QThread):
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_height)
             self.cap.set(cv2.CAP_PROP_FPS, self.camera_fps)
 
+            self._running_event.set()
             self.is_running = True
             self.start_time = datetime.now()
             self.frame_count = 0
@@ -129,11 +135,14 @@ class CameraWorker(QThread):
             self.status_changed_signal.emit("카메라 시작됨")
 
             # 메인 루프
-            while self.is_running:
+            while self._running_event.is_set():
+                self.is_running = True
                 # 일시정지 상태 확인
-                if self.is_paused:
+                if self._paused_event.is_set():
+                    self.is_paused = True
                     self.msleep(100)
                     continue
+                self.is_paused = False
 
                 # 프레임 읽기
                 ret, frame = self.cap.read()
@@ -173,6 +182,7 @@ class CameraWorker(QThread):
             # 정리
             if self.cap is not None:
                 self.cap.release()
+            self._running_event.clear()
             self.is_running = False
 
     def process_frame(self, frame: np.ndarray) -> dict:
@@ -228,6 +238,7 @@ class CameraWorker(QThread):
             logger.debug(f"랜드마크 추출 실패: {e}")
 
         # 2. 지표 계산
+        normalized_landmarks: dict = {}
         indicators: Optional[PostureIndicators] = None
         try:
             frame_height, frame_width = frame.shape[:2]
@@ -646,18 +657,22 @@ class CameraWorker(QThread):
 
     def pause(self):
         """캡처 일시정지"""
+        self._paused_event.set()
         self.is_paused = True
         logger.info("카메라 일시정지")
         self.status_changed_signal.emit("일시정지됨")
 
     def resume(self):
         """캡처 재개"""
+        self._paused_event.clear()
         self.is_paused = False
         logger.info("카메라 재개")
         self.status_changed_signal.emit("재개됨")
 
     def stop_capture(self):
         """캡처 중지"""
+        self._running_event.clear()
+        self._paused_event.clear()
         self.is_running = False
         self.is_paused = False
         logger.info("카메라 중지 요청")

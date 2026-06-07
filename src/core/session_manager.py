@@ -123,6 +123,9 @@ class SessionManager:
         self.db_path = str(data_dir / "sessions.db")
         self.sessions_dir = data_dir / "sessions"  # 레거시 JSON 경로
 
+        # 영구 연결 (매 프레임마다 연결 생성 비용 제거)
+        self._conn: Optional[sqlite3.Connection] = None
+
         self._init_db()
         self._migrate_json_sessions()
         logger.info(f"SessionManager 초기화 완료 (DB: {self.db_path})")
@@ -131,11 +134,22 @@ class SessionManager:
     # DB 연결
     # ------------------------------------------------------------------
     def _get_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.row_factory = sqlite3.Row
-        return conn
+        """영구 연결 반환 (없으면 생성). 스레드 안전은 _lock으로 보장."""
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA foreign_keys=ON")
+            self._conn.row_factory = sqlite3.Row
+        return self._conn
+
+    def close(self):
+        """DB 연결 명시적 종료 (앱 종료 시 호출)"""
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self._conn = None
 
     def _init_db(self):
         with self._get_conn() as conn:
@@ -243,7 +257,7 @@ class SessionManager:
                         "UPDATE sessions SET total_frames = total_frames + 1 WHERE session_id=?",
                         (self.current_session.session_id,),
                     )
-            self.current_session.total_frames += 1
+                    self.current_session.total_frames += 1
         except Exception as e:
             logger.error(f"프레임 데이터 추가 실패: {e}", exc_info=True)
 

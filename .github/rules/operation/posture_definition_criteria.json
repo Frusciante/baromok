@@ -45,7 +45,7 @@
       "wait_seconds": 3.0,
       "collect_seconds": 1.0,
       "expected_samples": 5,
-      "minimum_valid_frames": 50
+      "minimum_valid_frames": 30
     },
     "metrics": [
       "shoulder_width",

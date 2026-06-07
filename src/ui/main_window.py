@@ -87,12 +87,6 @@ class MainWindow(QMainWindow):
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
         # ==========================================
 
-        # 스타일 적용 (기존 코드)
-        self.setStyleSheet(self.theme_manager.stylesheet)
-
-        # UI 구성 (기존 코드)
-        self.setup_ui()
-
         # 스타일 적용
         self.setStyleSheet(self.theme_manager.stylesheet)
 
