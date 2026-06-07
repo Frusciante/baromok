@@ -243,8 +243,11 @@ class StatisticsScreen(QWidget):
         self.breakdown_chart.plot_data({}, 0)
 
     def _update_average_label(self, grouped: list):
+        # 차트 추세선과 동일하게, 실제 측정 데이터가 있는 날(percentage > 0)만 평균에 포함
         vals = [float(s.get("good_posture_percentage", 0))
-                for s in grouped if s.get("session_count", 0) > 0]
+                for s in grouped
+                if s.get("session_count", 0) > 0
+                and float(s.get("good_posture_percentage", 0)) > 0]
         if not vals:
             self.avg_label.setText("데이터 없음")
             return

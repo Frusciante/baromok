@@ -152,28 +152,32 @@ class SessionManager:
         if not json_files:
             return
 
-        migrated = skipped = 0
+        migrated = skipped = deleted = 0
         for filepath in json_files:
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 session_id = data.get("session_id")
                 if not session_id:
+                    filepath.unlink()
                     continue
                 with self._get_conn() as conn:
-                    if conn.execute("SELECT 1 FROM sessions WHERE session_id=?", (session_id,)).fetchone():
-                        skipped += 1
-                        continue
-                session = SessionData.from_dict(data)
-                if not session.statistics and session.frame_records:
-                    session.statistics = self.calculate_session_stats(session)
-                self._save_session_to_db(session)
-                migrated += 1
+                    already_exists = conn.execute("SELECT 1 FROM sessions WHERE session_id=?", (session_id,)).fetchone()
+                if already_exists:
+                    skipped += 1
+                else:
+                    session = SessionData.from_dict(data)
+                    if not session.statistics and session.frame_records:
+                        session.statistics = self.calculate_session_stats(session)
+                    self._save_session_to_db(session)
+                    migrated += 1
+                filepath.unlink()
+                deleted += 1
             except Exception as e:
                 logger.warning(f"JSON 마이그레이션 실패 ({filepath.name}): {e}")
 
         if migrated or skipped:
-            logger.info(f"JSON 마이그레이션: {migrated}개 임포트, {skipped}개 이미 존재")
+            logger.info(f"JSON 마이그레이션: {migrated}개 임포트, {skipped}개 이미 존재, {deleted}개 JSON 삭제")
 
     # ------------------------------------------------------------------
     # 세션 생명주기

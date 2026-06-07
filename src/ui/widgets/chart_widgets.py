@@ -298,9 +298,11 @@ class StatisticsLineChart(QWidget):
             ax.spines["left"].set_linewidth(1.2)
             ax.spines["bottom"].set_linewidth(1.6)
 
-            # 범례
+            # 범례 — bars[0] 대신 고정 색상 Patch를 사용해 기간별 색상 변동 방지
+            from matplotlib.patches import Patch
+            bar_legend_patch = Patch(facecolor="#7C3AED", edgecolor="#7C3AED")
             ax.legend(
-                [bars[0], avg_line],
+                [bar_legend_patch, avg_line],
                 ["바른자세 유지율", "평균 유지율"],
                 loc="lower left",  # 기준점을 범례 상자의 '좌측 하단'으로 잡고
                 # 차트 왼쪽 선(0)보다 살짝 왼쪽(-0.02), 차트 위쪽 선(1)보다 살짝 위쪽(1.02) 외곽으로 떨어뜨려서 배치. 이렇게 하면 tight_layout()이 범례 위치를 건드리지 못하게 됨.
@@ -584,15 +586,16 @@ class PostureBreakdownChart(QWidget):
 
     # 자세 유형 → (한글 이름, 색상)
     POSTURE_META = {
-        "normal":              ("바른 자세",    "#7C3AED"),
-        "neutral":             ("바른 자세",    "#7C3AED"),
-        "forward_head":        ("거북목",       "#D97A7A"),
-        "forward_head_only":   ("거북목 경향",  "#D97A7A"),
+        "normal":              ("바른 자세",      "#7C3AED"),
+        "neutral":             ("바른 자세",      "#7C3AED"),
+        "forward_head":        ("거북목",         "#D97A7A"),
+        "forward_head_only":   ("거북목 경향",    "#D97A7A"),
         "forward_head_full":   ("기울어진 거북목", "#D97A7A"),
-        "recline":             ("기댄 자세",    "#7E8AA2"),
-        "chin_rest_estimated": ("턱 괸 자세",   "#B89B72"),
-        "head_tilt":           ("고개 기울임",  "#7C3AED"),
-        "eye_close":           ("눈 가까움",    "#059669"),
+        "recline":             ("기댄 자세",      "#7E8AA2"),
+        "chin_rest_estimated": ("턱 괸 자세",     "#B89B72"),
+        "head_tilt":           ("고개 기울임",    "#F59E0B"),
+        "side_tilt":           ("옆으로 기울임",  "#F59E0B"),
+        "eye_close":           ("눈 가까움",      "#059669"),
     }
 
     def __init__(self, theme_manager: ThemeManager):
@@ -631,7 +634,7 @@ class PostureBreakdownChart(QWidget):
         # 표시 순서: 바른 자세 → 나쁜 자세들
         order = ["normal", "neutral", "forward_head", "forward_head_only",
                  "forward_head_full", "recline", "chin_rest_estimated",
-                 "head_tilt", "eye_close"]
+                 "head_tilt", "side_tilt", "eye_close"]
         items = []
         for key in order:
             count = posture_distribution.get(key, 0)
