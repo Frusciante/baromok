@@ -341,7 +341,7 @@ class CameraWorker(QThread):
         # 3. 판정
         posture_type = "normal"
         probability = 0.0
-        display_label = "바른 자세"
+        display_label = ""
         confirmed_posture = None
         judgment_result: Optional[PostureJudgmentResult] = None
 

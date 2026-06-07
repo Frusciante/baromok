@@ -88,6 +88,9 @@
       "guards": {
         "max_eye_tilt": 12.0,
         "max_shoulder_tilt": 10.0,
+        "max_eye_symmetry_ratio": 0.12,
+        "max_cheek_symmetry_ratio": 0.12,
+        "max_chin_alignment_offset": 0.15,
         "max_eye_turn_percent": -8.0,
         "face_v_len_stable_threshold": -4.0
       },
@@ -106,7 +109,7 @@
         "max_shoulder_tilt": 10.0,
         "max_eye_symmetry_ratio": 0.15,
         "max_cheek_symmetry_ratio": 0.15,
-        "max_chin_alignment_offset": 0.05
+        "max_chin_alignment_offset": 0.15
       },
       "sustain_seconds": 1.5
     },

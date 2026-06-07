@@ -239,10 +239,10 @@ class JudgmentEngine:
             shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > guards.get("max_shoulder_tilt", 10.0)
             
             # 눈/광대 대칭 확인 (0.08 -> 0.12로 완화하여 너무 민감하게 차단되지 않도록 함)
-            eye_sym_excessive = indicators.eye_symmetry_ratio > 0.12
-            cheek_sym_excessive = indicators.cheek_symmetry_ratio > 0.12
-            chin_offset_excessive = indicators.chin_alignment_offset > 0.05
-            
+            eye_sym_excessive = indicators.eye_symmetry_ratio > guards.get("max_eye_symmetry_ratio", 0.12)
+            cheek_sym_excessive = indicators.cheek_symmetry_ratio > guards.get("max_cheek_symmetry_ratio", 0.12)
+            chin_offset_excessive = indicators.chin_alignment_offset > guards.get("max_chin_alignment_offset", 0.15)
+
             if side_tilt_excessive or shoulder_tilt_excessive or eye_sym_excessive or cheek_sym_excessive or chin_offset_excessive:
                 return {"likelihood": 0.0, "triggered": False}
 
@@ -271,9 +271,9 @@ class JudgmentEngine:
             shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > guards.get("max_shoulder_tilt", 10.0)
             
             # 눈/광대 대칭 및 턱 정렬 확인 (0.08 -> 0.12로 완화)
-            eye_sym_excessive = indicators.eye_symmetry_ratio > 0.12
-            cheek_sym_excessive = indicators.cheek_symmetry_ratio > 0.12
-            chin_offset_excessive = indicators.chin_alignment_offset > 0.05
+            eye_sym_excessive = indicators.eye_symmetry_ratio > guards.get("max_eye_symmetry_ratio", 0.12)
+            cheek_sym_excessive = indicators.cheek_symmetry_ratio > guards.get("max_cheek_symmetry_ratio", 0.12)
+            chin_offset_excessive = indicators.chin_alignment_offset > guards.get("max_chin_alignment_offset", 0.15)
 
             if side_tilt_excessive or shoulder_tilt_excessive or eye_sym_excessive or cheek_sym_excessive or chin_offset_excessive:
                 return {"likelihood": 0.0, "triggered": False}
