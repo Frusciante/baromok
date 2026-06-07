@@ -1,0 +1,77 @@
+{
+  "session_id": "9ffeb6b5-4ace-44f1-9db7-30caa64e10fc",
+  "start_time": "2026-05-19T15:45:40.492360",
+  "end_time": "2026-05-19T15:45:41.967294",
+  "duration_seconds": 1,
+  "total_frames": 3,
+  "frame_records": [
+    {
+      "timestamp": "2026-05-19T15:45:40.530622",
+      "posture_type": "normal",
+      "probability": 0.0,
+      "state": "normal",
+      "cheek_distance": 0.1797750715246424,
+      "eye_distance": 0.11714691937771314,
+      "shoulder_width": 0.38097319573137794,
+      "shoulder_tilt_deg": 5.359318463662332,
+      "neck_offset": 0.33790787150282414,
+      "eye_line_tilt": 4.014945152489519,
+      "chin_occlusion": 0.0,
+      "hand_near_face": 0.0
+    },
+    {
+      "timestamp": "2026-05-19T15:45:40.782658",
+      "posture_type": "normal",
+      "probability": 0.0,
+      "state": "normal",
+      "cheek_distance": 0.17923221760705071,
+      "eye_distance": 0.11678147717388174,
+      "shoulder_width": 0.38226210064291033,
+      "shoulder_tilt_deg": 5.000728570976382,
+      "neck_offset": 0.3368147007390403,
+      "eye_line_tilt": 3.9705503565578515,
+      "chin_occlusion": 0.0,
+      "hand_near_face": 0.0
+    },
+    {
+      "timestamp": "2026-05-19T15:45:41.061349",
+      "posture_type": "normal",
+      "probability": 0.0,
+      "state": "normal",
+      "cheek_distance": 0.17892742565069347,
+      "eye_distance": 0.11671466540787884,
+      "shoulder_width": 0.38279118708217863,
+      "shoulder_tilt_deg": 4.821433624633407,
+      "neck_offset": 0.3340348594167585,
+      "eye_line_tilt": 4.0485856068273565,
+      "chin_occlusion": 0.0,
+      "hand_near_face": 0.0
+    }
+  ],
+  "statistics": {
+    "duration_seconds": 1,
+    "total_frames": 3,
+    "fps": 3.0,
+    "posture_distribution": {
+      "forward_head": 0,
+      "recline": 0,
+      "chin_rest_estimated": 0,
+      "normal": 3
+    },
+    "state_counts": {
+      "NORMAL": 3,
+      "WARNING": 0,
+      "BAD_POSTURE": 0
+    },
+    "good_posture_seconds": 1.0,
+    "warning_posture_seconds": 0.0,
+    "bad_posture_seconds": 0.0,
+    "good_posture_percentage": 100.0,
+    "warning_posture_percentage": 0.0,
+    "bad_posture_percentage": 0.0,
+    "posture_changes": 0,
+    "max_bad_duration_seconds": 0,
+    "average_probability": 0.0
+  },
+  "notes": ""
+}

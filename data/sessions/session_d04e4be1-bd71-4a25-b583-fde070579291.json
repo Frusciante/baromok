@@ -1,0 +1,105 @@
+{
+  "session_id": "d04e4be1-bd71-4a25-b583-fde070579291",
+  "start_time": "2026-05-19T13:36:55.289530",
+  "end_time": "2026-05-19T13:36:58.235505",
+  "duration_seconds": 2,
+  "total_frames": 5,
+  "frame_records": [
+    {
+      "timestamp": "2026-05-19T13:36:55.221864",
+      "posture_type": "forward_head",
+      "probability": 0.9994638775682838,
+      "state": "normal",
+      "cheek_distance": 0.2097762789985145,
+      "eye_distance": 0.13440413579245133,
+      "shoulder_width": 0.29545688091269073,
+      "shoulder_tilt_deg": -2.0192060301534802e-11,
+      "neck_offset": 0.19135797424776513,
+      "eye_line_tilt": 5.423550082714507,
+      "chin_occlusion": 1.3867052493250243e-22,
+      "hand_near_face": 0.0
+    },
+    {
+      "timestamp": "2026-05-19T13:36:55.575689",
+      "posture_type": "forward_head",
+      "probability": 0.9995442959330413,
+      "state": "normal",
+      "cheek_distance": 0.20922937775064007,
+      "eye_distance": 0.1340890091284307,
+      "shoulder_width": 0.290073358492929,
+      "shoulder_tilt_deg": -1.4581060545924277e-11,
+      "neck_offset": 0.18799840720036817,
+      "eye_line_tilt": 5.937962290227409,
+      "chin_occlusion": 6.933526246625121e-23,
+      "hand_near_face": 0.0
+    },
+    {
+      "timestamp": "2026-05-19T13:36:55.686569",
+      "posture_type": "forward_head",
+      "probability": 0.9996126515430851,
+      "state": "normal",
+      "cheek_distance": 0.20894131544456954,
+      "eye_distance": 0.13400842892901738,
+      "shoulder_width": 0.2855611993520091,
+      "shoulder_tilt_deg": -1.0297347005429695e-11,
+      "neck_offset": 0.18602394147488727,
+      "eye_line_tilt": 6.2691449484463675,
+      "chin_occlusion": 3.4667631233125607e-23,
+      "hand_near_face": 0.0
+    },
+    {
+      "timestamp": "2026-05-19T13:36:55.806508",
+      "posture_type": "forward_head",
+      "probability": 0.9996707538116223,
+      "state": "normal",
+      "cheek_distance": 0.2086777395185654,
+      "eye_distance": 0.1340971150736336,
+      "shoulder_width": 0.281855523757496,
+      "shoulder_tilt_deg": -7.059085402318042e-12,
+      "neck_offset": 0.1848308369682376,
+      "eye_line_tilt": 6.493983906985063,
+      "chin_occlusion": 1.7333815616562803e-23,
+      "hand_near_face": 0.0
+    },
+    {
+      "timestamp": "2026-05-19T13:36:55.920956",
+      "posture_type": "forward_head",
+      "probability": 0.9997201407398789,
+      "state": "normal",
+      "cheek_distance": 0.2083556959668124,
+      "eye_distance": 0.13416672401362867,
+      "shoulder_width": 0.27952048070968283,
+      "shoulder_tilt_deg": -4.785699169002815e-12,
+      "neck_offset": 0.18411746035337018,
+      "eye_line_tilt": 6.656823445930463,
+      "chin_occlusion": 8.666907808281402e-24,
+      "hand_near_face": 0.0
+    }
+  ],
+  "statistics": {
+    "duration_seconds": 2,
+    "total_frames": 5,
+    "fps": 2.5,
+    "posture_distribution": {
+      "forward_head": 5,
+      "recline": 0,
+      "chin_rest_estimated": 0,
+      "normal": 0
+    },
+    "state_counts": {
+      "NORMAL": 5,
+      "WARNING": 0,
+      "BAD_POSTURE": 0
+    },
+    "good_posture_seconds": 2.0,
+    "warning_posture_seconds": 0.0,
+    "bad_posture_seconds": 0.0,
+    "good_posture_percentage": 100.0,
+    "warning_posture_percentage": 0.0,
+    "bad_posture_percentage": 0.0,
+    "posture_changes": 0,
+    "max_bad_duration_seconds": 0,
+    "average_probability": 1.0
+  },
+  "notes": ""
+}

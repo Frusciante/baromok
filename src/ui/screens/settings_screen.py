@@ -141,6 +141,14 @@ class SettingsScreen(QWidget):
     def _on_widget_value_changed(self, value_dict: dict):
         self.settings_config.update(value_dict)
 
+    def update_settings(self, settings_dict: dict):
+        """앱의 최신 설정값으로 화면 위젯을 동기화한다."""
+        self.settings_config = dict(settings_dict)
+        for widget in self.category_widgets:
+            widget.blockSignals(True)
+            widget.set_value(self.settings_config)
+            widget.blockSignals(False)
+
     def _save_settings(self):
         all_settings = {}
         for widget in self.category_widgets:

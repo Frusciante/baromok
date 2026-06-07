@@ -15,6 +15,8 @@ class DetectionScreen(QWidget):
 
     detection_paused_signal = pyqtSignal()
     detection_stopped_signal = pyqtSignal()
+    detection_restart_signal = pyqtSignal()
+    view_results_signal = pyqtSignal()
     open_settings_signal = pyqtSignal()
     open_baseline_signal = pyqtSignal()
 
@@ -33,6 +35,7 @@ class DetectionScreen(QWidget):
         self.start_time = None
         self.elapsed_time = 0
         self.is_detection_paused = False
+        self.is_session_stopped = False
         self.setup_ui()
 
         if self.camera_worker:
@@ -98,6 +101,12 @@ class DetectionScreen(QWidget):
         self.cheek_detail_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
         layout.addWidget(self.cheek_detail_label)
 
+        self.distance_label = QLabel("화면 거리: - cm")
+        self.distance_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.distance_label.setFont(app_font(self.theme_manager.scale_pixel(16), QFont.Weight.Bold))
+        self.distance_label.setStyleSheet(f"color: {Colors.GRAY_MEDIUM.value};")
+        layout.addWidget(self.distance_label)
+
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
 
@@ -111,17 +120,37 @@ class DetectionScreen(QWidget):
         self.pause_btn.clicked.connect(self._pause_detection)
         button_layout.addWidget(self.pause_btn)
 
-        stop_btn = QPushButton("종료")
-        stop_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
-        stop_btn.setObjectName("danger")
-        stop_btn.clicked.connect(self._stop_detection)
-        button_layout.addWidget(stop_btn)
+        self.stop_btn = QPushButton("종료")
+        self.stop_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
+        self.stop_btn.setObjectName("danger")
+        self.stop_btn.clicked.connect(self._stop_detection)
+        button_layout.addWidget(self.stop_btn)
 
         layout.addLayout(button_layout)
+
+        # 세션 종료 후 표시되는 액션 버튼들 (기본 숨김)
+        self.post_stop_button_layout = QHBoxLayout()
+        self.post_stop_button_layout.setSpacing(10)
+        self.restart_btn = QPushButton("다시 시작")
+        self.restart_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
+        self.restart_btn.clicked.connect(self.detection_restart_signal.emit)
+        self.results_btn = QPushButton("결과 보기")
+        self.results_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
+        self.results_btn.clicked.connect(self.view_results_signal.emit)
+        self.post_stop_button_layout.addStretch()
+        self.post_stop_button_layout.addWidget(self.restart_btn)
+        self.post_stop_button_layout.addWidget(self.results_btn)
+        self.post_stop_button_layout.addStretch()
+        # initially hidden
+        self.restart_btn.hide()
+        self.results_btn.hide()
+        layout.addLayout(self.post_stop_button_layout)
         self.setLayout(layout)
 
     def _on_frame_processed(self, frame_data: dict):
         try:
+            if self.is_session_stopped:
+                return
             if frame_data.get("posture_type") == "baseline": return
             annotated_frame = frame_data.get("frame")
             if annotated_frame is not None:
@@ -137,30 +166,55 @@ class DetectionScreen(QWidget):
 
             indicators = frame_data.get("indicators")
             if indicators is None:
+                # 얼굴(광대) 랜드마크도 감지되지 않는 경우에만 메시지 표시
                 self.posture_label.setText(RECOGNITION_DIFFICULT_MESSAGE)
                 self.cheek_detail_label.setText("광대 거리: - (예상: -)")
                 return
 
             set_recognition_message(self.recognition_label, False)
-            self._update_posture_status(frame_data.get("state", "NORMAL"), frame_data.get("posture_type", "normal"), frame_data.get("probability", 0.0))
+            self._update_posture_status(
+                frame_data.get("state", "NORMAL"),
+                frame_data.get("posture_type", "normal"),
+                frame_data.get("probability", 0.0),
+                frame_data.get("display_label", ""),
+            )
 
             # 광대 거리 정보 업데이트
             current_cheek = indicators.cheek_distance
-            if self.baseline_manager:
+            if self.baseline_manager and indicators.shoulder_width is not None:
                 expected_cheek = self.baseline_manager.get_expected_cheek(indicators.shoulder_width)
                 deviation = (current_cheek - expected_cheek) / expected_cheek if expected_cheek > 0 else 0
                 self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (예상: {expected_cheek:.3f}, 편차: {deviation*100:+.1f}%)")
             else:
-                self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f}")
+                self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (어깨 미감지)")
+
+            # 화면 거리 업데이트
+            dist_cm = indicators.eye_screen_distance_cm
+            if dist_cm is not None:
+                self.distance_label.setText(f"화면 거리: {dist_cm:.1f} cm")
+            else:
+                self.distance_label.setText("화면 거리: - cm")
 
             if self.session_manager and getattr(self.session_manager, "current_session", None) is not None:
                 self.session_manager.add_frame_data(frame_data)
         except Exception as e:
             logger.error(f"프레임 처리 오류: {e}")
 
-    def _update_posture_status(self, state: str, posture_type: str, probability: float):
-        posture_map = {"normal": "바른 자세", "forward_head": "거북목", "recline": "기댄 자세", "chin_rest_estimated": "턱 받침", "baseline": "자세 맞춤 중"}
-        self.posture_label.setText(f"{posture_map.get(posture_type, '알 수 없음')} ({probability:.1%})")
+    def _update_posture_status(self, state: str, posture_type: str, probability: float, display_label: str = ""):
+        posture_map = {
+            # V1
+            "normal": "바른 자세", "forward_head": "거북목", "recline": "기댄 자세",
+            "chin_rest_estimated": "턱 받침", "baseline": "자세 맞춤 중",
+            # V2
+            "neutral": "바른 자세", "forward_head_only": "거북목 경향",
+            "forward_head_full": "몸 기울어진 거북목", "head_tilt": "고개 기울임",
+            "chin_rest": "턱 괸 자세",
+            # 기타
+            "eye_close": "화면 가까움", "turned_head": "고개 돌린 자세", "side_tilt": "고개 기울인 자세",
+        }
+        # V2는 display_label 이 이미 한국어이므로 우선 사용
+        korean_label = display_label if display_label else posture_map.get(posture_type, posture_type)
+        self.posture_label.setText(f"{korean_label} ({probability:.1%})")
         state_text = {"normal": "바른 자세", "warning": "경고", "bad_posture": "나쁜 자세", "NORMAL": "바른 자세", "WARNING": "경고", "BAD_POSTURE": "나쁜 자세"}
         self.status_label.setText(state_text.get(state, "상태 알 수 없음"))
         state_colors = {"normal": "status_normal", "warning": "status_warning", "bad_posture": "status_bad", "NORMAL": "status_normal", "WARNING": "status_warning", "BAD_POSTURE": "status_bad"}
@@ -195,18 +249,53 @@ class DetectionScreen(QWidget):
         self.open_baseline_signal.emit()
 
     def _stop_detection(self):
-        if self.camera_worker and self.camera_worker.isRunning():
-            self.camera_worker.pause()
         self.time_timer.stop()
         self.pause_btn.setText("일시정지")
         self.is_detection_paused = False
         self.detection_stopped_signal.emit()
 
     def on_detection_started(self):
+        self.is_session_stopped = False
         self.is_detection_paused = False
+        self.status_label.setText("바른 자세")
+        self.status_label.setObjectName("status_normal")
+        self.status_label.style().polish(self.status_label)
+        self.posture_label.setText("감지 중")
+        self.cheek_detail_label.setText("광대 거리: - (예상: -)")
+        self.distance_label.setText("화면 거리: - cm")
         self.pause_btn.setText("일시정지")
+        self.pause_btn.setEnabled(True)
+        self.recalibrate_btn.setEnabled(True)
+        self.stop_btn.setEnabled(True)
+        # hide post-stop actions if visible
+        try:
+            self.restart_btn.hide()
+            self.results_btn.hide()
+        except Exception:
+            pass
         self._update_elapsed_time()
         self.time_timer.start(1000)
+
+    def on_detection_stopped(self):
+        self.is_session_stopped = True
+        self.time_timer.stop()
+        self.is_detection_paused = False
+        self.pause_btn.setText("일시정지")
+        self.pause_btn.setEnabled(False)
+        self.recalibrate_btn.setEnabled(False)
+        self.stop_btn.setEnabled(False)
+        self.status_label.setText("세션 종료됨")
+        self.status_label.setObjectName("status_warning")
+        self.status_label.style().polish(self.status_label)
+        self.posture_label.setText("감지가 종료되었습니다. 아래 버튼으로 다시 시작하거나 결과를 확인하세요.")
+        self.cheek_detail_label.setText("광대 거리: - (예상: -)")
+        self.distance_label.setText("화면 거리: - cm")
+        # show post-stop actions
+        try:
+            self.restart_btn.show()
+            self.results_btn.show()
+        except Exception:
+            pass
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -217,6 +306,7 @@ class DetectionScreen(QWidget):
         self.time_timer.stop()
 
     def _on_camera_error(self, error_msg: str):
+        self.is_session_stopped = True
         self.preview_label.setText(f"오류: {error_msg}")
         self.status_label.setText("카메라 오류")
         self.time_timer.stop()

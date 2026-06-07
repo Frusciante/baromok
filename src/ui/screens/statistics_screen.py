@@ -8,6 +8,56 @@ from src.ui.styles.font_loader import app_font
 
 logger = logging.getLogger(__name__)
 
+
+class DateAggregator:
+    """날짜별 세션 집계 전략.
+
+    같은 session_label(날짜)을 가진 세션들을 하나의 항목으로 합산합니다.
+    파일 저장 구조와 무관하게 표현 전략만 교체할 수 있도록 분리되어 있습니다.
+    다른 집계 전략(주별, 월별 등)이 필요하면 동일 인터페이스로 새 클래스를 작성하세요.
+    """
+
+    def aggregate(self, sessions: list) -> list:
+        """세션 리스트를 날짜별로 집계하여 반환합니다.
+
+        Args:
+            sessions: _load_and_plot_data에서 만든 session dict 리스트
+                      (session_label, good_posture_seconds, total_detection_seconds 포함)
+        Returns:
+            날짜 순서를 유지한 집계 결과 리스트. session_count 키 추가.
+        """
+        grouped: dict = {}
+        order: list = []
+
+        for session in sessions:
+            label = session.get("session_label", "")
+            if label not in grouped:
+                grouped[label] = {
+                    "session_label": label,
+                    "good_posture_seconds": 0.0,
+                    "total_detection_seconds": 0.0,
+                    "duration_seconds": 0.0,
+                    "session_count": 0,
+                    "start_time": session.get("start_time", ""),
+                }
+                order.append(label)
+
+            g = grouped[label]
+            g["good_posture_seconds"] += float(session.get("good_posture_seconds", 0) or 0)
+            g["total_detection_seconds"] += float(session.get("total_detection_seconds", 0) or 0)
+            g["duration_seconds"] += float(session.get("duration_seconds", 0) or 0)
+            g["session_count"] += 1
+
+        result = []
+        for label in order:
+            g = grouped[label]
+            total = g["total_detection_seconds"]
+            g["good_posture_percentage"] = (g["good_posture_seconds"] / total * 100) if total > 0 else 0.0
+            result.append(g)
+
+        return result
+
+
 class StatisticsScreen(QWidget):
     """통계 화면"""
 
@@ -27,7 +77,7 @@ class StatisticsScreen(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
 
-        subtitle = QLabel("최근 10개 세션 바른자세 유지율")
+        subtitle = QLabel("날짜별 바른자세 유지율")
         subtitle.setFont(
             app_font(self.theme_manager.scale_pixel(19), QFont.Weight.Bold)
         )
@@ -66,8 +116,9 @@ class StatisticsScreen(QWidget):
                             "start_time": session.start_time,
                             "duration_seconds": session.duration_seconds,
                         })
-                    self.chart_widget.plot_data(sessions_data)
-                    self._update_average_label(sessions_data)
+                    grouped_data = DateAggregator().aggregate(sessions_data)
+                    self.chart_widget.plot_data(grouped_data)
+                    self._update_average_label(grouped_data)
                 else:
                     self.chart_widget.plot_data([])
                     self._update_average_label([])

@@ -15,7 +15,7 @@ import numpy as np
 
 from src.config import ConfigManager
 from src.core.indicator_calculator import PostureIndicators
-from src.utils.helpers import RansacQuadraticModel
+from src.utils.helpers import RansacLinearModel
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -55,10 +55,10 @@ class BaselineManager:
         # 6단계(총 30초 수집) 데이터를 충분히 확보하기 위해 최소 유효 프레임을 설정에서 가져온다.
         baseline_config = self.config.get_baseline_config()
         self.minimum_valid_frame_count = baseline_config.get(
-            "minimum_valid_frames", 120
+            "minimum_valid_frames", 50
         )
 
-        self.ransac_model = RansacQuadraticModel(
+        self.ransac_model = RansacLinearModel(
             min_samples=10, residual_threshold=0.01
         )
         self.max_inlier_deviation = 0.05
@@ -571,7 +571,7 @@ class BaselineManager:
                     y_pred,
                     color="red",
                     linewidth=3,
-                    label="RANSAC Fit (Quadratic)",
+                    label="RANSAC Fit (Linear)",
                 )
 
                 try:
