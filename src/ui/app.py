@@ -532,6 +532,9 @@ class baromokApp:
         self.camera_worker.set_baseline_mode(False)
         self.state_machine.reset()
         self._hide_alert_popup()
+        # 재시작 시 기존 세션이 end_session() 없이 덮어써지는 버그 방지
+        if self.session_manager.current_session is not None:
+            self.session_manager.end_session()
         self.session_manager.start_session()
 
         if not self.camera_worker.isRunning():

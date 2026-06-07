@@ -569,3 +569,102 @@ class StatisticsLineChart(QWidget):
         if duration_text:
             parts.append(duration_text)
         return "\n".join(parts)
+
+
+class PostureBreakdownChart(QWidget):
+    """자세 유형별 비율 수평 막대 차트"""
+
+    # 자세 유형 → (한글 이름, 색상)
+    POSTURE_META = {
+        "normal":              ("바른 자세",    "#7C3AED"),
+        "neutral":             ("바른 자세",    "#7C3AED"),
+        "forward_head":        ("거북목",       "#DC2626"),
+        "forward_head_only":   ("거북목 경향",  "#F97316"),
+        "forward_head_full":   ("기울어진 거북목", "#EF4444"),
+        "recline":             ("기댄 자세",    "#2563EB"),
+        "chin_rest_estimated": ("턱 괸 자세",   "#D97706"),
+        "head_tilt":           ("고개 기울임",  "#7C3AED"),
+        "eye_close":           ("눈 가까움",    "#059669"),
+    }
+
+    def __init__(self, theme_manager: ThemeManager):
+        super().__init__()
+        self.theme_manager = theme_manager
+
+        dpi_scale = theme_manager.dpi_scale
+        self.figure = Figure(figsize=(10 * dpi_scale, 2.2 * dpi_scale), dpi=100)
+        self.figure.patch.set_facecolor("#FBFBFE")
+        self.canvas = FigureCanvas(self.figure)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.canvas)
+        self.setLayout(layout)
+
+    def plot_data(self, posture_distribution: dict, total_frames: int):
+        """자세 유형별 비율을 수평 스택 막대로 표시한다.
+
+        Args:
+            posture_distribution: {"forward_head": N, "recline": N, ...}
+            total_frames: 전체 프레임 수 (0이면 표시 생략)
+        """
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+        ax.set_facecolor("#FBFBFE")
+        self.figure.patch.set_facecolor("#FBFBFE")
+
+        if total_frames <= 0 or not posture_distribution:
+            ax.text(0.5, 0.5, "데이터 없음", ha="center", va="center",
+                    fontsize=12, color="#9CA3AF", transform=ax.transAxes)
+            ax.axis("off")
+            self.canvas.draw()
+            return
+
+        # 표시 순서: 바른 자세 → 나쁜 자세들
+        order = ["normal", "neutral", "forward_head", "forward_head_only",
+                 "forward_head_full", "recline", "chin_rest_estimated",
+                 "head_tilt", "eye_close"]
+        items = []
+        for key in order:
+            count = posture_distribution.get(key, 0)
+            if count > 0:
+                label, color = self.POSTURE_META.get(key, (key, "#9CA3AF"))
+                pct = count / total_frames * 100
+                items.append((label, pct, color))
+
+        # 나머지 unknown
+        known = sum(posture_distribution.get(k, 0) for k in order)
+        unknown = total_frames - known
+        if unknown > 0:
+            items.append(("기타", unknown / total_frames * 100, "#9CA3AF"))
+
+        if not items:
+            ax.axis("off")
+            self.canvas.draw()
+            return
+
+        # 수평 스택 막대
+        left = 0.0
+        bar_height = 0.55
+        for label, pct, color in items:
+            ax.barh(0, pct, left=left, height=bar_height,
+                    color=color, edgecolor="white", linewidth=0.8)
+            if pct >= 5.0:
+                ax.text(left + pct / 2, 0, f"{pct:.1f}%",
+                        ha="center", va="center",
+                        fontsize=9, fontweight="bold", color="white")
+            left += pct
+
+        # 범례
+        from matplotlib.patches import Patch
+        legend_elements = [Patch(facecolor=c, label=f"{l} {p:.1f}%")
+                           for l, p, c in items]
+        ax.legend(handles=legend_elements, loc="upper center",
+                  bbox_to_anchor=(0.5, -0.18), ncol=min(len(items), 5),
+                  fontsize=9, frameon=False)
+
+        ax.set_xlim(0, 100)
+        ax.set_ylim(-0.5, 0.5)
+        ax.axis("off")
+        self.figure.tight_layout(rect=[0, 0.15, 1, 1])
+        self.canvas.draw()

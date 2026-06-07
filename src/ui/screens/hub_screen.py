@@ -136,7 +136,7 @@ class HubScreen(QWidget):
         sessions = []
         try:
             if self.session_manager:
-                sessions = self.session_manager.load_recent_sessions(10)
+                sessions = self.session_manager.load_recent_sessions(30)
         except Exception:
             logger.exception("세션 데이터 로드 실패")
 
@@ -281,7 +281,7 @@ class HubScreen(QWidget):
         sessions = []
         try:
             if self.session_manager:
-                sessions = self.session_manager.load_recent_sessions(10)
+                sessions = self.session_manager.load_recent_sessions(30)
         except Exception:
             logger.exception("세션 데이터 로드 실패")
 

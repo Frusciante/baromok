@@ -169,32 +169,32 @@ class DetectionScreen(QWidget):
                 # 얼굴(광대) 랜드마크도 감지되지 않는 경우에만 메시지 표시
                 self.posture_label.setText(RECOGNITION_DIFFICULT_MESSAGE)
                 self.cheek_detail_label.setText("광대 거리: - (예상: -)")
-                return
-
-            set_recognition_message(self.recognition_label, False)
-            self._update_posture_status(
-                frame_data.get("state", "NORMAL"),
-                frame_data.get("posture_type", "normal"),
-                frame_data.get("probability", 0.0),
-                frame_data.get("display_label", ""),
-            )
-
-            # 광대 거리 정보 업데이트
-            current_cheek = indicators.cheek_distance
-            if self.baseline_manager and indicators.shoulder_width is not None:
-                expected_cheek = self.baseline_manager.get_expected_cheek(indicators.shoulder_width)
-                deviation = (current_cheek - expected_cheek) / expected_cheek if expected_cheek > 0 else 0
-                self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (예상: {expected_cheek:.3f}, 편차: {deviation*100:+.1f}%)")
             else:
-                self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (어깨 미감지)")
+                set_recognition_message(self.recognition_label, False)
+                self._update_posture_status(
+                    frame_data.get("state", "NORMAL"),
+                    frame_data.get("posture_type", "normal"),
+                    frame_data.get("probability", 0.0),
+                    frame_data.get("display_label", ""),
+                )
 
-            # 화면 거리 업데이트
-            dist_cm = indicators.eye_screen_distance_cm
-            if dist_cm is not None:
-                self.distance_label.setText(f"화면 거리: {dist_cm:.1f} cm")
-            else:
-                self.distance_label.setText("화면 거리: - cm")
+                # 광대 거리 정보 업데이트
+                current_cheek = indicators.cheek_distance
+                if self.baseline_manager and indicators.shoulder_width is not None:
+                    expected_cheek = self.baseline_manager.get_expected_cheek(indicators.shoulder_width)
+                    deviation = (current_cheek - expected_cheek) / expected_cheek if expected_cheek > 0 else 0
+                    self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (예상: {expected_cheek:.3f}, 편차: {deviation*100:+.1f}%)")
+                else:
+                    self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (어깨 미감지)")
 
+                # 화면 거리 업데이트
+                dist_cm = indicators.eye_screen_distance_cm
+                if dist_cm is not None:
+                    self.distance_label.setText(f"화면 거리: {dist_cm:.1f} cm")
+                else:
+                    self.distance_label.setText("화면 거리: - cm")
+
+            # indicators 유무와 관계없이 모든 프레임을 세션에 기록
             if self.session_manager and getattr(self.session_manager, "current_session", None) is not None:
                 self.session_manager.add_frame_data(frame_data)
         except Exception as e:
