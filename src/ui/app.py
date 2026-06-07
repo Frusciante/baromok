@@ -326,22 +326,45 @@ class baromokApp:
 
     @property
     def popup_position_xy(self) -> tuple:
-        """팝업 화면 위치 (x, y) - 중앙 또는 상단"""
+        """팝업 화면 위치 (x, y) - 현재 모니터 기준 중앙 또는 상단 중앙"""
         if self.alert_popup is None:
             return (0, 0)
 
-        main_geom = self.main_window.geometry()
         popup_width = self.alert_popup.width()
         popup_height = self.alert_popup.height()
 
+        if popup_width <= 0 or popup_height <= 0:
+            size_hint = self.alert_popup.sizeHint()
+            popup_width = max(popup_width, size_hint.width())
+            popup_height = max(popup_height, size_hint.height())
+
+        screen = None
+
+        try:
+            window_handle = self.main_window.windowHandle()
+            if window_handle is not None:
+                screen = window_handle.screen()
+        except Exception:
+            screen = None
+
+        if screen is None:
+            try:
+                center_point = self.main_window.frameGeometry().center()
+                screen = self.qt_app.screenAt(center_point)
+            except Exception:
+                screen = None
+
+        if screen is None:
+            screen = self.qt_app.primaryScreen()
+
+        screen_geom = screen.availableGeometry()
+        x = screen_geom.x() + (screen_geom.width() - popup_width) // 2
+
         if self.settings_config.popup_position == "top":
-            # 화면 상단 중앙 (상단에서 20px 아래)
-            x = main_geom.x() + (main_geom.width() - popup_width) // 2
-            y = main_geom.y() + 20
+            margin_top = 20
+            y = screen_geom.y() + margin_top
         else:  # "center" (기본값)
-            # 화면 중앙
-            x = main_geom.x() + (main_geom.width() - popup_width) // 2
-            y = main_geom.y() + (main_geom.height() - popup_height) // 2
+            y = screen_geom.y() + (screen_geom.height() - popup_height) // 2
 
         return (x, y)
 
