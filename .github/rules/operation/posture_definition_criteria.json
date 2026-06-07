@@ -109,7 +109,8 @@
         "max_shoulder_tilt": 10.0,
         "max_eye_symmetry_ratio": 0.15,
         "max_cheek_symmetry_ratio": 0.15,
-        "max_chin_alignment_offset": 0.15
+        "max_chin_alignment_offset": 0.15,
+        "max_shoulder_decrease_pct": -15.0
       },
       "sustain_seconds": 1.5
     },

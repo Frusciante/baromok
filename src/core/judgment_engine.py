@@ -246,7 +246,18 @@ class JudgmentEngine:
             if side_tilt_excessive or shoulder_tilt_excessive or eye_sym_excessive or cheek_sym_excessive or chin_offset_excessive:
                 return {"likelihood": 0.0, "triggered": False}
 
-            # 3. 점수 계산
+            # 3. 기댄 자세 오판 방지 가드
+            # 어깨가 baseline 대비 크게 감소한 경우 → 몸 전체가 뒤로 빠진 기댄 자세일 가능성이 높음.
+            # 이때 양수 deviation은 머리가 앞으로 나온 게 아니라 어깨가 뒤로 빠진 결과이므로 거북목으로 판정하지 않음.
+            if indicators.shoulder_width is not None:
+                sw_change_pct = self.baseline_manager.calculate_change_percentage(
+                    indicators.shoulder_width, "shoulder_width"
+                )
+                recline_sw_threshold = guards.get("max_shoulder_decrease_pct", -15.0)
+                if sw_change_pct < recline_sw_threshold:
+                    return {"likelihood": 0.0, "triggered": False}
+
+            # 4. 점수 계산
             score = (deviation / self.forward_head_sensitivity) * self.warning_anchor
             
             return {"likelihood": float(np.clip(score, 0.0, 1.0)), "triggered": False}

@@ -11,7 +11,6 @@ import time
 from src.utils.helpers import OneEuroFilter
 from typing import Dict, Tuple, Optional, List
 from collections import deque
-from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from src.utils.logger import get_logger
@@ -217,22 +216,19 @@ class LandmarkExtractor:
         coords = []
         confidences = []
         for lm in landmarks:
-            x = getattr(lm, "x", getattr(lm, "position_x", None))
-            y = getattr(lm, "y", getattr(lm, "position_y", None))
-            z = getattr(lm, "z", getattr(lm, "position_z", 0.0))
+            # x/y 접근 — 속성 존재 여부를 한 번만 확인
+            x = lm.x if hasattr(lm, "x") else getattr(lm, "position_x", None)
+            y = lm.y if hasattr(lm, "y") else getattr(lm, "position_y", None)
             if x is None or y is None:
                 continue
+            z = lm.z if hasattr(lm, "z") else getattr(lm, "position_z", 0.0)
             coords.append((x, y, z))
-            p = getattr(lm, "presence", None)
-            if p is None:
-                p = getattr(lm, "visibility", None)
-            try:
-                confidences.append(float(p) if p is not None else 1.0)
-            except Exception:
-                confidences.append(1.0)
+            # presence > visibility 순으로 신뢰도 추출
+            p = getattr(lm, "presence", None) or getattr(lm, "visibility", None)
+            confidences.append(float(p) if p is not None else 1.0)
 
         return LandmarkData(
-            landmarks=[(c[0], c[1], c[2]) for c in coords],
+            landmarks=coords,
             confidences=confidences,
             timestamp_ms=timestamp_ms,
         )
@@ -482,55 +478,45 @@ class LandmarkExtractor:
             if chin_point is not None:
                 landmarks["chin_points"].append(chin_point)
 
-            # 홍채(Iris) 추출: MediaPipe FaceMesh의 iris 인덱스 영역(468-477) 사용
+            # 홍채(Iris) 추출: MediaPipe FaceMesh 468~477 인덱스
             left_iris_diam_px = None
             right_iris_diam_px = None
             try:
-                iris_candidates = []
-                for idx in range(468, 478):
-                    if len(face_lms) > idx and len(face_conf) > idx and face_conf[idx] > confidence_threshold:
-                        pt = self._get_pixel_point(face_lms[idx], face_conf[idx], frame_width, frame_height)
-                        iris_candidates.append((idx, (pt[0], pt[1])))
+                n_face = len(face_lms)
+                # 유효한 iris 포인트만 픽셀 좌표로 모으기
+                iris_px = []
+                for idx in range(468, min(478, n_face)):
+                    if face_conf[idx] > confidence_threshold:
+                        lm = face_lms[idx]
+                        iris_px.append((
+                            int(lm[0] * frame_width),
+                            int(lm[1] * frame_height),
+                        ))
 
-                if iris_candidates:
-                    # 좌/우로 클러스터링: 눈 중심의 x값을 기준으로 분할
-                    mid_x = None
-                    if landmarks.get('left_eye') and landmarks.get('right_eye'):
-                        mid_x = (landmarks['left_eye'][0] + landmarks['right_eye'][0]) / 2.0
-                    if mid_x is None:
-                        xs = [p[1][0] for p in iris_candidates]
-                        mid_x = float(np.median(xs)) if xs else None
+                if len(iris_px) >= 3:
+                    arr = np.array(iris_px, dtype=np.float32)
+                    # 좌/우 분할 기준 x
+                    mid_x = (landmarks['left_eye'][0] + landmarks['right_eye'][0]) / 2.0 \
+                        if landmarks.get('left_eye') and landmarks.get('right_eye') \
+                        else float(np.median(arr[:, 0]))
 
-                    left_pts = []
-                    right_pts = []
-                    for (_i, p) in iris_candidates:
-                        if mid_x is not None and p[0] <= mid_x:
-                            left_pts.append(p)
-                        else:
-                            right_pts.append(p)
-
-                    def _compute_diam(pts):
-                        if not pts or len(pts) < 3:
-                            return None
-                        arr = np.array(pts, dtype=float)
-                        cen = arr.mean(axis=0)
-                        dists = np.linalg.norm(arr - cen, axis=1)
-                        diam = 2.0 * float(np.mean(dists))
-                        return diam
-
-                    left_iris_diam_px = _compute_diam(left_pts)
-                    right_iris_diam_px = _compute_diam(right_pts)
+                    mask_l = arr[:, 0] <= mid_x
+                    for mask, attr in ((mask_l, "left"), (~mask_l, "right")):
+                        pts = arr[mask]
+                        if len(pts) >= 3:
+                            cen = pts.mean(axis=0)
+                            diam = 2.0 * float(np.mean(np.linalg.norm(pts - cen, axis=1)))
+                            if attr == "left":
+                                left_iris_diam_px = diam
+                            else:
+                                right_iris_diam_px = diam
             except Exception:
-                # 안전하게 실패 허용
-                left_iris_diam_px = None
-                right_iris_diam_px = None
+                pass
 
             landmarks['left_iris_diameter_px'] = left_iris_diam_px
             landmarks['right_iris_diameter_px'] = right_iris_diam_px
 
-            # iris centers (index 468 for left, 473 for right?)
-            # Wait, 468 is center of left eye in MediaPipe Mesh, 473 is right.
-            # Let's use 468 and 473 as centers.
+            # 홍채 중심: 468(왼쪽), 473(오른쪽)
             left_iris_center = _get_face_point(468, "left_iris_center")
             right_iris_center = _get_face_point(473, "right_iris_center")
             landmarks['left_iris_center'] = left_iris_center
@@ -714,170 +700,107 @@ class LandmarkExtractor:
                 normalized[key] = value
 
         # Keys we keep ghosted (including lists)
-        ghost_keys = [
-            "face_center",
-            "left_eye",
-            "right_eye",
-            "left_cheek",
-            "right_cheek",
-            "left_shoulder",
-            "right_shoulder",
-            "chin_points",
-            "left_hand_tips",
-            "right_hand_tips",
-            # iris diameter (pixels)
-            "left_iris_diameter_px",
-            "right_iris_diameter_px",
-            "left_iris_center",
-            "right_iris_center",
-        ]
+        _VECTOR_KEYS = (
+            "face_center", "left_eye", "right_eye",
+            "left_cheek", "right_cheek", "left_shoulder", "right_shoulder",
+        )
+        _LIST_KEYS = (
+            "chin_points", "left_hand_tips", "right_hand_tips",
+            "left_iris_center", "right_iris_center",
+        )
+        _SCALAR_KEYS = ("left_iris_diameter_px", "right_iris_diameter_px")
+        ghost_keys = _VECTOR_KEYS + _LIST_KEYS + _SCALAR_KEYS
 
         # Lazy init deques for each ghost key
-        if not hasattr(self, "_ghost_windows") or not self._ghost_windows:
+        if not self._ghost_windows:
             self._ghost_windows = {k: deque() for k in ghost_keys}
 
-        # timestamp for this frame (ms)
-        ts = int(time.time() * 1000) if timestamp_ms is None else int(timestamp_ms)
+        # timestamp for this frame (ms) — compute once
+        ts = int(timestamp_ms) if timestamp_ms is not None else int(time.time() * 1000)
+        cutoff = ts - int(self._ghost_window_ms)
+        t_sec = ts * 0.001
 
-        # take a snapshot of raw normalized values (per-frame) so we can preserve them
-        raw_snapshot = {k: deepcopy(v) for k, v in normalized.items()}
-
-        # Helper: is value present (non-empty)
-        def _has_value(k, v):
-            if v is None:
-                return False
-            if isinstance(v, list):
-                return len(v) > 0
-            return True
-
-        # Append current values to their windows (if present) and prune old entries
+        # --- Ghost window update (avoid deepcopy for simple tuples/scalars) ---
         for k in ghost_keys:
             val = normalized.get(k)
-            present = _has_value(k, val)
+            # determine if present
+            present = val is not None and (not isinstance(val, list) or len(val) > 0)
             if present:
-                # store a safe copy
-                stored = deepcopy(val)
-                # for scalar points ensure tuple of floats
-                if isinstance(stored, tuple) and len(stored) >= 2:
-                    try:
-                        stored = (float(stored[0]), float(stored[1]))
-                    except Exception:
-                        pass
-                self._ghost_windows.setdefault(k, deque()).append((ts, stored))
+                if isinstance(val, tuple):
+                    stored = (float(val[0]), float(val[1]))
+                elif isinstance(val, list):
+                    stored = list(val)          # shallow copy sufficient for tuples inside
+                else:
+                    stored = val                # scalar — immutable
+                dq = self._ghost_windows.setdefault(k, deque())
+                dq.append((ts, stored))
+            else:
+                dq = self._ghost_windows.setdefault(k, deque())
 
-            # prune older than window
-            dq = self._ghost_windows.setdefault(k, deque())
-            cutoff = ts - int(self._ghost_window_ms)
+            # prune old entries
             while dq and dq[0][0] < cutoff:
                 dq.popleft()
 
-        # Build representative values from window (do not yet apply OneEuro)
+        # --- Build representative values (most recent in window) ---
         rep_values: Dict[str, any] = {}
         for k in ghost_keys:
-            val = raw_snapshot.get(k)
-            if _has_value(k, val):
-                # use current frame's normalized (raw) value as representative
-                rep_values[k] = deepcopy(val)
+            val = normalized.get(k)
+            present = val is not None and (not isinstance(val, list) or len(val) > 0)
+            if present:
+                rep_values[k] = val             # use current frame value directly
             else:
-                dq = self._ghost_windows.get(k, deque())
-                if dq:
-                    # use the most recent stored value
-                    rep_values[k] = deepcopy(dq[-1][1])
-                else:
-                    rep_values[k] = None
+                dq = self._ghost_windows.get(k)
+                rep_values[k] = dq[-1][1] if dq else None
 
-        # Shoulder selection: choose pair within window that maximizes shoulder width
-        l_dq = self._ghost_windows.get("left_shoulder", deque())
-        r_dq = self._ghost_windows.get("right_shoulder", deque())
+        # --- Shoulder selection: O(n) instead of O(n²) ---
+        # Pick the leftmost candidate for left_shoulder and rightmost for right_shoulder
+        l_dq = self._ghost_windows.get("left_shoulder")
+        r_dq = self._ghost_windows.get("right_shoulder")
         if l_dq and r_dq:
-            l_cands = [entry[1] for entry in l_dq if entry[1] is not None]
-            r_cands = [entry[1] for entry in r_dq if entry[1] is not None]
-            best_pair = (None, None)
-            best_width = -1.0
-            for lpt in l_cands:
-                for rpt in r_cands:
-                    try:
-                        width = float(rpt[0]) - float(lpt[0])
-                    except Exception:
-                        continue
-                    if width > best_width:
-                        best_width = width
-                        best_pair = (lpt, rpt)
+            # best left_shoulder = smallest x (leftmost on screen)
+            best_l = min((e[1] for e in l_dq if e[1] is not None), key=lambda p: p[0], default=None)
+            # best right_shoulder = largest x (rightmost on screen)
+            best_r = max((e[1] for e in r_dq if e[1] is not None), key=lambda p: p[0], default=None)
+            if best_l is not None and best_r is not None and best_r[0] > best_l[0]:
+                rep_values["left_shoulder"] = (float(best_l[0]), float(best_l[1]))
+                rep_values["right_shoulder"] = (float(best_r[0]), float(best_r[1]))
 
-            if best_pair[0] is not None and best_pair[1] is not None:
-                rep_values["left_shoulder"] = (float(best_pair[0][0]), float(best_pair[0][1]))
-                rep_values["right_shoulder"] = (float(best_pair[1][0]), float(best_pair[1][1]))
-
-        # Apply OneEuro filtering between representative values for scalar/vector points only
-        scalar_vector_keys = [
-            "face_center",
-            "left_eye",
-            "right_eye",
-            "left_cheek",
-            "right_cheek",
-            "left_shoulder",
-            "right_shoulder",
-        ]
-        # Scalar (1D) keys such as iris diameters (pixels)
-        scalar_scalar_keys = []
-
-        t_sec = float(ts) / 1000.0
+        # --- Apply OneEuro / pass-through per key type ---
         for k in ghost_keys:
+            # store raw per-frame value
+            normalized[f"{k}_raw"] = normalized.get(k)
+
             rep = rep_values.get(k)
-            # preserve raw per-frame normalized under a `_raw` suffix
-            normalized_key_raw = f"{k}_raw"
-            normalized[normalized_key_raw] = deepcopy(raw_snapshot.get(k))
-            
-            # v1.1: If baseline_mode is True, skip OneEuro filtering and use representative values (ghosted) directly.
-            # This follows the requirement: "remove filtering, only keep logic to fill in if missing".
+
             if baseline_mode:
-                if k in scalar_vector_keys:
+                # baseline 모드: 필터 없이 ghost 값만 사용
+                if k in _VECTOR_KEYS:
                     normalized[k] = (float(rep[0]), float(rep[1])) if rep is not None else None
-                elif k in scalar_scalar_keys:
+                elif k in _SCALAR_KEYS:
                     normalized[k] = float(rep) if rep is not None else None
                 else:
-                    normalized[k] = deepcopy(rep) if rep is not None else []
+                    normalized[k] = rep if rep is not None else []
                 continue
 
-            if k in scalar_vector_keys:
+            if k in _VECTOR_KEYS:
                 if rep is None:
                     normalized[k] = None
                 else:
-                    # ensure OneEuroFilter exists for this key (use config params)
                     if k not in self._one_euro_filters:
-                        min_cutoff = getattr(self, "_one_euro_min_cutoff", 0.05)
-                        beta = getattr(self, "_one_euro_beta", 0.005)
-                        d_cutoff = getattr(self, "_one_euro_d_cutoff", 1.0)
                         self._one_euro_filters[k] = OneEuroFilter(
-                            min_cutoff=min_cutoff, beta=beta, d_cutoff=d_cutoff
+                            min_cutoff=self._one_euro_min_cutoff,
+                            beta=self._one_euro_beta,
+                            d_cutoff=self._one_euro_d_cutoff,
                         )
                     try:
-                        vec = np.array([float(rep[0]), float(rep[1])], dtype=float)
+                        vec = np.array((float(rep[0]), float(rep[1])), dtype=np.float64)
                         filtered = self._one_euro_filters[k].process(t_sec, vec)
                         normalized[k] = (float(filtered[0]), float(filtered[1]))
                     except Exception:
                         normalized[k] = (float(rep[0]), float(rep[1]))
-            elif k in scalar_scalar_keys:
-                # scalar values (e.g., iris diameters in pixels)
-                if rep is None:
-                    normalized[k] = None
-                else:
-                    if k not in self._one_euro_filters:
-                        min_cutoff = getattr(self, "_one_euro_min_cutoff", 0.05)
-                        beta = getattr(self, "_one_euro_beta", 0.005)
-                        d_cutoff = getattr(self, "_one_euro_d_cutoff", 1.0)
-                        self._one_euro_filters[k] = OneEuroFilter(
-                            min_cutoff=min_cutoff, beta=beta, d_cutoff=d_cutoff
-                        )
-                    try:
-                        val = np.array([float(rep)], dtype=float)
-                        filtered = self._one_euro_filters[k].process(t_sec, val)
-                        normalized[k] = float(filtered[0])
-                    except Exception:
-                        normalized[k] = float(rep)
             else:
-                # lists (chin_points, hand tips): keep representative list as-is
-                normalized[k] = deepcopy(rep) if rep is not None else []
+                # lists and scalars: pass through representative value
+                normalized[k] = rep if rep is not None else ([] if k in _LIST_KEYS else None)
 
         return normalized
 
