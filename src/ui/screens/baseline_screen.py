@@ -7,7 +7,6 @@ from PyQt6.QtWidgets import (
 )
 from src.ui.styles.theme import Colors, ThemeManager
 from src.ui.styles.font_loader import app_font
-from src.ui.widgets.chart_widgets import CalibrationScatterChart
 from .helpers import set_recognition_message, cv2_to_qpixmap
 
 logger = logging.getLogger(__name__)
@@ -57,7 +56,7 @@ class BaselineScreen(QWidget):
 
         # 기본값 설정
         self.total_steps = 20
-        self.wait_seconds = 5.0
+        self.wait_seconds = 3.0
         self.collect_seconds = 1.0
 
         # 설정에서 자세 맞춤 파라미터 로드
@@ -123,20 +122,11 @@ class BaselineScreen(QWidget):
         self.info_panel = QVBoxLayout()
         self.info_panel.setSpacing(15)
 
-        # 2-1. 실시간 데이터 그래프
-        self.chart_frame = QFrame()
-        self.chart_frame.setStyleSheet(f"""
-            background-color: {Colors.WHITE.value};
-            border: 2px solid {Colors.GRAY_MEDIUM.value};
-            border-radius: 15px;
-        """)
-        chart_vbox = QVBoxLayout()
-        self.calibration_chart = CalibrationScatterChart(self.theme_manager)
-        chart_vbox.addWidget(self.calibration_chart)
-        self.chart_frame.setLayout(chart_vbox)
-        self.info_panel.addWidget(self.chart_frame, 1)
+        # 2-1. 초기 자세 설정 가이드 (간단한 핵심 안내 카드)
+        self.guide_card = self._create_posture_guide_card()
+        self.info_panel.addWidget(self.guide_card, 2)
 
-        # 2-2. 상태 안내 및 진행바 (그래프 바로 아래 공간 활용)
+        # 2-2. 상태 안내 및 진행바
         self.status_card = QFrame()
         self.status_card.setStyleSheet(f"""
             background-color: #F8F9FF;
@@ -149,11 +139,11 @@ class BaselineScreen(QWidget):
 
         self.main_status_label = QLabel("준비")
         self.main_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.main_status_label.setFont(app_font(self.theme_manager.scale_pixel(25), QFont.Weight.Bold))
+        self.main_status_label.setFont(app_font(self.theme_manager.scale_pixel(21), QFont.Weight.Bold))
         self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value}; border: none; background-color: transparent;")
         status_vbox.addWidget(self.main_status_label)
 
-        self.sub_status_label = QLabel("자세 설정 시작을 눌러주세요")
+        self.sub_status_label = QLabel("시작하면 3초 거리 이동 → 1초 촬영을 5번 반복합니다.")
         self.sub_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.sub_status_label.setFont(app_font(self.theme_manager.scale_pixel(16)))
         self.sub_status_label.setStyleSheet("border: none; background-color: transparent;")
@@ -215,6 +205,76 @@ class BaselineScreen(QWidget):
         self.capture_timer = QTimer()
         self.capture_timer.timeout.connect(self._update_progress)
 
+    def _create_posture_guide_card(self) -> QFrame:
+        """초기 자세 설정 화면의 사용자 안내 카드"""
+        guide_card = QFrame()
+        guide_card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+
+        guide_layout = QVBoxLayout()
+        guide_layout.setContentsMargins(
+            self.theme_manager.scale_pixel(13),
+            self.theme_manager.scale_pixel(10),
+            self.theme_manager.scale_pixel(13),
+            self.theme_manager.scale_pixel(10),
+        )
+        guide_layout.setSpacing(self.theme_manager.scale_pixel(5))
+
+        def build_label(text: str, font_size: int = 11, bold: bool = False, centered: bool = False, color: str | None = None) -> QLabel:
+            label = QLabel(text)
+            label.setWordWrap(True)
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+            label.setFont(app_font(self.theme_manager.scale_pixel(font_size), QFont.Weight.Bold if bold else QFont.Weight.Normal))
+            if centered:
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            if color is not None:
+                label.setStyleSheet(f"color: {color}; border: none; background-color: transparent;")
+            else:
+                label.setStyleSheet("border: none; background-color: transparent;")
+            return label
+
+        title = build_label("기준 자세 설정 가이드", font_size=18, bold=True, color=Colors.PRIMARY.value)
+        guide_layout.addWidget(title)
+
+        pill_row = QHBoxLayout()
+        pill_row.setSpacing(self.theme_manager.scale_pixel(5))
+        for pill_text in ("평소 거리 범위", "3초 안에 이동", "1초 정지 촬영"):
+            pill = build_label(pill_text, font_size=11, bold=True, centered=True)
+            pill.setStyleSheet(
+                f"background-color: {Colors.PURPLE_PRIMARY.value}; color: {Colors.WHITE.value}; border-radius: 11px; padding: 4px 8px;"
+            )
+            pill.setMinimumHeight(self.theme_manager.scale_pixel(22))
+            pill_row.addWidget(pill)
+        pill_row.addStretch()
+        guide_layout.addLayout(pill_row)
+
+        step1_title = build_label("① 거리 이동", font_size=12, bold=True)
+        step1_desc = build_label("바른 자세를 유지한 채, 평소 사용하는 거리 범위 안에서 3초 안에 카메라와의 거리를 조정합니다.", font_size=11)
+        guide_layout.addWidget(step1_title)
+        guide_layout.addWidget(step1_desc)
+
+        step2_title = build_label("② 자세 촬영", font_size=12, bold=True)
+        step2_desc = build_label("1초 자세 촬영 중에는 말하거나 움직이지 말고 가만히 있어야 합니다.", font_size=11)
+        guide_layout.addWidget(step2_title)
+        guide_layout.addWidget(step2_desc)
+
+        step3_title = build_label("③ 반복", font_size=12, bold=True)
+        step3_desc = build_label("총 5단계 동안 카메라와의 거리 이동과 촬영을 반복합니다.", font_size=11)
+        guide_layout.addWidget(step3_title)
+        guide_layout.addWidget(step3_desc)
+
+        caution = build_label(
+            "주의 : 몸 전체의 거리만 조정해 주세요.\n이 자세가 앞으로의 ‘바른 자세 기준’이 됩니다.",
+            font_size=11,
+            bold=True,
+            centered=True,
+            color=Colors.TEXT_BLACK.value,
+        )
+        guide_layout.addWidget(caution)
+
+        guide_card.setLayout(guide_layout)
+        return guide_card
+
     def start_camera_preview(self):
         """화면 진입 시 카메라 프리뷰만 미리 시작 (baseline 모드)"""
         if self.camera_worker is None:
@@ -255,7 +315,7 @@ class BaselineScreen(QWidget):
 
         self.capture_btn.setEnabled(False)
         self.main_status_label.setText("준비")
-        self.sub_status_label.setText("잠시 후 시작합니다...")
+        self.sub_status_label.setText("시작하면 3초 거리 이동 → 1초 촬영을 5번 반복합니다.")
 
         if hasattr(self.camera_worker, "set_baseline_mode"):
             self.camera_worker.set_baseline_mode(True)
@@ -284,9 +344,11 @@ class BaselineScreen(QWidget):
             self.current_remaining_sec = remaining
             progress = int((self.step_ticks / (self.wait_seconds * 10)) * 100)
 
-            self.main_status_label.setText("이동 하세요")
+            self.main_status_label.setText("거리 이동")
             self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value}; border: none; background-color: transparent;")
-            self.sub_status_label.setText(f"다음 거리로 이동해 주세요... ({remaining:.1f}초)")
+            self.sub_status_label.setText(
+                f"바른 자세를 유지한 채 3초 안에 거리만 조정해 주세요. ({remaining:.1f}초)"
+            )
             self.step_progress_bar.setValue(min(progress, 100))
             self.step_progress_bar.setStyleSheet(
                 f"QProgressBar::chunk {{ background-color: {Colors.PRIMARY.value}; }}"
@@ -304,9 +366,11 @@ class BaselineScreen(QWidget):
             self.current_remaining_sec = remaining
             progress = int((self.step_ticks / (self.collect_seconds * 10)) * 100)
 
-            self.main_status_label.setText("정지 하세요")
+            self.main_status_label.setText("정지 촬영")
             self.main_status_label.setStyleSheet(f"color: {Colors.RED_DANGER.value}; border: none; background-color: transparent;")
-            self.sub_status_label.setText(f"가만히 자세를 유지해 주세요... ({remaining:.1f}초)")
+            self.sub_status_label.setText(
+                f"1초 동안 움직이지 말고 가만히 있어주세요. ({remaining:.1f}초)"
+            )
             self.step_progress_bar.setValue(min(progress, 100))
             self.step_progress_bar.setStyleSheet(
                 f"QProgressBar::chunk {{ background-color: {Colors.RED_DANGER.value}; }}"
@@ -364,13 +428,6 @@ class BaselineScreen(QWidget):
                 return
 
             set_recognition_message(self.recognition_label, False)
-            self.calibration_chart.update_live_point(
-                indicators.shoulder_width,
-                indicators.cheek_distance,
-                is_collecting=(self.step_state == "COLLECT"),
-                step=self.current_step,
-                total_steps=self.total_steps,
-            )
 
             if self.step_state == "WAIT":
                 return
@@ -402,9 +459,9 @@ class BaselineScreen(QWidget):
         
         if success:
             self.total_progress_bar.setValue(self.total_steps)
-            self.main_status_label.setText("분석 완료")
+            self.main_status_label.setText("완료")
             self.main_status_label.setStyleSheet(f"color: {Colors.SECONDARY.value}; border: none; background-color: transparent;")
-            self.sub_status_label.setText(f"총 {self.valid_baseline_frame_count}개 유효 데이터 수집됨")
+            self.sub_status_label.setText("기준 자세 설정이 완료되었습니다.")
             
             if self.baseline_manager:
                 noise = self.baseline_manager.max_inlier_deviation
@@ -444,16 +501,12 @@ class BaselineScreen(QWidget):
         self.capture_btn.setText("자세 설정 시작")
         self.preview_label.clear()
         self.preview_label.setText("카메라 프리뷰")
-        try:
-            self.calibration_chart.clear()
-        except Exception:
-            logger.debug("베이스라인 차트 초기화 실패")
         self.total_progress_bar.setValue(0)
         self.step_progress_bar.setValue(0)
         self.step_label.setText(f"전체 진행: 0 / {self.total_steps}")
         self.main_status_label.setText("준비")
         self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value}; border: none; background-color: transparent;")
-        self.sub_status_label.setText("자세 설정 시작을 눌러주세요")
+        self.sub_status_label.setText("시작하면 3초 거리 이동 → 1초 촬영을 5번 반복합니다.")
         set_recognition_message(self.recognition_label, False)
 
     def _fail_capture(self, message: str):
