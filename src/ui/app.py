@@ -843,6 +843,13 @@ class baromokApp:
         except Exception:
             logger.debug("종료 시 카메라 정지 실패")
 
+        # 종료 시 진행 중인 세션을 정상 종료 처리 (end_time/통계 저장)
+        try:
+            if self.session_manager.current_session is not None:
+                self.session_manager.end_session()
+        except Exception:
+            logger.debug("종료 시 세션 종료 실패")
+
         # 종료 전 설정 최종 저장 (dirty일 때만)
         self._persist_settings_if_dirty(reason="app_exit")
 

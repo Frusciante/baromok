@@ -163,10 +163,20 @@ class DetectionScreen(QWidget):
         self.setLayout(layout)
 
     def _on_frame_processed(self, frame_data: dict):
+        if self.is_session_stopped:
+            return
+        if frame_data.get("posture_type") == "baseline":
+            return
+
+        # 세션 기록은 UI 렌더링과 독립적으로 먼저 수행 (렌더링 예외가 기록을 막지 않도록)
         try:
-            if self.is_session_stopped:
-                return
-            if frame_data.get("posture_type") == "baseline": return
+            if self.session_manager and getattr(self.session_manager, "current_session", None) is not None:
+                self.session_manager.add_frame_data(frame_data)
+        except Exception as e:
+            logger.error(f"프레임 기록 실패: {e}")
+
+        # UI 업데이트 (여기서 예외가 나도 위 세션 기록에는 영향 없음)
+        try:
             if self._waiting_for_first_frame:
                 self._waiting_for_first_frame = False
                 self._preview_stack.setCurrentIndex(1)  # 첫 프레임 도착 → 프리뷰 표시
@@ -211,10 +221,6 @@ class DetectionScreen(QWidget):
                     self.distance_label.setText(f"화면 거리: {dist_cm:.1f} cm")
                 else:
                     self.distance_label.setText("화면 거리: - cm")
-
-            # indicators 유무와 관계없이 모든 프레임을 세션에 기록
-            if self.session_manager and getattr(self.session_manager, "current_session", None) is not None:
-                self.session_manager.add_frame_data(frame_data)
         except Exception as e:
             logger.error(f"프레임 처리 오류: {e}")
 

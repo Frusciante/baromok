@@ -296,14 +296,16 @@ class SessionManager:
                 row = conn.execute(
                     """SELECT
                            COUNT(*) AS total,
-                           SUM(CASE WHEN state='NORMAL'      THEN 1 ELSE 0 END) AS good_count,
-                           SUM(CASE WHEN state='WARNING'     THEN 1 ELSE 0 END) AS warn_count,
-                           SUM(CASE WHEN state='BAD_POSTURE' THEN 1 ELSE 0 END) AS bad_count,
+                           SUM(CASE WHEN UPPER(state)='NORMAL'      THEN 1 ELSE 0 END) AS good_count,
+                           SUM(CASE WHEN UPPER(state)='WARNING'     THEN 1 ELSE 0 END) AS warn_count,
+                           SUM(CASE WHEN UPPER(state)='BAD_POSTURE' THEN 1 ELSE 0 END) AS bad_count,
                            AVG(probability) AS avg_prob,
                            SUM(CASE WHEN posture_type='forward_head'        THEN 1 ELSE 0 END) AS fh,
                            SUM(CASE WHEN posture_type='recline'             THEN 1 ELSE 0 END) AS rc,
                            SUM(CASE WHEN posture_type='chin_rest_estimated' THEN 1 ELSE 0 END) AS cr,
-                           SUM(CASE WHEN posture_type='normal'              THEN 1 ELSE 0 END) AS nm
+                           SUM(CASE WHEN posture_type='normal'              THEN 1 ELSE 0 END) AS nm,
+                           SUM(CASE WHEN posture_type='side_tilt'           THEN 1 ELSE 0 END) AS stl,
+                           SUM(CASE WHEN posture_type='turned_head'         THEN 1 ELSE 0 END) AS th
                        FROM frame_records WHERE session_id=?""",
                     (session_id,),
                 ).fetchone()
@@ -345,6 +347,8 @@ class SessionManager:
                     "recline":             row["rc"] or 0,
                     "chin_rest_estimated": row["cr"] or 0,
                     "normal":              row["nm"] or 0,
+                    "side_tilt":           row["stl"] or 0,
+                    "turned_head":         row["th"] or 0,
                 },
                 "state_counts": {
                     "NORMAL":      good_count,
@@ -370,7 +374,7 @@ class SessionManager:
         if not session.frame_records:
             return {}
         try:
-            posture_counts = {"forward_head": 0, "recline": 0, "chin_rest_estimated": 0, "normal": 0}
+            posture_counts = {"forward_head": 0, "recline": 0, "chin_rest_estimated": 0, "normal": 0, "side_tilt": 0, "turned_head": 0}
             state_counts   = {"NORMAL": 0, "WARNING": 0, "BAD_POSTURE": 0}
             probs = []
             prev = None
