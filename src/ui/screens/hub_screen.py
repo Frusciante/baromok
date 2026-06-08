@@ -43,6 +43,23 @@ class HubScreen(QWidget):
         }
         self.setup_ui()
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        # 화면에 진입할 때마다 최신 세션 통계로 갱신 (실시간 반영)
+        try:
+            self._rebuild_ui()
+        except Exception:
+            logger.exception("허브 화면 갱신 실패")
+
+    def _rebuild_ui(self):
+        """기존 레이아웃을 분리/폐기하고 setup_ui로 재구성한다."""
+        old_layout = self.layout()
+        if old_layout is not None:
+            _tmp = QWidget()
+            _tmp.setLayout(old_layout)
+            _tmp.deleteLater()
+        self.setup_ui()
+
     def setup_ui(self):
         """UI 구성"""
         main_layout = QVBoxLayout()
