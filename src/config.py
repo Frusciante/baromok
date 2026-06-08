@@ -149,6 +149,33 @@ class ConfigManager:
             raise ValueError(f"미알려진 자세 유형: {posture_type}")
         return posture_types[posture_type]
 
+    # 자세 표시 이름/알림 문구의 단일 소스 (모든 UI는 아래 헬퍼만 사용할 것)
+    _POSTURE_LABEL_SPECIAL = {
+        "normal": "바른 자세",
+        "neutral": "바른 자세",
+        "baseline": "자세 맞춤 중",
+    }
+
+    def get_posture_label(self, posture_type: str) -> str:
+        """자세 유형의 한글 표시 이름을 반환 (단일 소스).
+
+        normal/baseline 등 특수 키는 내장 매핑, 그 외 자세는 config의
+        display_label을 사용한다. 알 수 없는 키는 키 문자열을 그대로 반환.
+        """
+        if posture_type in self._POSTURE_LABEL_SPECIAL:
+            return self._POSTURE_LABEL_SPECIAL[posture_type]
+        entry = self.posture_criteria.get("posture_types", {}).get(posture_type)
+        if entry and entry.get("display_label"):
+            return entry["display_label"]
+        return posture_type
+
+    def get_posture_alert_message(self, posture_type: str) -> str:
+        """자세 유형의 알림(토스트) 문구를 반환. 없으면 빈 문자열."""
+        entry = self.posture_criteria.get("posture_types", {}).get(posture_type)
+        if entry and entry.get("alert_message"):
+            return entry["alert_message"]
+        return ""
+
     def get_event_judgment_config(self) -> Dict[str, Any]:
         """이벤트 판정 설정 조회"""
         return self.posture_criteria.get("event_judgment", {})
@@ -247,18 +274,18 @@ class SettingsConfig:
                 sensitivities = scoring_config.get("sensitivities", {})
 
                 if instance.forward_head_sensitivity is None:
-                    instance.forward_head_sensitivity = sensitivities.get("forward_head", 0.075)
+                    instance.forward_head_sensitivity = sensitivities.get("forward_head", 0.1)
                 if instance.recline_sensitivity is None:
-                    instance.recline_sensitivity = sensitivities.get("recline", 0.01)
+                    instance.recline_sensitivity = sensitivities.get("recline", 0.04)
                 if instance.recommended_forward_head is None:
-                    instance.recommended_forward_head = sensitivities.get("forward_head", 0.075)
+                    instance.recommended_forward_head = sensitivities.get("forward_head", 0.1)
                 if instance.recommended_recline is None:
-                    instance.recommended_recline = sensitivities.get("recline", 0.01)
+                    instance.recommended_recline = sensitivities.get("recline", 0.04)
             else:
                 if instance.forward_head_sensitivity is None:
-                    instance.forward_head_sensitivity = 0.075
+                    instance.forward_head_sensitivity = 0.1
                 if instance.recline_sensitivity is None:
-                    instance.recline_sensitivity = 0.01
+                    instance.recline_sensitivity = 0.04
                 if instance.recommended_forward_head is None:
                     instance.recommended_forward_head = instance.forward_head_sensitivity
                 if instance.recommended_recline is None:

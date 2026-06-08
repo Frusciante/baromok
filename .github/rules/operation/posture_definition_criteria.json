@@ -78,7 +78,8 @@
   },
   "posture_types": {
     "recline": {
-      "display_label": "기댄 자세 의심",
+      "display_label": "기댄 자세",
+      "alert_message": "몸이 뒤로 기울었어요. 허리를 세워 바르게 앉아 주세요.",
       "primary_conditions": {
         "deviation": {
           "operator": "<",
@@ -97,7 +98,8 @@
       "sustain_seconds": 1.5
     },
     "forward_head": {
-      "display_label": "거북목 경향",
+      "display_label": "거북목",
+      "alert_message": "거북목이 감지됐어요. 고개를 뒤로 당겨 화면과 맞춰 주세요.",
       "primary_conditions": {
         "deviation": {
           "operator": ">",
@@ -115,7 +117,8 @@
       "sustain_seconds": 1.5
     },
     "chin_rest_estimated": {
-      "display_label": "턱 괸 자세 의심",
+      "display_label": "턱 괸 자세",
+      "alert_message": "턱을 괴고 있어요. 손을 내리고 바르게 앉아 주세요.",
       "primary_conditions": {
         "eye_line_tilt_deg": {
           "operator": ">=",
@@ -157,7 +160,8 @@
     }
     ,
     "eye_close": {
-      "display_label": "화면과 눈 거리 가까움",
+      "display_label": "화면 가까움",
+      "alert_message": "화면과 너무 가까워요. 잠시 뒤로 물러나 주세요.",
       "primary_conditions": {
         "distance_threshold_cm": {
           "operator": "<=",
@@ -168,6 +172,7 @@
     },
     "turned_head": {
       "display_label": "고개 돌린 자세",
+      "alert_message": "고개가 돌아갔어요. 정면을 바라봐 주세요.",
       "sustain_seconds": 1.5,
       "thresholds": {
         "eye_symmetry": 0.4,
@@ -177,6 +182,7 @@
     },
     "side_tilt": {
       "display_label": "고개 기울인 자세",
+      "alert_message": "고개가 기울었어요. 머리를 수직으로 세워 주세요.",
       "primary_conditions": {
         "eye_line_tilt_deg": {
           "operator": ">=",

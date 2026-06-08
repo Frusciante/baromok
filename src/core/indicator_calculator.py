@@ -74,7 +74,7 @@ class IndicatorCalculator:
 
         self._iris_diameter_mm = float(self._eye_monitoring_cfg.get("iris_diameter_mm", 11.5))
         self._camera_hfov_deg = float(self._eye_monitoring_cfg.get("camera_horizontal_fov_deg", 60.0))
-        self._eye_distance_threshold_cm = float(self._eye_monitoring_cfg.get("distance_threshold_cm", 40.0))
+        self._eye_distance_threshold_cm = float(self._eye_monitoring_cfg.get("distance_threshold_cm", 45.0))
         self._eye_sustain_seconds = float(self._eye_monitoring_cfg.get("sustain_seconds", 2.0))
         self._eye_close_start_time: Optional[float] = None
         

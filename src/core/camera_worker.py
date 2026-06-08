@@ -468,18 +468,8 @@ class CameraWorker(QThread):
         }
         state_text = state_text_map.get(state, "알 수 없음")
 
-        # 자세 유형 한글 매핑
-        posture_name_map = {
-            "normal": "바른 자세",
-            "forward_head": "거북목",
-            "recline": "기댄 자세",
-            "chin_rest_estimated": "턱 받침",
-            "eye_close": "화면 가까움",
-            "turned_head": "고개 돌린 자세",
-            "side_tilt": "고개 기울인 자세",
-            "baseline": "자세 맞춤 중"
-        }
-        display_posture = posture_name_map.get(posture_type, posture_type)
+        # 자세 유형 한글 매핑 (config 단일 소스)
+        display_posture = self.judgment_engine.config.get_posture_label(posture_type)
 
         # Iris visualization (debugging)
         if normalized_landmarks:

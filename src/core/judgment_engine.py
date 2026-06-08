@@ -358,9 +358,9 @@ class JudgmentEngine:
             # 구성에서 임계값 확인
             try:
                 cfg = self.config.get_posture_criteria().get("eye_monitoring", {})
-                threshold = float(cfg.get("distance_threshold_cm", 40.0))
+                threshold = float(cfg.get("distance_threshold_cm", 45.0))
             except Exception:
-                threshold = 40.0
+                threshold = 45.0
 
             if dist_cm is None:
                 return {"likelihood": 0.0, "triggered": False}

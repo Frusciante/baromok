@@ -639,7 +639,11 @@ class PostureBreakdownChart(QWidget):
         for key in order:
             count = posture_distribution.get(key, 0)
             if count > 0:
-                label, color = self.POSTURE_META.get(key, (key, "#9CA3AF"))
+                from src.config import get_config
+                _name, color = self.POSTURE_META.get(key, (key, "#9CA3AF"))
+                label = get_config().get_posture_label(key)
+                if label == key:  # config에 없는 통계 전용 키는 기존 이름 유지
+                    label = _name
                 pct = count / total_frames * 100
                 items.append((label, pct, color))
 
