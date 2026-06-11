@@ -30,8 +30,6 @@ from src.core.indicator_calculator import IndicatorCalculator
 from src.core.baseline_manager import BaselineManager
 from src.core.judgment_engine import JudgmentEngine
 from src.core.state_machine import StateMachine, StateTransitionEvent
-from src.core.calibration_v2 import CalibrationV2Manager
-from src.core.judgment_engine_v2 import JudgmentEngineV2
 from src.core.camera_worker import create_camera_worker
 from src.core.session_manager import create_session_manager
 from src.core.sound_manager import SoundManager
@@ -91,6 +89,7 @@ class baromokApp:
         self.alert_hide_timer.timeout.connect(self._hide_alert_popup)
         self._last_alert_time = 0.0
         self._last_alert_type = ""
+        self._alert_state_lock = threading.Lock()
         self._previous_screen_index = 1
 
         # 엔진 컴포넌트 초기화 (Phase 2)
@@ -108,14 +107,6 @@ class baromokApp:
         self.state_machine = StateMachine(self.config)
         self.state_machine.register_state_change_callback(self._handle_state_transition)
 
-        # V2 엔진 초기화
-        self.cal_mgr_v2 = CalibrationV2Manager(self.config)
-        if self.cal_mgr_v2.load():
-            logger.info("V2 캘리브레이션 로드 완료")
-        else:
-            logger.info("V2 캘리브레이션 없음 — 기준자세설정 시 자동 생성됩니다")
-        self.judgment_engine_v2 = JudgmentEngineV2(self.config, self.cal_mgr_v2)
-
         logger.info("✓ 엔진 컴포넌트 준비 완료")
 
         # 비즈니스 로직 초기화 (Phase 4)
@@ -132,8 +123,6 @@ class baromokApp:
             self.state_machine,
             self.config,
         )
-        # V2 컴포넌트를 카메라 워커에 주입
-        self.camera_worker.set_v2_components(self.judgment_engine_v2, self.cal_mgr_v2)
         logger.info("✓ 카메라 워커 준비 완료")
 
         # 설정 로드 (ConfigManager를 전달하여 기본값 처리)
@@ -239,7 +228,6 @@ class baromokApp:
         self.hub_screen.open_statistics_signal.connect(
             lambda: self.switch_screen(3)  # Statistics
         )
-        self.hub_screen.engine_mode_changed_signal.connect(self._on_engine_mode_changed)
         self.detection_screen.open_settings_signal.connect(
             lambda: self.switch_screen(2)  # Settings
         )
@@ -326,22 +314,45 @@ class baromokApp:
 
     @property
     def popup_position_xy(self) -> tuple:
-        """팝업 화면 위치 (x, y) - 중앙 또는 상단"""
+        """팝업 화면 위치 (x, y) - 현재 모니터 기준 중앙 또는 상단 중앙"""
         if self.alert_popup is None:
             return (0, 0)
 
-        main_geom = self.main_window.geometry()
         popup_width = self.alert_popup.width()
         popup_height = self.alert_popup.height()
 
+        if popup_width <= 0 or popup_height <= 0:
+            size_hint = self.alert_popup.sizeHint()
+            popup_width = max(popup_width, size_hint.width())
+            popup_height = max(popup_height, size_hint.height())
+
+        screen = None
+
+        try:
+            window_handle = self.main_window.windowHandle()
+            if window_handle is not None:
+                screen = window_handle.screen()
+        except Exception:
+            screen = None
+
+        if screen is None:
+            try:
+                center_point = self.main_window.frameGeometry().center()
+                screen = self.qt_app.screenAt(center_point)
+            except Exception:
+                screen = None
+
+        if screen is None:
+            screen = self.qt_app.primaryScreen()
+
+        screen_geom = screen.availableGeometry()
+        x = screen_geom.x() + (screen_geom.width() - popup_width) // 2
+
         if self.settings_config.popup_position == "top":
-            # 화면 상단 중앙 (상단에서 20px 아래)
-            x = main_geom.x() + (main_geom.width() - popup_width) // 2
-            y = main_geom.y() + 20
+            margin_top = 20
+            y = screen_geom.y() + margin_top
         else:  # "center" (기본값)
-            # 화면 중앙
-            x = main_geom.x() + (main_geom.width() - popup_width) // 2
-            y = main_geom.y() + (main_geom.height() - popup_height) // 2
+            y = screen_geom.y() + (screen_geom.height() - popup_height) // 2
 
         return (x, y)
 
@@ -389,6 +400,9 @@ class baromokApp:
                     self.baseline_screen.start_camera_preview()
                 except Exception:
                     logger.debug("Baseline 화면 진입 시 카메라 시작 실패")
+
+            if screen_index == 1:
+                self._start_camera_warmup()
 
             if screen_index == 2 and hasattr(self, "settings_screen"):
                 self._refresh_settings_screen_values()
@@ -532,6 +546,9 @@ class baromokApp:
         self.camera_worker.set_baseline_mode(False)
         self.state_machine.reset()
         self._hide_alert_popup()
+        # 재시작 시 기존 세션이 end_session() 없이 덮어써지는 버그 방지
+        if self.session_manager.current_session is not None:
+            self.session_manager.end_session()
         self.session_manager.start_session()
 
         if not self.camera_worker.isRunning():
@@ -542,43 +559,33 @@ class baromokApp:
         self.switch_screen(4)  # DetectionScreen으로 이동
         self.detection_screen.on_detection_started()
 
-    def _on_engine_mode_changed(self, mode: str):
-        """V1/V2 토글 처리"""
-        if mode == "v2" and not self.cal_mgr_v2.is_loaded():
-            # V2 캘리브레이션 없음 → V1로 롤백하고 안내
-            from PyQt6.QtWidgets import QMessageBox
-            msg = QMessageBox(self.main_window)
-            msg.setIcon(QMessageBox.Icon.Information)
-            msg.setWindowTitle("V2 캘리브레이션 필요")
-            msg.setText(
-                "V2 모드는 기준자세설정이 필요합니다.\n\n"
-                "기준자세설정(자세 맞춤)을 한 번 완료하면\n"
-                "V1과 V2 캘리브레이션이 동시에 생성됩니다.\n\n"
-                "기준자세설정 후 다시 V2로 전환해 주세요."
-            )
-            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg.exec()
-            # V1으로 롤백
-            self.hub_screen.update_engine_badge("v1")
-            return
-        self.camera_worker.engine_mode = mode
-        logger.info(f"엔진 모드 변경: {mode}")
+    def _start_camera_warmup(self):
+        """허브 화면 진입 시 카메라를 백그라운드에서 예열한다."""
+        try:
+            if not self.camera_worker.isRunning():
+                self.camera_worker.set_baseline_mode(False)
+                self.camera_worker.start()
+                # 2초 후 일시정지 (이미 충분히 예열됨)
+                QTimer.singleShot(2000, self._pause_warmup_camera)
+                logger.debug("카메라 예열 시작")
+            # 이미 running+paused 상태면 그대로 유지 (이미 예열됨)
+        except Exception:
+            logger.debug("카메라 예열 시작 실패")
+
+    def _pause_warmup_camera(self):
+        """예열 완료 후 허브 화면에 있는 경우에만 카메라를 일시정지한다."""
+        try:
+            current_index = self.main_window.stacked_widget.currentIndex()
+            if (current_index == 1
+                    and self.camera_worker.isRunning()
+                    and not self.camera_worker.is_paused):
+                self.camera_worker.pause()
+                logger.debug("카메라 예열 완료, 일시정지 상태로 전환")
+        except Exception:
+            logger.debug("카메라 예열 일시정지 실패")
 
     def _handle_baseline_captured(self):
         """Baseline 완료 후 다음 동작 처리"""
-        # V2 캘리브레이션 병행 완료
-        try:
-            if self.cal_mgr_v2.is_collecting:
-                success = self.cal_mgr_v2.finish_collection()
-                if success:
-                    self.cal_mgr_v2.save()
-                    self.judgment_engine_v2.reset_filters()
-                    logger.info(f"V2 캘리브레이션 자동 완료 (quality={self.cal_mgr_v2.calibration.calibration_quality})")
-                else:
-                    logger.warning("V2 캘리브레이션 자동 완료 실패 (프레임 부족 또는 오류)")
-        except Exception as e:
-            logger.warning(f"V2 캘리브레이션 병행 완료 중 오류: {e}")
-
         if self.settings_config.auto_start_detection:
             logger.info("자동 감지 시작 설정 활성화: 바로 감지 시작")
             self._start_detection()
@@ -633,34 +640,30 @@ class baromokApp:
 
         alert_type = "danger"
         # 기본 문구
-        message_text = "나쁜 자세가 지속되고 있습니다. 즉시 자세를 바르게 해주세요."
+        message_text = "자세가 흐트러졌어요. 바르게 고쳐 앉아 주세요."
 
-        # 확정된 자세가 있고, 설정에 표시 레이블이 있으면 레이블 기반 문구 사용
+        # 확정된 자세의 알림 문구(config의 alert_message, 단일 소스)를 사용
         try:
             confirmed = event.confirmed_posture
             if confirmed:
-                cfg = self.config.get_posture_type_config(confirmed)
-                display_label = cfg.get("display_label") if cfg else None
-                if display_label:
-                    # 사용자 요청: UI 스타일 유지, 자세 이름은 정확히 display_label 사용
-                    if confirmed == "eye_close":
-                        message_text = f"{display_label}: 화면과 눈의 거리가 너무 가깝습니다. 잠시 물러나 주세요."
-                    else:
-                        message_text = display_label
+                msg = self.config.get_posture_alert_message(confirmed)
+                if msg:
+                    message_text = msg
         except Exception:
             # 실패 시 기본 메시지 유지
             pass
 
         now = time.time()
-        if (
-            alert_type == self._last_alert_type
-            and now - self._last_alert_time
-            < self.alert_cooldown_seconds  # 프로퍼티 사용
-        ):
-            return
+        with self._alert_state_lock:
+            if (
+                alert_type == self._last_alert_type
+                and now - self._last_alert_time
+                < self.alert_cooldown_seconds  # 프로퍼티 사용
+            ):
+                return
+            self._last_alert_type = alert_type
+            self._last_alert_time = now
 
-        self._last_alert_type = alert_type
-        self._last_alert_time = now
         self.alert_bridge.alert_requested.emit(alert_type, message_text)
 
         # 나쁜 자세로 진입했을 때만 경고음을 별도로 1회 재생한다.
@@ -764,7 +767,7 @@ class baromokApp:
     def _reset_settings(self):
         """설정 초기화 (기본값으로)"""
         try:
-            self.settings_config.reset_to_defaults(self.config)
+            self.settings_config.reset_to_defaults()
             self._refresh_settings_screen_values()
 
             # 엔진 즉시 반영
@@ -863,21 +866,20 @@ class baromokApp:
         except Exception:
             logger.debug("종료 시 카메라 정지 실패")
 
+        # 종료 시 진행 중인 세션을 정상 종료 처리 (end_time/통계 저장)
+        try:
+            if self.session_manager.current_session is not None:
+                self.session_manager.end_session()
+        except Exception:
+            logger.debug("종료 시 세션 종료 실패")
+
         # 종료 전 설정 최종 저장 (dirty일 때만)
         self._persist_settings_if_dirty(reason="app_exit")
 
+        # DB 연결 종료
+        try:
+            self.session_manager.close()
+        except Exception:
+            logger.debug("종료 시 DB 연결 닫기 실패")
+
         return exit_code
-
-
-def main():
-    """메인 진입점"""
-    try:
-        app = baromokApp()
-        sys.exit(app.run())
-    except Exception as e:
-        logger.error("애플리케이션 오류: %s", e, exc_info=True)
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

@@ -55,7 +55,7 @@ class BaselineManager:
         # 6단계(총 30초 수집) 데이터를 충분히 확보하기 위해 최소 유효 프레임을 설정에서 가져온다.
         baseline_config = self.config.get_baseline_config()
         self.minimum_valid_frame_count = baseline_config.get(
-            "minimum_valid_frames", 50
+            "minimum_valid_frames", 30
         )
 
         self.ransac_model = RansacLinearModel(
@@ -269,13 +269,19 @@ class BaselineManager:
         try:
             filepath.parent.mkdir(parents=True, exist_ok=True)
 
+            # RANSAC 원시 샘플 리스트는 저장 불필요 (수백~수천 개 float -> 파일 비대화)
+            _SAMPLE_KEYS = {"ransac_x_samples", "ransac_y_samples", "ransac_s_samples"}
+            metrics_to_save = {
+                k: v for k, v in self.baseline_metrics.metrics.items()
+                if k not in _SAMPLE_KEYS
+            }
             data = {
                 "timestamp": self.baseline_metrics.timestamp,
                 "collection_duration_seconds": (
                     self.baseline_metrics.collection_duration_seconds
                 ),
                 "frame_count": self.baseline_metrics.frame_count,
-                "metrics": self.baseline_metrics.metrics,
+                "metrics": metrics_to_save,
             }
 
             with open(filepath, "w", encoding="utf-8") as f:

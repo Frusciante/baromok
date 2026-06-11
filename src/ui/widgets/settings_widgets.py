@@ -681,11 +681,11 @@ class SensitivitySettingsWidget(QWidget):
 
         # 현재 값 (설정 파일에서 로드, 범위 내로 클램프)
         self.fwd_val = self._clamp(
-            self.config.get("forward_head_sensitivity", 0.075),
+            self.config.get("forward_head_sensitivity", 0.1),
             self.FWD_MIN, self.FWD_MAX,
         )
         self.rec_val = self._clamp(
-            self.config.get("recline_sensitivity", 0.01),
+            self.config.get("recline_sensitivity", 0.04),
             self.REC_MIN, self.REC_MAX,
         )
 
@@ -847,11 +847,11 @@ class SensitivitySettingsWidget(QWidget):
 
     def set_value(self, config: dict):
         self.fwd_val = self._clamp(
-            config.get("forward_head_sensitivity", 0.075),
+            config.get("forward_head_sensitivity", 0.1),
             self.FWD_MIN, self.FWD_MAX,
         )
         self.rec_val = self._clamp(
-            config.get("recline_sensitivity", 0.01),
+            config.get("recline_sensitivity", 0.04),
             self.REC_MIN, self.REC_MAX,
         )
         self.fwd_slider.blockSignals(True)

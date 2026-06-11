@@ -23,7 +23,6 @@ class HubScreen(QWidget):
     open_settings_signal = pyqtSignal()
     open_statistics_signal = pyqtSignal()
     open_baseline_signal = pyqtSignal()
-    engine_mode_changed_signal = pyqtSignal(str)  # "v1" or "v2"
 
     def __init__(
         self,
@@ -35,7 +34,6 @@ class HubScreen(QWidget):
         self.theme_manager = theme_manager
         self.session_manager = session_manager
         self.baseline_manager = baseline_manager
-        self._engine_mode = "v1"
         self._colors = {
             "panel_border": "#e5e5e7",
             "empty_icon": "#c9c4ed",
@@ -43,6 +41,23 @@ class HubScreen(QWidget):
             "muted": "#888888",
             "score": "#5B4DE0",
         }
+        self.setup_ui()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # 화면에 진입할 때마다 최신 세션 통계로 갱신 (실시간 반영)
+        try:
+            self._rebuild_ui()
+        except Exception:
+            logger.exception("허브 화면 갱신 실패")
+
+    def _rebuild_ui(self):
+        """기존 레이아웃을 분리/폐기하고 setup_ui로 재구성한다."""
+        old_layout = self.layout()
+        if old_layout is not None:
+            _tmp = QWidget()
+            _tmp.setLayout(old_layout)
+            _tmp.deleteLater()
         self.setup_ui()
 
     def setup_ui(self):
@@ -136,7 +151,7 @@ class HubScreen(QWidget):
         sessions = []
         try:
             if self.session_manager:
-                sessions = self.session_manager.load_recent_sessions(10)
+                sessions = self.session_manager.load_recent_sessions(30)
         except Exception:
             logger.exception("세션 데이터 로드 실패")
 
@@ -201,35 +216,6 @@ class HubScreen(QWidget):
         main_layout.addLayout(top_layout, 1)
         main_layout.addStretch()
 
-        # V1 / V2 엔진 토글
-        toggle_layout = QHBoxLayout()
-        toggle_layout.setSpacing(0)
-
-        self._btn_v1 = QPushButton("V1 (기존)")
-        self._btn_v2 = QPushButton("V2 (신규)")
-        for btn in (self._btn_v1, self._btn_v2):
-            btn.setFixedHeight(self.theme_manager.scale_pixel(34))
-            btn.setFont(app_font(self.theme_manager.scale_pixel(14)))
-            btn.setCheckable(True)
-
-        self._btn_v1.setChecked(True)
-        self._btn_v1.clicked.connect(lambda: self._on_engine_toggle("v1"))
-        self._btn_v2.clicked.connect(lambda: self._on_engine_toggle("v2"))
-
-        self._v1_style_active   = f"QPushButton{{background:{Colors.PURPLE_PRIMARY.value};color:#fff;border:none;border-radius:6px 0 0 6px;padding:0 16px;}}"
-        self._v1_style_inactive = f"QPushButton{{background:#E8E5F8;color:{Colors.PURPLE_PRIMARY.value};border:none;border-radius:6px 0 0 6px;padding:0 16px;}}"
-        self._v2_style_active   = f"QPushButton{{background:{Colors.PURPLE_PRIMARY.value};color:#fff;border:none;border-radius:0 6px 6px 0;padding:0 16px;}}"
-        self._v2_style_inactive = f"QPushButton{{background:#E8E5F8;color:{Colors.PURPLE_PRIMARY.value};border:none;border-radius:0 6px 6px 0;padding:0 16px;}}"
-
-        self._btn_v1.setStyleSheet(self._v1_style_active)
-        self._btn_v2.setStyleSheet(self._v2_style_inactive)
-
-        toggle_layout.addStretch()
-        toggle_layout.addWidget(self._btn_v1)
-        toggle_layout.addWidget(self._btn_v2)
-        toggle_layout.addStretch()
-        main_layout.addLayout(toggle_layout)
-
         start_btn = QPushButton("모니터링 시작")
         start_btn.setFixedHeight(self.theme_manager.scale_pixel(56))
         start_btn.setFont(app_font(self.theme_manager.scale_pixel(23), QFont.Weight.Bold))
@@ -248,25 +234,6 @@ class HubScreen(QWidget):
 
         self.setLayout(main_layout)
 
-    def _on_engine_toggle(self, mode: str):
-        """V1/V2 토글 처리"""
-        self._engine_mode = mode
-        if mode == "v1":
-            self._btn_v1.setStyleSheet(self._v1_style_active)
-            self._btn_v2.setStyleSheet(self._v2_style_inactive)
-            self._btn_v1.setChecked(True)
-            self._btn_v2.setChecked(False)
-        else:
-            self._btn_v1.setStyleSheet(self._v1_style_inactive)
-            self._btn_v2.setStyleSheet(self._v2_style_active)
-            self._btn_v1.setChecked(False)
-            self._btn_v2.setChecked(True)
-        self.engine_mode_changed_signal.emit(mode)
-
-    def update_engine_badge(self, mode: str):
-        """외부에서 토글 상태 동기화"""
-        self._on_engine_toggle(mode)
-
     # ----------------------------- Score Panel -----------------------------
     def _create_score_panel(self) -> QWidget:
         """우측 점수 패널 생성: 최근 통계자료(sessions) 유무로만 분기 렌더링"""
@@ -281,7 +248,7 @@ class HubScreen(QWidget):
         sessions = []
         try:
             if self.session_manager:
-                sessions = self.session_manager.load_recent_sessions(10)
+                sessions = self.session_manager.load_recent_sessions(30)
         except Exception:
             logger.exception("세션 데이터 로드 실패")
 

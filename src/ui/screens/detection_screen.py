@@ -2,7 +2,7 @@ import logging
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+    QFrame, QHBoxLayout, QLabel, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 )
 from src.ui.styles.theme import Colors, ThemeManager
 from src.ui.styles.font_loader import app_font
@@ -36,6 +36,7 @@ class DetectionScreen(QWidget):
         self.elapsed_time = 0
         self.is_detection_paused = False
         self.is_session_stopped = False
+        self._waiting_for_first_frame = False
         self.setup_ui()
 
         if self.camera_worker:
@@ -77,9 +78,23 @@ class DetectionScreen(QWidget):
         self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(300))
         preview_layout = QVBoxLayout()
         preview_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 카메라 대기 스피너 / 실제 프리뷰를 QStackedWidget으로 관리
+        self._preview_stack = QStackedWidget()
+
+        # Page 0: 스피너 레이블
+        self._spinner_label = QLabel("카메라 연결 중...")
+        self._spinner_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._spinner_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value}; font-size: 16px;")
+        self._preview_stack.addWidget(self._spinner_label)  # index 0
+
+        # Page 1: 실제 카메라 프리뷰
         self.preview_label = QLabel("[카메라 프리뷰]")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview_layout.addWidget(self.preview_label)
+        self._preview_stack.addWidget(self.preview_label)  # index 1
+
+        self._preview_stack.setCurrentIndex(1)  # 기본은 프리뷰 표시
+        preview_layout.addWidget(self._preview_stack)
         self.preview_frame.setLayout(preview_layout)
         layout.addWidget(self.preview_frame, 1)
 
@@ -148,10 +163,23 @@ class DetectionScreen(QWidget):
         self.setLayout(layout)
 
     def _on_frame_processed(self, frame_data: dict):
+        if self.is_session_stopped:
+            return
+        if frame_data.get("posture_type") == "baseline":
+            return
+
+        # 세션 기록은 UI 렌더링과 독립적으로 먼저 수행 (렌더링 예외가 기록을 막지 않도록)
         try:
-            if self.is_session_stopped:
-                return
-            if frame_data.get("posture_type") == "baseline": return
+            if self.session_manager and getattr(self.session_manager, "current_session", None) is not None:
+                self.session_manager.add_frame_data(frame_data)
+        except Exception as e:
+            logger.error(f"프레임 기록 실패: {e}")
+
+        # UI 업데이트 (여기서 예외가 나도 위 세션 기록에는 영향 없음)
+        try:
+            if self._waiting_for_first_frame:
+                self._waiting_for_first_frame = False
+                self._preview_stack.setCurrentIndex(1)  # 첫 프레임 도착 → 프리뷰 표시
             annotated_frame = frame_data.get("frame")
             if annotated_frame is not None:
                 pixmap = cv2_to_qpixmap(annotated_frame)
@@ -169,51 +197,37 @@ class DetectionScreen(QWidget):
                 # 얼굴(광대) 랜드마크도 감지되지 않는 경우에만 메시지 표시
                 self.posture_label.setText(RECOGNITION_DIFFICULT_MESSAGE)
                 self.cheek_detail_label.setText("광대 거리: - (예상: -)")
-                return
-
-            set_recognition_message(self.recognition_label, False)
-            self._update_posture_status(
-                frame_data.get("state", "NORMAL"),
-                frame_data.get("posture_type", "normal"),
-                frame_data.get("probability", 0.0),
-                frame_data.get("display_label", ""),
-            )
-
-            # 광대 거리 정보 업데이트
-            current_cheek = indicators.cheek_distance
-            if self.baseline_manager and indicators.shoulder_width is not None:
-                expected_cheek = self.baseline_manager.get_expected_cheek(indicators.shoulder_width)
-                deviation = (current_cheek - expected_cheek) / expected_cheek if expected_cheek > 0 else 0
-                self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (예상: {expected_cheek:.3f}, 편차: {deviation*100:+.1f}%)")
             else:
-                self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (어깨 미감지)")
+                set_recognition_message(self.recognition_label, False)
+                self._update_posture_status(
+                    frame_data.get("state", "NORMAL"),
+                    frame_data.get("posture_type", "normal"),
+                    frame_data.get("probability", 0.0),
+                    frame_data.get("display_label", ""),
+                )
 
-            # 화면 거리 업데이트
-            dist_cm = indicators.eye_screen_distance_cm
-            if dist_cm is not None:
-                self.distance_label.setText(f"화면 거리: {dist_cm:.1f} cm")
-            else:
-                self.distance_label.setText("화면 거리: - cm")
+                # 광대 거리 정보 업데이트
+                current_cheek = indicators.cheek_distance
+                if self.baseline_manager and indicators.shoulder_width is not None:
+                    expected_cheek = self.baseline_manager.get_expected_cheek(indicators.shoulder_width)
+                    deviation = (current_cheek - expected_cheek) / expected_cheek if expected_cheek > 0 else 0
+                    self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (예상: {expected_cheek:.3f}, 편차: {deviation*100:+.1f}%)")
+                else:
+                    self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (어깨 미감지)")
 
-            if self.session_manager and getattr(self.session_manager, "current_session", None) is not None:
-                self.session_manager.add_frame_data(frame_data)
+                # 화면 거리 업데이트
+                dist_cm = indicators.eye_screen_distance_cm
+                if dist_cm is not None:
+                    self.distance_label.setText(f"화면 거리: {dist_cm:.1f} cm")
+                else:
+                    self.distance_label.setText("화면 거리: - cm")
         except Exception as e:
             logger.error(f"프레임 처리 오류: {e}")
 
     def _update_posture_status(self, state: str, posture_type: str, probability: float, display_label: str = ""):
-        posture_map = {
-            # V1
-            "normal": "바른 자세", "forward_head": "거북목", "recline": "기댄 자세",
-            "chin_rest_estimated": "턱 받침", "baseline": "자세 맞춤 중",
-            # V2
-            "neutral": "바른 자세", "forward_head_only": "거북목 경향",
-            "forward_head_full": "몸 기울어진 거북목", "head_tilt": "고개 기울임",
-            "chin_rest": "턱 괸 자세",
-            # 기타
-            "eye_close": "화면 가까움", "turned_head": "고개 돌린 자세", "side_tilt": "고개 기울인 자세",
-        }
-        # V2는 display_label 이 이미 한국어이므로 우선 사용
-        korean_label = display_label if display_label else posture_map.get(posture_type, posture_type)
+        from src.config import get_config
+        # display_label 이 지정된 경우(예: 자세 맞춤 중) 우선, 그 외엔 config 단일 소스
+        korean_label = display_label if display_label else get_config().get_posture_label(posture_type)
         self.posture_label.setText(f"{korean_label} ({probability:.1%})")
         state_text = {"normal": "바른 자세", "warning": "경고", "bad_posture": "나쁜 자세", "NORMAL": "바른 자세", "WARNING": "경고", "BAD_POSTURE": "나쁜 자세"}
         self.status_label.setText(state_text.get(state, "상태 알 수 없음"))
@@ -257,6 +271,8 @@ class DetectionScreen(QWidget):
     def on_detection_started(self):
         self.is_session_stopped = False
         self.is_detection_paused = False
+        self._waiting_for_first_frame = True
+        self._preview_stack.setCurrentIndex(0)  # 스피너 표시
         self.status_label.setText("바른 자세")
         self.status_label.setObjectName("status_normal")
         self.status_label.style().polish(self.status_label)

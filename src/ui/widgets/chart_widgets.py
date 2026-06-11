@@ -203,8 +203,9 @@ class StatisticsLineChart(QWidget):
                 item["good_posture_percentage"] for item in prepared_sessions
             ]
             session_labels = [item["session_label"] for item in prepared_sessions]
-            avg_retention = sum(retention_rates) / len(retention_rates)
-            latest_index = len(prepared_sessions) - 1
+            # 평균은 실제 데이터(>0)가 있는 날만 계산
+            nonzero = [v for v in retention_rates if v > 0]
+            avg_retention = sum(nonzero) / len(nonzero) if nonzero else 0.0
 
             # Figure 초기화
             self.figure.clear()
@@ -232,6 +233,12 @@ class StatisticsLineChart(QWidget):
             )
             self._hover_annotation.set_visible(False)
 
+            # 데이터가 실제로 있는(>0) 마지막 항목을 강조; 없으면 마지막 항목
+            latest_index = next(
+                (i for i in range(len(retention_rates) - 1, -1, -1)
+                 if retention_rates[i] > 0),
+                len(retention_rates) - 1,
+            )
             bar_colors = ["#E0E0FF"] * len(session_nums)
             bar_edge_colors = ["#E0E0FF"] * len(session_nums)
             bar_colors[latest_index] = "#7C3AED"
@@ -282,7 +289,7 @@ class StatisticsLineChart(QWidget):
             ax.set_yticks([0, 25, 50, 75, 100])
 
             # 그리드 및 스파인
-            ax.grid(True, axis="y", linestyle="--", alpha=0.28, color="#C4B5FD")
+            ax.grid(True, axis="y", linestyle="--", alpha=0.28, color="#A9A0D4")
             ax.set_axisbelow(True)
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
@@ -291,9 +298,11 @@ class StatisticsLineChart(QWidget):
             ax.spines["left"].set_linewidth(1.2)
             ax.spines["bottom"].set_linewidth(1.6)
 
-            # 범례
+            # 범례 — bars[0] 대신 고정 색상 Patch를 사용해 기간별 색상 변동 방지
+            from matplotlib.patches import Patch
+            bar_legend_patch = Patch(facecolor="#7C3AED", edgecolor="#7C3AED")
             ax.legend(
-                [bars[0], avg_line],
+                [bar_legend_patch, avg_line],
                 ["바른자세 유지율", "평균 유지율"],
                 loc="lower left",  # 기준점을 범례 상자의 '좌측 하단'으로 잡고
                 # 차트 왼쪽 선(0)보다 살짝 왼쪽(-0.02), 차트 위쪽 선(1)보다 살짝 위쪽(1.02) 외곽으로 떨어뜨려서 배치. 이렇게 하면 tight_layout()이 범례 위치를 건드리지 못하게 됨.
@@ -301,7 +310,7 @@ class StatisticsLineChart(QWidget):
                 fontsize=10,
                 frameon=True,
                 facecolor="#FBFBFE",
-                edgecolor="#C4B5FD",
+                edgecolor="#A9A0D4",
             ).set_in_layout(True) # tight_layout()이 이 범례의 위치를 무시하지 못하도록 대처
 
             # 각 세션 값 표기
@@ -310,7 +319,8 @@ class StatisticsLineChart(QWidget):
                 bar_x = bar.get_x() + bar.get_width() / 2
                 bar_height = bar.get_height()
 
-                if idx == latest_index:
+                # 최신 데이터(말풍선 표시) 또는 데이터 없는 날(0%)은 레이블 생략
+                if idx == latest_index or value <= 0:
                     continue
 
                 ax.text(
@@ -569,3 +579,114 @@ class StatisticsLineChart(QWidget):
         if duration_text:
             parts.append(duration_text)
         return "\n".join(parts)
+
+
+class PostureBreakdownChart(QWidget):
+    """자세 유형별 비율 수평 막대 차트"""
+
+    # 자세 유형 → (한글 이름, 색상)
+    POSTURE_META = {
+        "normal":              ("바른 자세",      "#7C3AED"),
+        "neutral":             ("바른 자세",      "#7C3AED"),
+        "forward_head":        ("거북목",         "#D97A7A"),
+        "forward_head_only":   ("거북목 경향",    "#D97A7A"),
+        "forward_head_full":   ("기울어진 거북목", "#D97A7A"),
+        "recline":             ("기댄 자세",      "#7E8AA2"),
+        "chin_rest_estimated": ("턱 괸 자세",     "#B89B72"),
+        "head_tilt":           ("고개 기울임",    "#F59E0B"),
+        "side_tilt":           ("옆으로 기울임",  "#F59E0B"),
+        "eye_close":           ("눈 가까움",      "#059669"),
+    }
+
+    def __init__(self, theme_manager: ThemeManager):
+        super().__init__()
+        self.theme_manager = theme_manager
+
+        dpi_scale = theme_manager.dpi_scale
+        self.figure = Figure(figsize=(10 * dpi_scale, 1.6 * dpi_scale), dpi=100)
+        self.figure.patch.set_facecolor("#FBFBFE")
+        self.canvas = FigureCanvas(self.figure)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.canvas)
+        self.setLayout(layout)
+
+    def plot_data(self, posture_distribution: dict, total_frames: int):
+        """자세 유형별 비율을 수평 스택 막대로 표시한다.
+
+        Args:
+            posture_distribution: {"forward_head": N, "recline": N, ...}
+            total_frames: 전체 프레임 수 (0이면 표시 생략)
+        """
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+        ax.set_facecolor("#FBFBFE")
+        self.figure.patch.set_facecolor("#FBFBFE")
+
+        if total_frames <= 0 or not posture_distribution:
+            ax.text(0.5, 0.5, "데이터 없음", ha="center", va="center",
+                    fontsize=12, color="#9CA3AF", transform=ax.transAxes)
+            ax.axis("off")
+            self.canvas.draw()
+            return
+
+        # 표시 순서: 바른 자세 → 나쁜 자세들
+        order = ["normal", "neutral", "forward_head", "forward_head_only",
+                 "forward_head_full", "recline", "chin_rest_estimated",
+                 "head_tilt", "side_tilt", "eye_close"]
+        items = []
+        for key in order:
+            count = posture_distribution.get(key, 0)
+            if count > 0:
+                from src.config import get_config
+                _name, color = self.POSTURE_META.get(key, (key, "#9CA3AF"))
+                label = get_config().get_posture_label(key)
+                if label == key:  # config에 없는 통계 전용 키는 기존 이름 유지
+                    label = _name
+                pct = count / total_frames * 100
+                items.append((label, pct, color))
+
+        # 나머지 unknown
+        known = sum(posture_distribution.get(k, 0) for k in order)
+        unknown = total_frames - known
+        if unknown > 0:
+            items.append(("기타", unknown / total_frames * 100, "#9CA3AF"))
+
+        if not items:
+            ax.axis("off")
+            self.canvas.draw()
+            return
+
+        # 수평 스택 막대
+        left = 0.0
+        bar_height = 0.55
+        for label, pct, color in items:
+            ax.barh(0, pct, left=left, height=bar_height,
+                    color=color, edgecolor="white", linewidth=0.8)
+            if pct >= 5.0:
+                ax.text(left + pct / 2, 0, f"{pct:.1f}%",
+                        ha="center", va="center",
+                        fontsize=9, fontweight="bold", color="white")
+            left += pct
+
+        ax.set_xlim(0, 100)
+        ax.set_ylim(-0.5, 0.5)
+        ax.axis("off")
+
+        # figure 레벨 범례 (axes 클리핑 우회)
+        from matplotlib.patches import Patch
+        legend_elements = [Patch(facecolor=c, label=f"{l} {p:.1f}%")
+                           for l, p, c in items]
+        # figure 레벨 범례 (axes 클리핑 우회)
+        from matplotlib.patches import Patch
+        legend_elements = [Patch(facecolor=c, label=f"{l} {p:.1f}%")
+                           for l, p, c in items]
+        self.figure.legend(handles=legend_elements,
+                           loc="lower center",
+                           ncol=min(len(items), 5),
+                           fontsize=9, frameon=False,
+                           bbox_to_anchor=(0.5, 0.02))
+
+        self.figure.subplots_adjust(left=0.01, right=0.99, top=0.98, bottom=0.35)
+        self.canvas.draw()
