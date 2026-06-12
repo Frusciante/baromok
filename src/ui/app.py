@@ -132,11 +132,16 @@ class baromokApp:
         self._settings_dirty = False
         logger.info("사용자 설정 로드 완료")
 
-        # 로드된 감도를 판정 엔진에 적용
+        # 로드된 감도를 판정 엔진 및 카메라 워커(멀티스레드)에 적용
         self.judgment_engine.update_sensitivities(
             self.settings_config.forward_head_sensitivity,
             self.settings_config.recline_sensitivity,
         )
+        if self.camera_worker:
+            self.camera_worker.update_worker_sensitivities(
+                self.settings_config.forward_head_sensitivity,
+                self.settings_config.recline_sensitivity,
+            )
 
         # 알림음 관리자
         self.sound_manager = SoundManager()
