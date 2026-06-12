@@ -252,9 +252,7 @@ class CameraWorker(QThread):
         state_text = {PostureState.NORMAL: "정상", PostureState.WARNING: "주의", PostureState.BAD_POSTURE: "나쁜자세"}.get(state, "알 수 없음")
         display_posture = self.judgment_engine.config.get_posture_label(posture_type)
         
-        info_text = f"{state_text} | {display_posture} | {probability:.1%}"
-        if display_label: info_text += f" ({display_label})"
-        cv2.putText(annotated, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+        # [삭제] 왼쪽 상단 정보 텍스트 (사용자 요청)
         
         # (상세 지표 및 랜드마크 시각화 로직은 기존과 동일하게 유지하거나 간소화)
         # 여기서는 기본 랜드마크 표시만 수행 (실제 서비스에서는 이전 로직 전체 복사 권장)
