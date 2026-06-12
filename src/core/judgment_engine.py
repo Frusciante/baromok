@@ -138,24 +138,30 @@ class JudgmentEngine:
                 timestamp=indicators.timestamp,
             )
 
-        # RANSAC 모델을 통한 기대 광대 거리 산출
-        has_shoulders = indicators.shoulder_width is not None
-        expected_cheek = 0.0
-        deviation = 0.0
-        
+        # 1. 거북목용 광대 거리 편차 (어깨 필수)
+        has_shoulders = (indicators.shoulder_width is not None and indicators.shoulder_width > 0)
+        fh_deviation = 0.0
         if has_shoulders:
             expected_cheek = max(1e-6, self.baseline_manager.get_expected_cheek(indicators.shoulder_width))
-            measured_cheek = indicators.cheek_distance
-            # 편차 계산 (Deviation)
-            deviation = (measured_cheek - expected_cheek) / expected_cheek
+            fh_deviation = (indicators.cheek_distance - expected_cheek) / expected_cheek
+
+        # 2. 기댄 자세용 머리 높이 편차 (어깨 우선, 없으면 눈 거리)
+        recline_deviation = 0.0
+        proxy_val = indicators.shoulder_width if has_shoulders else indicators.eye_distance
+        if proxy_val and proxy_val > 0:
+            expected_height = max(1e-6, self.baseline_manager.get_expected_height(proxy_val, is_shoulder=has_shoulders))
+            recline_deviation = (indicators.head_height - expected_height) / expected_height
 
         # 각 자세별 판정
-        # 어깨가 필요한 자세는 어깨가 있을 때만 판정
         if has_shoulders:
-            forward_head_raw = self._judge_forward_head(indicators, deviation)
-            recline_raw = self._judge_recline(indicators, deviation)
+            forward_head_raw = self._judge_forward_head(indicators, fh_deviation)
         else:
             forward_head_raw = {"likelihood": 0.0, "triggered": False}
+            
+        # 기댄 자세는 어깨가 없어도 proxy_val이 있으면 판정 가능
+        if proxy_val and proxy_val > 0:
+            recline_raw = self._judge_recline(indicators, recline_deviation)
+        else:
             recline_raw = {"likelihood": 0.0, "triggered": False}
             
         chin_rest_raw = self._judge_chin_rest(indicators)
@@ -267,21 +273,26 @@ class JudgmentEngine:
             return {"likelihood": 0.0, "triggered": False}
 
     def _judge_recline(self, indicators: PostureIndicators, deviation: float) -> Dict[str, Any]:
-        """기댄 자세 판정"""
+        """기댄 자세 판정 (머리 높이 편차 기반)"""
         try:
             criteria = self.config.get_posture_type_config(PostureType.RECLINE.value)
             primary_th = criteria["primary_conditions"]["deviation"]["threshold"]
             guards = criteria.get("guards", {})
 
-            # 1. 기본 방향 확인
+            # 1. 기본 방향 확인 (기대한 것보다 높이가 낮아지면 음수 편차)
+            # primary_th가 음수(예: -0.04)라고 가정
             if deviation >= primary_th:
                 return {"likelihood": 0.0, "triggered": False}
                 
             # 2. 고개 기울임 및 중앙 정렬(Symmetry) 가드
             side_tilt_excessive = abs(indicators.eye_line_tilt) > guards.get("max_eye_tilt", 12.0)
-            shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > guards.get("max_shoulder_tilt", 10.0)
             
-            # 눈/광대 대칭 및 턱 정렬 확인 (0.08 -> 0.12로 완화)
+            # 어깨가 있을 때만 어깨 기울기 체크
+            shoulder_tilt_excessive = False
+            if indicators.shoulder_tilt_deg is not None:
+                shoulder_tilt_excessive = abs(indicators.shoulder_tilt_deg) > guards.get("max_shoulder_tilt", 10.0)
+            
+            # 눈/광대 대칭 및 턱 정렬 확인
             eye_sym_excessive = indicators.eye_symmetry_ratio > guards.get("max_eye_symmetry_ratio", 0.12)
             cheek_sym_excessive = indicators.cheek_symmetry_ratio > guards.get("max_cheek_symmetry_ratio", 0.12)
             chin_offset_excessive = indicators.chin_alignment_offset > guards.get("max_chin_alignment_offset", 0.15)
