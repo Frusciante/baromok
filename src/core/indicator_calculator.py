@@ -49,43 +49,55 @@ class IndicatorCalculator:
         self.normalization_helper = NormalizationHelper()
         self._shoulder_tilt_history = deque(maxlen=5)
         
-        alpha = 0.15
-        if self.config:
-            try:
-                alpha = self.config.get_posture_criteria().get("filters", {}).get("indicator_ema", {}).get("alpha", 0.15)
-            except Exception: pass
-            
-        self.ema_filters = {
-            'cheek_distance': EMAFilter(alpha=alpha),
-            'eye_distance': EMAFilter(alpha=alpha),
-            'face_vertical_length': EMAFilter(alpha=alpha),
-            'head_height': EMAFilter(alpha=alpha),
-            'shoulder_width': EMAFilter(alpha=alpha),
-            'shoulder_tilt_deg': EMAFilter(alpha=alpha),
-            'neck_offset': EMAFilter(alpha=alpha),
-            'eye_line_tilt': EMAFilter(alpha=alpha),
-            'chin_occlusion': EMAFilter(alpha=alpha),
-            'hand_face_score': EMAFilter(alpha=alpha),
-        }
+        # 설정 캐시 변수들
+        self._ema_alpha = 0.15
+        self._iris_diameter_mm = 11.5
+        self._camera_hfov_deg = 60.0
+        self._eye_distance_threshold_cm = 45.0
+        self._eye_sustain_seconds = 2.0
+        self._camera_frame_width = 1280
         
-        # 설정 로드
-        self._eye_monitoring_cfg = {}
-        if self.config:
-            try: self._eye_monitoring_cfg = self.config.get_posture_criteria().get("eye_monitoring", {})
-            except Exception: pass
-
-        self._iris_diameter_mm = float(self._eye_monitoring_cfg.get("iris_diameter_mm", 11.5))
-        self._camera_hfov_deg = float(self._eye_monitoring_cfg.get("camera_horizontal_fov_deg", 60.0))
-        self._eye_distance_threshold_cm = float(self._eye_monitoring_cfg.get("distance_threshold_cm", 45.0))
-        self._eye_sustain_seconds = float(self._eye_monitoring_cfg.get("sustain_seconds", 2.0))
+        self.ema_filters = {}
+        self.refresh_settings()
+        
         self._eye_close_start_time: Optional[float] = None
-        
+        logger.info(f"IndicatorCalculator 초기화 완료 (캐싱 활성)")
+
+    def refresh_settings(self):
+        """설정 파일에서 값을 읽어 내부 변수에 캐싱 (루프 외부 호출 권장)"""
+        if not self.config:
+            return
+
         try:
-            self._camera_frame_width = int(self.config.get_app_setting('camera_resolution_width', 1280)) if self.config else 1280
-        except Exception:
-            self._camera_frame_width = 1280
+            criteria = self.config.get_posture_criteria()
+            # EMA Alpha
+            self._ema_alpha = criteria.get("filters", {}).get("indicator_ema", {}).get("alpha", 0.15)
             
-        logger.info(f"IndicatorCalculator 초기화 완료 (alpha={alpha})")
+            # 홍채 모니터링 설정
+            eye_cfg = criteria.get("eye_monitoring", {})
+            self._iris_diameter_mm = float(eye_cfg.get("iris_diameter_mm", 11.5))
+            self._camera_hfov_deg = float(eye_cfg.get("camera_horizontal_fov_deg", 60.0))
+            self._eye_distance_threshold_cm = float(eye_cfg.get("distance_threshold_cm", 45.0))
+            self._eye_sustain_seconds = float(eye_cfg.get("sustain_seconds", 2.0))
+            
+            # 카메라 설정
+            self._camera_frame_width = int(self.config.get_app_setting('camera_resolution_width', 1280))
+            
+            # 필터 갱신 (이미 존재하면 alpha만 업데이트, 없으면 생성)
+            filter_keys = [
+                'cheek_distance', 'eye_distance', 'face_vertical_length', 'head_height',
+                'shoulder_width', 'shoulder_tilt_deg', 'neck_offset', 'eye_line_tilt',
+                'chin_occlusion', 'hand_face_score'
+            ]
+            for key in filter_keys:
+                if key in self.ema_filters:
+                    self.ema_filters[key].alpha = self._ema_alpha
+                else:
+                    self.ema_filters[key] = EMAFilter(alpha=self._ema_alpha)
+                    
+            logger.debug("IndicatorCalculator 설정 캐시 갱신 완료")
+        except Exception as e:
+            logger.error(f"IndicatorCalculator 설정 갱신 실패: {e}")
 
     def calculate_cheek_distance(self, left_cheek, right_cheek) -> float:
         if left_cheek is None or right_cheek is None: return 0.0

@@ -6,6 +6,7 @@ PyQt UI 애플리케이션
 
 import time
 import threading
+from dataclasses import asdict
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal, Qt
 from PyQt6.QtWidgets import (
@@ -132,16 +133,8 @@ class baromokApp:
         self._settings_dirty = False
         logger.info("사용자 설정 로드 완료")
 
-        # 로드된 감도를 판정 엔진 및 카메라 워커(멀티스레드)에 적용
-        self.judgment_engine.update_sensitivities(
-            self.settings_config.forward_head_sensitivity,
-            self.settings_config.recline_sensitivity,
-        )
-        if self.camera_worker:
-            self.camera_worker.update_worker_sensitivities(
-                self.settings_config.forward_head_sensitivity,
-                self.settings_config.recline_sensitivity,
-            )
+        # 로드된 감도를 엔진 및 워커에 적용
+        self._apply_settings()
 
         # 알림음 관리자
         self.sound_manager = SoundManager()
@@ -197,7 +190,7 @@ class baromokApp:
             self.baseline_manager,
         )
         self.settings_screen = SettingsScreen(
-            self.theme_manager, vars(self.settings_config)  # dataclass를 dict로 변환
+            self.theme_manager, self._settings_to_dict()
         )
         self.statistics_screen = StatisticsScreen(
             self.theme_manager, self.session_manager
@@ -277,7 +270,7 @@ class baromokApp:
 
     def _settings_to_dict(self) -> dict:
         """현재 설정 dataclass를 dict 형태로 변환한다."""
-        return vars(self.settings_config)
+        return asdict(self.settings_config)
 
     def _refresh_settings_screen_values(self):
         """설정 화면 위젯을 앱의 최신 설정값으로 동기화한다."""
@@ -784,27 +777,36 @@ class baromokApp:
             logger.error(f"설정 초기화 실패: {e}")
 
     def _apply_settings(self):
-        """설정값 즉시 적용"""
+        """설정값 즉시 반영 (v1.2: 6종 감도 및 캐싱 지원)"""
         logger.info("설정값 적용:")
         logger.info(f"  - 알림 활성화: {self.settings_config.notification_enabled}")
-        logger.info(f"  - 알림 간격: {self.settings_config.notification_interval}초")
-        logger.info(f"  - 팝업 위치: {self.settings_config.popup_position}")
-        logger.info(
-            f"  - 팝업 자동 닫기: {self.settings_config.popup_auto_close} "
-            f"({self.settings_config.popup_auto_close_time}초)"
-        )
-        logger.info(
-            f"  - 거북목 감도: {self.settings_config.forward_head_sensitivity:.3f}"
-        )
-        logger.info(
-            f"  - 기댄자세 감도: {self.settings_config.recline_sensitivity:.3f}"
-        )
+        logger.info(f"  - 거북목 감도: {self.settings_config.forward_head_sensitivity:.3f}")
+        logger.info(f"  - 기댄자세 감도: {self.settings_config.recline_sensitivity:.3f}")
+        logger.info(f"  - 턱괸자세 감도: {self.settings_config.chin_rest_sensitivity:.3f}")
+        logger.info(f"  - 화면가까움 감도: {self.settings_config.eye_close_sensitivity:.3f}")
+        logger.info(f"  - 고개돌림 감도: {self.settings_config.turned_head_sensitivity:.3f}")
+        logger.info(f"  - 고개기울임 감도: {self.settings_config.side_tilt_sensitivity:.3f}")
 
-        # 판정 엔진에 감도 업데이트
+        # 1. 조정자(JudgmentEngine) 감도 업데이트
         self.judgment_engine.update_sensitivities(
             self.settings_config.forward_head_sensitivity,
             self.settings_config.recline_sensitivity,
         )
+
+        # 2. 멀티스레드 워커 감도 및 캐시 갱신 요청
+        if hasattr(self, "camera_worker") and self.camera_worker:
+            sensitivity_map = {
+                "forward_head": self.settings_config.forward_head_sensitivity,
+                "recline": self.settings_config.recline_sensitivity,
+                "chin_rest_estimated": self.settings_config.chin_rest_sensitivity,
+                "eye_close": self.settings_config.eye_close_sensitivity,
+                "turned_head": self.settings_config.turned_head_sensitivity,
+                "side_tilt": self.settings_config.side_tilt_sensitivity
+            }
+            # 워커 감도 갱신
+            self.camera_worker.judge_manager.update_sensitivities(sensitivity_map)
+            # [유저 요청] 루프 내 설정 재사용을 위한 플래그 설정
+            self.camera_worker.mark_settings_dirty()
 
         if not self.settings_config.notification_enabled:
             self.alert_hide_timer.stop()

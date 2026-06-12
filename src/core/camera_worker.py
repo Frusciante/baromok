@@ -16,7 +16,7 @@ from src.utils.logger import get_logger
 
 from src.core.landmark_extractor import LandmarkExtractor, ExtractedLandmarks
 from src.core.indicator_calculator import IndicatorCalculator, PostureIndicators
-from src.core.judgment_engine import JudgmentEngine, PostureJudgmentResult
+from src.core.judgment_engine import JudgmentEngine, PostureJudgmentResult, PostureType
 from src.core.state_machine import StateMachine, PostureState
 from src.core.judge_workers import PostureJudgeManager
 
@@ -82,10 +82,39 @@ class CameraWorker(QThread):
         # 최신 판정 결과 저장 (비동기 업데이트용)
         self._last_judgment_result: Optional[PostureJudgmentResult] = None
         self._last_confirmed_postures: List[str] = []
+        
+        # 설정 갱신 플래그 및 캐시
+        self._settings_dirty = True
+        self._label_cache = {}
 
         logger.info(
             f"CameraWorker 초기화: {camera_width}x{camera_height} @ {camera_fps} FPS (멀티스레드 판정 활성)"
         )
+
+    def mark_settings_dirty(self):
+        """설정이 변경되었음을 알림 (플래그 설정)"""
+        self._settings_dirty = True
+        logger.debug("CameraWorker: 설정 갱신 플래그 설정됨")
+
+    def _sync_cached_settings(self):
+        """루프 내에서 한 번만 호출되어 무거운 설정을 캐싱"""
+        if not self._settings_dirty:
+            return
+            
+        logger.info("CameraWorker: 설정 캐시 동기화 중...")
+        
+        # 1. 지표 계산기 설정 갱신
+        self.indicator_calculator.refresh_settings()
+        
+        # 2. 라벨 캐시 갱신
+        self._label_cache = {
+            pt.value: self.judgment_engine.config.get_posture_label(pt.value)
+            for pt in PostureType
+        }
+        self._label_cache["normal"] = "바른 자세"
+        self._label_cache["baseline"] = "자세 맞춤 중"
+        
+        self._settings_dirty = False
 
     def _handle_judgment_results(self, results: List[dict]):
         """판정 워커들의 비동기 결과를 취합하여 상태 업데이트 (슬롯)"""
@@ -101,8 +130,12 @@ class CameraWorker(QThread):
         self.state_machine.update_state(self._last_confirmed_postures)
 
     def update_worker_sensitivities(self, forward_head: float, recline: float):
-        """워커들의 감도를 직접 갱신 (UI에서 호출 가능하도록 브릿지 제공)"""
-        self.judge_manager.update_sensitivities(forward_head, recline)
+        """워커들의 감도를 직접 갱신 (UI 하위 호환용)"""
+        sensitivity_map = {
+            "forward_head": forward_head,
+            "recline": recline
+        }
+        self.judge_manager.update_sensitivities(sensitivity_map)
 
     def set_baseline_mode(self, enabled: bool):
         """Baseline 수집 모드 설정"""
@@ -168,6 +201,9 @@ class CameraWorker(QThread):
 
     def process_frame(self, frame: np.ndarray) -> dict:
         """프레임 처리 (멀티스레드 브로드캐스트 포함)"""
+        # 0. 설정 갱신 확인 (플래그 기반)
+        self._sync_cached_settings()
+
         timestamp = datetime.now()
         current_timestamp_seconds = timestamp.timestamp()
 
@@ -218,7 +254,7 @@ class CameraWorker(QThread):
                             break
                 
                 if len(self._last_judgment_result.active_postures) > 1:
-                    active_names = [self.judgment_engine.config.get_posture_label(p["posture_type"]) 
+                    active_names = [self._label_cache.get(p["posture_type"], p["posture_type"]) 
                                     for p in self._last_judgment_result.active_postures]
                     display_label = f"{', '.join(active_names)} 동시 감지"
 
@@ -241,7 +277,7 @@ class CameraWorker(QThread):
     def _annotate_frame(
         self, frame, landmarks, indicators, posture_type, probability, state, normalized_landmarks=None, display_label=""
     ) -> np.ndarray:
-        """프레임 시각화 로직 (축약)"""
+        """프레임 시각화 로직"""
         annotated = frame.copy()
         frame_height, frame_width = annotated.shape[:2]
         
@@ -249,13 +285,9 @@ class CameraWorker(QThread):
         color = state_colors.get(state, (255, 255, 255))
         cv2.rectangle(annotated, (0, 0), (frame_width-1, frame_height-1), color, 3)
 
-        state_text = {PostureState.NORMAL: "정상", PostureState.WARNING: "주의", PostureState.BAD_POSTURE: "나쁜자세"}.get(state, "알 수 없음")
-        display_posture = self.judgment_engine.config.get_posture_label(posture_type)
-        
         # [삭제] 왼쪽 상단 정보 텍스트 (사용자 요청)
         
-        # (상세 지표 및 랜드마크 시각화 로직은 기존과 동일하게 유지하거나 간소화)
-        # 여기서는 기본 랜드마크 표시만 수행 (실제 서비스에서는 이전 로직 전체 복사 권장)
+        # 랜드마크 시각화
         try:
             rel_lms = self.landmark_extractor.get_relevant_landmarks(landmarks, frame_width, frame_height)
             for key in ["face_center", "left_eye", "right_eye", "left_shoulder", "right_shoulder"]:

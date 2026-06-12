@@ -665,30 +665,40 @@ class AutoStartSettingsWidget(QWidget):
 
 
 class SensitivitySettingsWidget(QWidget):
-    """민감도 설정 위젯: 슬라이더로 조절"""
+    """민감도 설정 위젯: 6종 자세 슬라이더 확장"""
 
     value_changed_signal = pyqtSignal(dict)
     reset_requested_signal = pyqtSignal()
 
-    # 감도 범위
-    FWD_MIN, FWD_MAX = 0.00, 0.15
-    REC_MIN, REC_MAX = 0.01, 0.10
+    # 감도 범위 정의 (0.01 ~ 0.20, 낮을수록 민감)
+    RANGE = (0.01, 0.20)
 
     def __init__(self, theme_manager: ThemeManager, initial_config: dict = None):
         super().__init__()
         self.theme_manager = theme_manager
         self.config = initial_config or {}
 
-        # 현재 값 (설정 파일에서 로드, 범위 내로 클램프)
-        self.fwd_val = self._clamp(
-            self.config.get("forward_head_sensitivity", 0.1),
-            self.FWD_MIN, self.FWD_MAX,
-        )
-        self.rec_val = self._clamp(
-            self.config.get("recline_sensitivity", 0.04),
-            self.REC_MIN, self.REC_MAX,
-        )
+        # 자세 키 리스트
+        self.posture_keys = [
+            ("forward_head", "거북목"),
+            ("recline", "기댄 자세"),
+            ("chin_rest_sensitivity", "턱 괸 자세"),
+            ("eye_close_sensitivity", "화면 가까움"),
+            ("turned_head_sensitivity", "고개 돌림"),
+            ("side_tilt_sensitivity", "고개 기울임")
+        ]
+        
+        # 내부 값 저장소
+        self.values = {}
+        for key, _ in self.posture_keys:
+            val = self.config.get(key if "sensitivity" in key else f"{key}_sensitivity")
+            if val is None:
+                # 기본값 설정
+                val = 0.04 if key == "recline" else 0.10
+            self.values[key] = self._clamp(val, *self.RANGE)
 
+        self.sliders = {}
+        self.labels = {}
         self.setup_ui()
 
     @staticmethod
@@ -697,47 +707,42 @@ class SensitivitySettingsWidget(QWidget):
 
     @staticmethod
     def _to_slider(val: float, lo: float, hi: float) -> int:
-        """실수값 → 슬라이더 위치(0~100)"""
-        val = max(lo, min(hi, val))
-        return round((val - lo) / (hi - lo) * 100)
+        """소수점 실제 수치를 1-100 사이 정수로 변환"""
+        return round((val - lo) / (hi - lo) * 99 + 1)
 
     @staticmethod
     def _from_slider(pos: int, lo: float, hi: float) -> float:
-        """슬라이더 위치(0~100) → 실수값"""
-        return lo + (pos / 100.0) * (hi - lo)
+        """1-100 사이 정수를 실제 소수점 수치로 변환"""
+        return lo + ((pos - 1) / 99.0) * (hi - lo)
 
     def setup_ui(self):
-        """UI 구성"""
+        """UI 구성 (6종 슬라이더)"""
         layout = QVBoxLayout()
         layout.setContentsMargins(11, 10, 11, 10)
-        layout.setSpacing(9)
+        layout.setSpacing(6)
 
         self.setObjectName("settings_card")
         self.setStyleSheet(
             f"#settings_card {{ background-color: {Colors.WHITE.value}; border: 1px solid #E3E0F2; border-radius: 12px; }}"
         )
 
-        # 상단 헤더 (제목 + 초기화 버튼)
+        # 헤더
         header_layout = QHBoxLayout()
         title_main = QLabel("정밀 감지 설정")
         title_main.setFont(app_font(self.theme_manager.scale_pixel(15), QFont.Weight.Bold))
-        title_main.setStyleSheet(
-            f"color: {Colors.PURPLE_PRIMARY.value}; {FLAT_LABEL_STYLE}"
-        )
+        title_main.setStyleSheet(f"color: {Colors.PURPLE_PRIMARY.value}; {FLAT_LABEL_STYLE}")
 
         self.reset_btn = QPushButton("감도 초기화")
-        self.reset_btn.setFixedSize(self.theme_manager.scale_pixel(120), self.theme_manager.scale_pixel(40))
-        self.reset_btn.setFont(app_font(self.theme_manager.scale_pixel(12), QFont.Weight.Bold))
+        self.reset_btn.setFixedSize(self.theme_manager.scale_pixel(100), self.theme_manager.scale_pixel(32))
+        self.reset_btn.setFont(app_font(self.theme_manager.scale_pixel(11), QFont.Weight.Bold))
         self.reset_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Colors.WHITE.value};
                 color: {Colors.PURPLE_PRIMARY.value};
                 border: 1px solid {Colors.PURPLE_PRIMARY.value};
-                border-radius: 8px;
+                border-radius: 6px;
             }}
-            QPushButton:hover {{
-                background-color: #F4F0FF;
-            }}
+            QPushButton:hover {{ background-color: #F4F0FF; }}
         """)
         self.reset_btn.clicked.connect(self.reset_requested_signal.emit)
 
@@ -746,51 +751,38 @@ class SensitivitySettingsWidget(QWidget):
         header_layout.addWidget(self.reset_btn)
         layout.addLayout(header_layout)
 
-        # 거북목 감도 슬라이더
-        self.fwd_slider, self.fwd_label = self._create_slider_row(
-            "거북목 감도",
-            self.fwd_val, self.FWD_MIN, self.FWD_MAX,
-            self._on_fwd_slider_changed,
-        )
-        layout.addLayout(self._last_row_layout)
+        # 6개 슬라이더 생성
+        for key, name in self.posture_keys:
+            slider, label = self._create_slider_row(
+                name, self.values[key], *self.RANGE,
+                lambda pos, k=key: self._on_slider_changed(k, pos)
+            )
+            self.sliders[key] = slider
+            self.labels[key] = label
+            layout.addLayout(self._last_row_layout)
 
-        # 기댄 자세 감도 슬라이더
-        self.rec_slider, self.rec_label = self._create_slider_row(
-            "기댄 자세 감도",
-            self.rec_val, self.REC_MIN, self.REC_MAX,
-            self._on_rec_slider_changed,
-        )
-        layout.addLayout(self._last_row_layout)
-
-        # 설명
-        description = QLabel(
-            "값이 낮을수록 작은 변화에도 알림이 발생하며,\n높을수록 확실한 변화가 있을 때만 알림이 발생합니다."
-        )
-        description.setFont(app_font(self.theme_manager.scale_pixel(14)))
-        description.setStyleSheet(
-            f"color: {Colors.GRAY_DARK.value}; {FLAT_LABEL_STYLE}"
-        )
+        # 하단 힌트
+        description = QLabel("낮음(1): 민감하게 반응 | 높음(100): 확실할 때만 반응")
+        description.setFont(app_font(self.theme_manager.scale_pixel(12)))
+        description.setStyleSheet(f"color: {Colors.GRAY_DARK.value}; {FLAT_LABEL_STYLE}")
+        description.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(description)
 
         self.setLayout(layout)
 
-    def _create_slider_row(self, title, initial_val, lo, hi, on_changed):
-        """슬라이더 조절 행 생성
-
-        반환: (slider, value_label) — 행 레이아웃은 self._last_row_layout에 저장
-        """
+    def _create_slider_row(self, title, initial_val, lo, hi, on_changed_callback):
         row_layout = QVBoxLayout()
-        row_layout.setSpacing(5)
+        row_layout.setSpacing(2)
 
-        # 헤더 (제목 + 현재 수치)
         header = QHBoxLayout()
         title_label = QLabel(title)
-        title_label.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
-        title_label.setStyleSheet(f"color: #1A1A1A; {FLAT_LABEL_STYLE}")
+        title_label.setFont(app_font(self.theme_manager.scale_pixel(13), QFont.Weight.Bold))
+        title_label.setStyleSheet(f"color: #333333; {FLAT_LABEL_STYLE}")
 
-        value_label = QLabel(f"{initial_val:.3f}")
-        value_label.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
-        value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        # 정수값(1-100) 표시
+        display_val = self._to_slider(initial_val, lo, hi)
+        value_label = QLabel(f"{display_val}")
+        value_label.setFont(app_font(self.theme_manager.scale_pixel(12), QFont.Weight.Bold))
         value_label.setStyleSheet(f"color: #4333A6; {FLAT_LABEL_STYLE}")
 
         header.addWidget(title_label)
@@ -798,67 +790,49 @@ class SensitivitySettingsWidget(QWidget):
         header.addWidget(value_label)
         row_layout.addLayout(header)
 
-        # 슬라이더
         slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        slider.setMinimum(0)
+        slider.setFixedHeight(self.theme_manager.scale_pixel(24))
+        slider.setMinimum(1)
         slider.setMaximum(100)
-        slider.setValue(self._to_slider(initial_val, lo, hi))
-        slider.setSingleStep(1)
-        slider.valueChanged.connect(on_changed)
+        slider.setValue(display_val)
+        slider.valueChanged.connect(on_changed_callback)
         row_layout.addWidget(slider)
-
-        # 범위 표시 (0 / 100)
-        range_layout = QHBoxLayout()
-        min_label = QLabel("0")
-        min_label.setFont(app_font(self.theme_manager.scale_pixel(12)))
-        min_label.setStyleSheet(FLAT_LABEL_STYLE)
-        max_label = QLabel("100")
-        max_label.setFont(app_font(self.theme_manager.scale_pixel(12)))
-        max_label.setStyleSheet(FLAT_LABEL_STYLE)
-        range_layout.addWidget(min_label)
-        range_layout.addStretch()
-        range_layout.addWidget(max_label)
-        row_layout.addLayout(range_layout)
 
         self._last_row_layout = row_layout
         return slider, value_label
 
-    def _on_fwd_slider_changed(self, pos: int):
-        self.fwd_val = self._from_slider(pos, self.FWD_MIN, self.FWD_MAX)
-        self.fwd_label.setText(f"{self.fwd_val:.3f}")
-        self._emit_value_changed()
-
-    def _on_rec_slider_changed(self, pos: int):
-        self.rec_val = self._from_slider(pos, self.REC_MIN, self.REC_MAX)
-        self.rec_label.setText(f"{self.rec_val:.3f}")
+    def _on_slider_changed(self, key: str, pos: int):
+        val = self._from_slider(pos, *self.RANGE)
+        self.values[key] = val
+        self.labels[key].setText(f"{pos}")
         self._emit_value_changed()
 
     def _emit_value_changed(self):
-        self.value_changed_signal.emit({
-            "forward_head_sensitivity": self.fwd_val,
-            "recline_sensitivity": self.rec_val
-        })
+        res = {}
+        for k, v in self.values.items():
+            key_name = k if "sensitivity" in k else f"{k}_sensitivity"
+            res[key_name] = v
+        self.value_changed_signal.emit(res)
 
     def get_value(self) -> dict:
-        return {
-            "forward_head_sensitivity": self.fwd_val,
-            "recline_sensitivity": self.rec_val
-        }
+        res = {}
+        for k, v in self.values.items():
+            key_name = k if "sensitivity" in k else f"{k}_sensitivity"
+            res[key_name] = v
+        return res
 
     def set_value(self, config: dict):
-        self.fwd_val = self._clamp(
-            config.get("forward_head_sensitivity", 0.1),
-            self.FWD_MIN, self.FWD_MAX,
-        )
-        self.rec_val = self._clamp(
-            config.get("recline_sensitivity", 0.04),
-            self.REC_MIN, self.REC_MAX,
-        )
-        self.fwd_slider.blockSignals(True)
-        self.rec_slider.blockSignals(True)
-        self.fwd_slider.setValue(self._to_slider(self.fwd_val, self.FWD_MIN, self.FWD_MAX))
-        self.rec_slider.setValue(self._to_slider(self.rec_val, self.REC_MIN, self.REC_MAX))
-        self.fwd_slider.blockSignals(False)
-        self.rec_slider.blockSignals(False)
-        self.fwd_label.setText(f"{self.fwd_val:.3f}")
-        self.rec_label.setText(f"{self.rec_val:.3f}")
+        for key, _ in self.posture_keys:
+            key_name = key if "sensitivity" in key else f"{key}_sensitivity"
+            if key_name in config:
+                val = self._clamp(config[key_name], *self.RANGE)
+                self.values[key] = val
+                
+                # 1-100 스케일로 변환
+                display_val = self._to_slider(val, *self.RANGE)
+                
+                self.sliders[key].blockSignals(True)
+                self.sliders[key].setValue(display_val)
+                self.sliders[key].blockSignals(False)
+                self.labels[key].setText(f"{display_val}")
+

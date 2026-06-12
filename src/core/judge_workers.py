@@ -175,6 +175,8 @@ class ChinRestWorker(BaseJudgeWorker):
     
     def __init__(self, config, baseline_manager):
         super().__init__(PostureType.CHIN_REST, config, baseline_manager)
+        # 턱 괸 자세는 감도 조절이 특별하므로 별도 저장 가능 (기본값 0.1)
+        self.sensitivity = 0.1
 
     def handle_indicators(self, indicators: PostureIndicators):
         try:
@@ -187,8 +189,12 @@ class ChinRestWorker(BaseJudgeWorker):
                 self._emit_result(0.0)
                 return
 
-            # 상세 점수 산출 로직 (기존 JudgmentEngine 로직 이관)
-            eye_score = self._normalize(abs(indicators.eye_line_tilt) / eye_th, 0, 2.0)
+            # 상세 점수 산출 로직
+            # 감도(sensitivity)가 낮을수록(민감) 점수가 더 잘 오르도록 설계
+            # (기본 0.1 기준, sensitivity=0.05면 2배 민감)
+            sens_factor = 0.1 / max(0.01, self.sensitivity)
+            
+            eye_score = self._normalize(abs(indicators.eye_line_tilt) / eye_th, 0, 2.0) * sens_factor
             
             w = self.config.get_frame_scoring_config().get("likelihood_weights", {}).get("chin_rest", {})
             has_sh = indicators.shoulder_width is not None
@@ -198,7 +204,7 @@ class ChinRestWorker(BaseJudgeWorker):
             w_sh = w.get("shoulder", 0.2) if has_sh else 0.0
             
             total_w = w_eye + w_hand + w_sh
-            likelihood = (w_eye * eye_score + w_hand * indicators.hand_face_score) / total_w if total_w > 0 else 0.0
+            likelihood = (w_eye * eye_score + w_hand * indicators.hand_face_score * sens_factor) / total_w if total_w > 0 else 0.0
             
             self._emit_result(likelihood)
         except Exception as e:
@@ -213,6 +219,7 @@ class EyeCloseWorker(BaseJudgeWorker):
     """눈-화면 거리 판정 워커"""
     def __init__(self, config, baseline_manager):
         super().__init__(PostureType.EYE_CLOSE, config, baseline_manager)
+        self.sensitivity = 0.1 # 기본값
 
     def handle_indicators(self, indicators: PostureIndicators):
         if indicators.eye_close_warning:
@@ -226,7 +233,13 @@ class EyeCloseWorker(BaseJudgeWorker):
 
         cfg = self.config.get_posture_criteria().get("eye_monitoring", {})
         threshold = float(cfg.get("distance_threshold_cm", 45.0))
-        severity = max(0.0, (threshold - float(dist_cm)) / max(1e-6, threshold))
+        
+        # 감도 반영: sensitivity가 작을수록(0.05) 더 먼 거리에서도 위험으로 판정
+        # 가중치 앵커: 0.1 대비 비율
+        sens_offset = (0.1 - self.sensitivity) * 100.0 # 0.1 -> 0, 0.05 -> +5cm
+        effective_threshold = threshold + sens_offset
+        
+        severity = max(0.0, (effective_threshold - float(dist_cm)) / max(1e-6, effective_threshold))
         self._emit_result(float(np.clip(severity, 0.0, 1.0)))
 
 
@@ -234,6 +247,7 @@ class TurnedHeadWorker(BaseJudgeWorker):
     """고개 돌린 자세 판정 워커 (Yaw)"""
     def __init__(self, config, baseline_manager):
         super().__init__(PostureType.TURNED_HEAD, config, baseline_manager)
+        self.sensitivity = 0.1
 
     def handle_indicators(self, indicators: PostureIndicators):
         try:
@@ -242,8 +256,10 @@ class TurnedHeadWorker(BaseJudgeWorker):
             eye_th = th_config.get("eye_symmetry", 0.4)
             cheek_th = th_config.get("cheek_symmetry", 0.4)
             
-            eye_score = float(np.clip(indicators.eye_symmetry_ratio / eye_th, 0, 1.0))
-            cheek_score = float(np.clip(indicators.cheek_symmetry_ratio / cheek_th, 0, 1.0))
+            sens_factor = 0.1 / max(0.01, self.sensitivity)
+            
+            eye_score = float(np.clip((indicators.eye_symmetry_ratio / eye_th) * sens_factor, 0, 1.0))
+            cheek_score = float(np.clip((indicators.cheek_symmetry_ratio / cheek_th) * sens_factor, 0, 1.0))
             
             self._emit_result(0.5 * eye_score + 0.5 * cheek_score)
         except Exception:
@@ -254,6 +270,7 @@ class SideTiltWorker(BaseJudgeWorker):
     """고개 기울인 자세 판정 워커 (Roll)"""
     def __init__(self, config, baseline_manager):
         super().__init__(PostureType.SIDE_TILT, config, baseline_manager)
+        self.sensitivity = 0.1
 
     def handle_indicators(self, indicators: PostureIndicators):
         try:
@@ -264,8 +281,9 @@ class SideTiltWorker(BaseJudgeWorker):
             if tilt < 3.0:
                 self._emit_result(0.0)
                 return
-                
-            self._emit_result(float(np.clip(tilt / primary_th, 0, 1.0)))
+            
+            sens_factor = 0.1 / max(0.01, self.sensitivity)
+            self._emit_result(float(np.clip((tilt / primary_th) * sens_factor, 0, 1.0)))
         except Exception:
             self._emit_result(0.0)
 
@@ -328,13 +346,12 @@ class PostureJudgeManager(QObject):
         self.current_frame_results = {}
         self.indicators_updated.emit(indicators)
 
-    def update_sensitivities(self, forward_head: float, recline: float):
+    def update_sensitivities(self, sensitivity_dict: Dict[str, float]):
         """개별 워커의 감도 설정을 실시간 갱신"""
-        if PostureType.FORWARD_HEAD.value in self.workers:
-            self.workers[PostureType.FORWARD_HEAD.value].sensitivity = forward_head
-        if PostureType.RECLINE.value in self.workers:
-            self.workers[PostureType.RECLINE.value].sensitivity = recline
-        logger.info(f"판정 워커 감도 갱신 완료: {forward_head}, {recline}")
+        for p_type, val in sensitivity_dict.items():
+            if p_type in self.workers:
+                self.workers[p_type].sensitivity = val
+        logger.info(f"판정 워커 감도 갱신 완료: {len(sensitivity_dict)}종")
 
     def _collect_result(self, result: dict):
         """워커로부터 결과를 수집하여 모두 모이면 통합 발송"""
