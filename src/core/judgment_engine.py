@@ -73,12 +73,16 @@ class JudgmentEngine:
         """
         워커들로부터 수집된 다중 결과를 처리하여 통합된 결과 생성
         """
-        # 1. 화면 가까움(eye_close) 여부 먼저 확인 (충돌 방지 우선순위)
+        # 1. 충돌 방지 우선순위 확인
         is_eye_close_triggered = False
+        is_turned_head_triggered = False
+        
         for res in results:
-            if res["posture_type"] == PostureType.EYE_CLOSE.value and res["triggered"]:
-                is_eye_close_triggered = True
-                break
+            if res["triggered"]:
+                if res["posture_type"] == PostureType.EYE_CLOSE.value:
+                    is_eye_close_triggered = True
+                elif res["posture_type"] == PostureType.TURNED_HEAD.value:
+                    is_turned_head_triggered = True
 
         active_list = []
         dominant_p = None
@@ -87,8 +91,13 @@ class JudgmentEngine:
         for res in results:
             p_type = res["posture_type"]
             
-            # 충돌 해결: 화면이 가까운 경우 기댄 자세 탐지 강제 억제
+            # 충돌 해결 1: 화면이 가까운 경우 기댄 자세 억제
             if is_eye_close_triggered and p_type == PostureType.RECLINE.value:
+                res["triggered"] = False
+                res["likelihood"] = 0.0
+            
+            # 충돌 해결 2: 고개를 돌린 경우 고개 기울임 억제
+            if is_turned_head_triggered and p_type == PostureType.SIDE_TILT.value:
                 res["triggered"] = False
                 res["likelihood"] = 0.0
 
