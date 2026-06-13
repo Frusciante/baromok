@@ -398,6 +398,11 @@ class baromokApp:
             # 진입 화면 설정
             if screen_index == 0 and hasattr(self, "baseline_screen"):
                 try:
+                    # [추가] 재측정 진입 시 탐지 로직 및 타이머 비활성화
+                    if self.camera_worker:
+                        self.camera_worker.set_baseline_mode(True)
+                        self.camera_worker.is_detecting = False
+                    
                     self.baseline_screen.cancel_capture()
                     self.baseline_screen.start_camera_preview()
                 except Exception:
@@ -593,6 +598,10 @@ class baromokApp:
 
     def _handle_baseline_captured(self):
         """Baseline 완료 후 다음 동작 처리"""
+        # 베이스라인 완료 후 탐지 모드로 전환 준비
+        if self.camera_worker:
+            self.camera_worker.set_baseline_mode(False)
+
         if self.settings_config.auto_start_detection:
             logger.info("자동 감지 시작 설정 활성화: 바로 감지 시작")
             self._start_detection()
@@ -621,10 +630,18 @@ class baromokApp:
     def _stop_detection(self):
         """감지 중지"""
         logger.info("감지 중지")
-        self.camera_worker.is_detecting = False
-        if self.camera_worker.isRunning():
-            self.camera_worker.stop_capture()
-        self.session_manager.end_session()
+        
+        # 1. 실제 활성 탐지 시간 획득 (일시정지 제외)
+        active_duration = 0
+        if self.camera_worker:
+            active_duration = self.camera_worker.get_elapsed_time()
+            self.camera_worker.is_detecting = False
+            if self.camera_worker.isRunning():
+                self.camera_worker.stop_capture()
+        
+        # 2. 세션 종료 (순수 활성 시간 기록)
+        self.session_manager.end_session(active_duration=active_duration)
+        
         self._hide_alert_popup()
         self.detection_screen.on_detection_stopped()
 

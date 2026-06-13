@@ -261,25 +261,36 @@ class SessionManager:
         except Exception as e:
             logger.error(f"프레임 데이터 추가 실패: {e}", exc_info=True)
 
-    def end_session(self) -> Optional[SessionData]:
+    def end_session(self, active_duration: Optional[int] = None) -> Optional[SessionData]:
         if self.current_session is None:
             logger.warning("진행 중인 세션이 없습니다.")
             return None
         try:
             end_time = datetime.now().isoformat()
-            duration = int((datetime.fromisoformat(end_time) - datetime.fromisoformat(self.current_session.start_time)).total_seconds())
+            
+            # 1. 활성 탐지 시간 결정 (외부 전달값 우선, 없으면 전체 시간)
+            if active_duration is not None:
+                duration = active_duration
+                logger.info(f"세션 종료: 활성 탐지 시간 {duration}초 (외부 입력)")
+            else:
+                duration = int((datetime.fromisoformat(end_time) - datetime.fromisoformat(self.current_session.start_time)).total_seconds())
+                logger.info(f"세션 종료: 전체 시간 {duration}초 (계산값)")
+                
+            # 2. 통계 계산 (가중 평균 포함)
             stats = self._calculate_stats_from_db(self.current_session.session_id, duration)
+            
             with self._lock:
                 with self._get_conn() as conn:
                     conn.execute(
                         "UPDATE sessions SET end_time=?, duration_seconds=?, statistics=? WHERE session_id=?",
                         (end_time, duration, json.dumps(stats, ensure_ascii=False), self.current_session.session_id),
                     )
+            
             self.current_session.end_time = end_time
             self.current_session.duration_seconds = duration
             self.current_session.statistics = stats
             self.sessions_history.append(self.current_session)
-            logger.info(f"세션 종료: {self.current_session.session_id} ({duration}초)")
+            
             session = self.current_session
             self.current_session = None
             return session
@@ -293,13 +304,10 @@ class SessionManager:
     def _calculate_stats_from_db(self, session_id: str, duration_seconds: int = 0) -> dict:
         try:
             with self._get_conn() as conn:
+                # 1. 기본 카운트 및 배분 정보 (프레임 기반)
                 row = conn.execute(
                     """SELECT
                            COUNT(*) AS total,
-                           SUM(CASE WHEN UPPER(state)='NORMAL'      THEN 1 ELSE 0 END) AS good_count,
-                           SUM(CASE WHEN UPPER(state)='WARNING'     THEN 1 ELSE 0 END) AS warn_count,
-                           SUM(CASE WHEN UPPER(state)='BAD_POSTURE' THEN 1 ELSE 0 END) AS bad_count,
-                           AVG(probability) AS avg_prob,
                            SUM(CASE WHEN posture_type='forward_head'        THEN 1 ELSE 0 END) AS fh,
                            SUM(CASE WHEN posture_type='recline'             THEN 1 ELSE 0 END) AS rc,
                            SUM(CASE WHEN posture_type='chin_rest_estimated' THEN 1 ELSE 0 END) AS cr,
@@ -314,29 +322,61 @@ class SessionManager:
                 if total == 0:
                     return {}
 
-                good_count = row["good_count"] or 0
-                warn_count = row["warn_count"] or 0
-                bad_count  = row["bad_count"]  or 0
-                avg_prob   = row["avg_prob"]   or 0.0
-                dur        = duration_seconds  or 0
-
-                posture_changes = max_bad = bad_dur = 0
-                prev = None
-                for r in conn.execute(
-                    "SELECT posture_type, state FROM frame_records WHERE session_id=? ORDER BY id",
+                # 2. 시간 가중 평균 및 실제 지속 시간 계산
+                records = conn.execute(
+                    "SELECT timestamp, probability, state, posture_type FROM frame_records WHERE session_id=? ORDER BY id",
                     (session_id,),
-                ).fetchall():
-                    pt = r["posture_type"]
-                    st = r["state"].upper()
-                    if prev and prev != pt:
-                        posture_changes += 1
-                    prev = pt
-                    if st == "BAD_POSTURE":
-                        bad_dur += 1
-                    else:
-                        max_bad = max(max_bad, bad_dur)
-                        bad_dur = 0
-                max_bad = max(max_bad, bad_dur)
+                ).fetchall()
+
+                total_weighted_prob = 0.0
+                total_time_delta = 0.0
+                
+                state_durations = {"NORMAL": 0.0, "WARNING": 0.0, "BAD_POSTURE": 0.0}
+                posture_changes = 0
+                max_bad_streak = 0.0
+                curr_bad_streak = 0.0
+                prev_time = None
+                prev_posture = None
+
+                for r in records:
+                    curr_time = datetime.fromisoformat(r["timestamp"]).timestamp()
+                    prob = float(r["probability"] or 0.0)
+                    state = r["state"].upper()
+                    posture = r["posture_type"]
+
+                    if prev_time is not None:
+                        dt = max(0.0, curr_time - prev_time)
+                        # 너무 큰 간격(예: 프로그램 중단 후 재개)은 가중치에서 제한 (최대 1초)
+                        weight = min(dt, 1.0) 
+                        
+                        total_weighted_prob += prob * weight
+                        total_time_delta += weight
+                        
+                        # 상태별 시간 누적
+                        if state in state_durations:
+                            state_durations[state] += weight
+                        
+                        # 나쁜 자세 최대 지속 시간 (Streak)
+                        if state == "BAD_POSTURE":
+                            curr_bad_streak += weight
+                        else:
+                            max_bad_streak = max(max_bad_streak, curr_bad_streak)
+                            curr_bad_streak = 0.0
+                        
+                        # 자세 변경 횟수
+                        if prev_posture and prev_posture != posture:
+                            posture_changes += 1
+
+                    prev_time = curr_time
+                    prev_posture = posture
+                
+                max_bad_streak = max(max_bad_streak, curr_bad_streak)
+                
+                # 가중 평균 계산
+                avg_prob = total_weighted_prob / total_time_delta if total_time_delta > 0 else 0.0
+                
+                # 전체 시간 (실제 기록된 시간의 합)
+                dur = duration_seconds if duration_seconds > 0 else int(total_time_delta)
 
             return {
                 "duration_seconds":           dur,
@@ -350,21 +390,20 @@ class SessionManager:
                     "side_tilt":           row["stl"] or 0,
                     "turned_head":         row["th"] or 0,
                 },
-                "state_counts": {
-                    "NORMAL":      good_count,
-                    "WARNING":     warn_count,
-                    "BAD_POSTURE": bad_count,
-                },
-                "good_posture_seconds":       round(dur * good_count / total, 2),
-                "warning_posture_seconds":    round(dur * warn_count / total, 2),
-                "bad_posture_seconds":        round(dur * bad_count  / total, 2),
-                "good_posture_percentage":    round(good_count / total * 100, 1),
-                "warning_posture_percentage": round(warn_count / total * 100, 1),
-                "bad_posture_percentage":     round(bad_count  / total * 100, 1),
+                "state_counts": state_durations, # 프레임 수 대신 시간(초) 저장
+                "good_posture_seconds":       round(state_durations["NORMAL"], 2),
+                "warning_posture_seconds":    round(state_durations["WARNING"], 2),
+                "bad_posture_seconds":        round(state_durations["BAD_POSTURE"], 2),
+                "good_posture_percentage":    round(state_durations["NORMAL"] / max(0.1, total_time_delta) * 100, 1),
+                "warning_posture_percentage": round(state_durations["WARNING"] / max(0.1, total_time_delta) * 100, 1),
+                "bad_posture_percentage":     round(state_durations["BAD_POSTURE"] / max(0.1, total_time_delta) * 100, 1),
                 "posture_changes":            posture_changes,
-                "max_bad_duration_seconds":   max_bad,
+                "max_bad_duration_seconds":   round(max_bad_streak, 2),
                 "average_probability":        round(avg_prob, 3),
             }
+        except Exception as e:
+            logger.error(f"DB 통계 계산 실패: {e}", exc_info=True)
+            return {}
         except Exception as e:
             logger.error(f"DB 통계 계산 실패: {e}", exc_info=True)
             return {}

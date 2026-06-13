@@ -65,17 +65,26 @@ class DetectionScreen(QWidget):
         top_layout.addWidget(settings_btn)
         layout.addLayout(top_layout)
 
+        # 중앙 메인 레이아웃 (좌: 프리뷰/시간, 우: 가드)
+        main_center_layout = QHBoxLayout()
+        main_center_layout.setSpacing(20)
+        
+        # [좌측 영역]
+        left_panel = QVBoxLayout()
+        left_panel.setSpacing(15)
+
         self.time_label = QLabel("00:00:00")
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.time_label.setFont(app_font(self.theme_manager.scale_pixel(51), QFont.Weight.Bold))
-        layout.addWidget(self.time_label)
+        left_panel.addWidget(self.time_label)
 
         self.preview_frame = QFrame()
         self.preview_frame.setStyleSheet(f"""
             background-color: {Colors.WHITE.value};
             border: 1px solid {Colors.GRAY_MEDIUM.value};
+            border-radius: 12px;
         """)
-        self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(300))
+        self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(320))
         preview_layout = QVBoxLayout()
         preview_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -96,19 +105,33 @@ class DetectionScreen(QWidget):
         self._preview_stack.setCurrentIndex(1)  # 기본은 프리뷰 표시
         preview_layout.addWidget(self._preview_stack)
         self.preview_frame.setLayout(preview_layout)
-        layout.addWidget(self.preview_frame, 1)
+        left_panel.addWidget(self.preview_frame, 1)
 
         self.recognition_label = QLabel("")
         self.recognition_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.recognition_label.setFont(app_font(self.theme_manager.scale_pixel(15), QFont.Weight.Bold))
         self.recognition_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
         set_recognition_message(self.recognition_label, False)
-        layout.addWidget(self.recognition_label)
+        left_panel.addWidget(self.recognition_label)
 
         self.posture_label = QLabel("감지 중")
         self.posture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.posture_label.setFont(app_font(self.theme_manager.scale_pixel(19), QFont.Weight.Bold))
-        layout.addWidget(self.posture_label)
+        left_panel.addWidget(self.posture_label)
+        
+        main_center_layout.addLayout(left_panel, 3) # 좌측 60%
+
+        # [우측 영역] 바른 자세 가이드 패널
+        from src.ui.widgets.settings_widgets import CorrectPostureGuideWidget
+        self.guide_panel = CorrectPostureGuideWidget(self.theme_manager, vertical=True)
+        self.guide_panel.setStyleSheet(f"""
+            background-color: #F8F9FF;
+            border: 1px solid #E3E0F2;
+            border-radius: 15px;
+        """)
+        main_center_layout.addWidget(self.guide_panel, 2) # 우측 40%
+        
+        layout.addLayout(main_center_layout)
 
         self.cheek_detail_label = QLabel("광대 거리: - (예상: -)")
         self.cheek_detail_label.setAlignment(Qt.AlignmentFlag.AlignCenter)

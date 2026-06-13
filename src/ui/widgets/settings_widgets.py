@@ -15,7 +15,8 @@ from PyQt6.QtWidgets import (
     QPushButton,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QFont, QPainter, QColor
+from PyQt6.QtGui import QFont, QPainter, QColor, QPixmap
+from pathlib import Path
 import logging
 
 from src.ui.styles.theme import Colors, ThemeManager
@@ -665,7 +666,7 @@ class AutoStartSettingsWidget(QWidget):
 
 
 class SensitivitySettingsWidget(QWidget):
-    """민감도 설정 위젯: 6종 자세 슬라이더 확장"""
+    """민감도 설정 위젯: 5종 자세 슬라이더 확장 (거북목 통합)"""
 
     value_changed_signal = pyqtSignal(dict)
     reset_requested_signal = pyqtSignal()
@@ -678,12 +679,11 @@ class SensitivitySettingsWidget(QWidget):
         self.theme_manager = theme_manager
         self.config = initial_config or {}
 
-        # 자세 키 리스트
+        # 자세 키 리스트 (거북목 통합 완료)
         self.posture_keys = [
             ("forward_head", "거북목"),
             ("recline", "기댄 자세"),
             ("chin_rest_sensitivity", "턱 괸 자세"),
-            ("eye_close_sensitivity", "화면 가까움"),
             ("turned_head_sensitivity", "고개 돌림"),
             ("side_tilt_sensitivity", "고개 기울임")
         ]
@@ -693,7 +693,6 @@ class SensitivitySettingsWidget(QWidget):
         for key, _ in self.posture_keys:
             val = self.config.get(key if "sensitivity" in key else f"{key}_sensitivity")
             if val is None:
-                # 기본값 설정
                 val = 0.04 if key == "recline" else 0.10
             self.values[key] = self._clamp(val, *self.RANGE)
 
@@ -716,7 +715,7 @@ class SensitivitySettingsWidget(QWidget):
         return lo + ((pos - 1) / 99.0) * (hi - lo)
 
     def setup_ui(self):
-        """UI 구성 (6종 슬라이더)"""
+        """UI 구성"""
         layout = QVBoxLayout()
         layout.setContentsMargins(11, 10, 11, 10)
         layout.setSpacing(6)
@@ -751,7 +750,7 @@ class SensitivitySettingsWidget(QWidget):
         header_layout.addWidget(self.reset_btn)
         layout.addLayout(header_layout)
 
-        # 6개 슬라이더 생성
+        # 5개 슬라이더 생성
         for key, name in self.posture_keys:
             slider, label = self._create_slider_row(
                 name, self.values[key], *self.RANGE,
@@ -779,7 +778,6 @@ class SensitivitySettingsWidget(QWidget):
         title_label.setFont(app_font(self.theme_manager.scale_pixel(13), QFont.Weight.Bold))
         title_label.setStyleSheet(f"color: #333333; {FLAT_LABEL_STYLE}")
 
-        # 정수값(1-100) 표시
         display_val = self._to_slider(initial_val, lo, hi)
         value_label = QLabel(f"{display_val}")
         value_label.setFont(app_font(self.theme_manager.scale_pixel(12), QFont.Weight.Bold))
@@ -827,12 +825,79 @@ class SensitivitySettingsWidget(QWidget):
             if key_name in config:
                 val = self._clamp(config[key_name], *self.RANGE)
                 self.values[key] = val
-                
-                # 1-100 스케일로 변환
                 display_val = self._to_slider(val, *self.RANGE)
-                
                 self.sliders[key].blockSignals(True)
                 self.sliders[key].setValue(display_val)
                 self.sliders[key].blockSignals(False)
                 self.labels[key].setText(f"{display_val}")
 
+
+class CorrectPostureGuideWidget(QWidget):
+    """바른 자세 가이드 위젯 (이미지 + 지침)"""
+
+    def __init__(self, theme_manager: ThemeManager, vertical: bool = False):
+        super().__init__()
+        self.theme_manager = theme_manager
+        self.vertical = vertical
+        self.setup_ui()
+
+    def setup_ui(self):
+        if self.vertical:
+            layout = QVBoxLayout(self)
+        else:
+            layout = QHBoxLayout(self)
+            
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(30) # 이미지와 텍스트 간격 확대
+
+        # 1. 이미지 영역 (고정 비율 축소)
+        img_label = QLabel()
+        img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        img_path = Path("assets/ui/correct_posture.png")
+        if img_path.exists():
+            pixmap = QPixmap(str(img_path))
+            if not pixmap.isNull():
+                # 세로 모드(감지 화면)일 때 이미지 크기 대폭 축소하여 잘림 방지
+                target_h = 180 if self.vertical else 240
+                img_label.setPixmap(pixmap.scaledToHeight(
+                    self.theme_manager.scale_pixel(target_h),
+                    Qt.TransformationMode.SmoothTransformation
+                ))
+        else:
+            img_label.setText("[이미지]")
+        
+        # 이미지가 너무 많은 공간을 차지하지 않도록 설정
+        img_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        layout.addWidget(img_label, 1)
+
+        # 2. 텍스트 지침 영역 (공간 최대 확보)
+        text_container = QWidget()
+        text_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        text_layout = QVBoxLayout(text_container)
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(15)
+        text_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        title = QLabel("바른 자세 핵심 지침")
+        title.setFont(app_font(self.theme_manager.scale_pixel(18), QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {Colors.PURPLE_PRIMARY.value}; border: none;")
+        title.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        text_layout.addWidget(title)
+
+        tips = [
+            "• 엉덩이를 의자 안쪽 끝까지 밀착하기",
+            "• 허리를 등받이에 대고 곧게 펴기",
+            "• 양발은 바닥에 완전히 닿게 놓기",
+            "• 턱은 가볍게 몸쪽으로 당기기"
+        ]
+        
+        for tip in tips:
+            label = QLabel(tip)
+            label.setFont(app_font(self.theme_manager.scale_pixel(14)))
+            label.setStyleSheet("color: #333333; border: none;")
+            label.setWordWrap(False) # 가급적 줄바꿈 방지
+            label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            text_layout.addWidget(label)
+            
+        layout.addWidget(text_container, 2) # 텍스트 영역에 2배의 가중치 부여
+        self.setLayout(layout)

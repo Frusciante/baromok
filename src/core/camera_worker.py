@@ -76,7 +76,7 @@ class CameraWorker(QThread):
         self.current_step = 0
         
         # 실제 판정 수행 여부 (Warmup 모드에서는 False)
-        self.is_detecting = False
+        self._is_detecting = False
 
         # 프레임 카운터
         self.frame_count = 0
@@ -92,7 +92,10 @@ class CameraWorker(QThread):
 
         # 판정 시작 시간 (Warmup 제외, 실제 탐지 시간)
         self._detection_start_time: Optional[float] = None
-        self._is_detecting = False
+        
+        # 일시정지 시간 관리
+        self._total_paused_duration = 0.0
+        self._pause_start_time: Optional[float] = None
 
         logger.info(
             f"CameraWorker 초기화: {camera_width}x{camera_height} @ {camera_fps} FPS (멀티스레드 판정 활성)"
@@ -104,12 +107,24 @@ class CameraWorker(QThread):
 
     @is_detecting.setter
     def is_detecting(self, value: bool):
+        # 베이스라인 모드에서는 탐지 타이머와 로직이 작동하지 않아야 함
+        if self.is_baseline_mode:
+            self._is_detecting = False
+            self._detection_start_time = None
+            self._total_paused_duration = 0.0
+            self._pause_start_time = None
+            return
+
         if value and not self._is_detecting:
             # 탐지 시작 시점 기록
             self._detection_start_time = time.time()
+            self._total_paused_duration = 0.0
+            self._pause_start_time = None
             logger.info("CameraWorker: 탐지 타이머 시작")
         elif not value:
             self._detection_start_time = None
+            self._total_paused_duration = 0.0
+            self._pause_start_time = None
         self._is_detecting = value
 
     def mark_settings_dirty(self):
@@ -162,6 +177,8 @@ class CameraWorker(QThread):
         """Baseline 수집 모드 설정"""
         self.is_baseline_mode = enabled
         if enabled:
+            # 베이스라인 모드 진입 시 탐지 로직 및 타이머 비활성화
+            self.is_detecting = False
             self.judgment_engine.reset_history()
             self.state_machine.reset()
             logger.info("Baseline 모드 활성화")
@@ -336,12 +353,26 @@ class CameraWorker(QThread):
         return annotated
 
     def pause(self):
-        self._paused_event.set()
-        self.is_paused = True
+        """캡처 및 판정 일시정지"""
+        if not self._paused_event.is_set():
+            self._paused_event.set()
+            self.is_paused = True
+            # 탐지 중인 경우 일시정지 시작 시점 기록
+            if self.is_detecting:
+                self._pause_start_time = time.time()
+                logger.debug("CameraWorker: 탐지 타이머 일시정지")
 
     def resume(self):
-        self._paused_event.clear()
-        self.is_paused = False
+        """캡처 및 판정 재개"""
+        if self._paused_event.is_set():
+            self._paused_event.clear()
+            self.is_paused = False
+            # 탐지 중인 경우 누적 일시정지 시간 계산
+            if self.is_detecting and self._pause_start_time is not None:
+                pause_delta = time.time() - self._pause_start_time
+                self._total_paused_duration += pause_delta
+                self._pause_start_time = None
+                logger.debug(f"CameraWorker: 탐지 타이머 재개 (이번 정지: {pause_delta:.1f}초)")
 
     def stop_capture(self):
         self._running_event.clear()
@@ -352,7 +383,16 @@ class CameraWorker(QThread):
 
     def get_elapsed_time(self) -> int:
         if self._detection_start_time is None: return 0
-        return int((time.time() - self._detection_start_time))
+        
+        total_elapsed = time.time() - self._detection_start_time
+        
+        # 현재 일시정지 중이라면 진행 중인 정지 시간도 빼야 함
+        current_pause = 0.0
+        if self.is_paused and self._pause_start_time is not None:
+            current_pause = time.time() - self._pause_start_time
+            
+        active_time = total_elapsed - (self._total_paused_duration + current_pause)
+        return int(max(0, active_time))
 
 
 def create_camera_worker(le, ic, je, sm, config=None) -> CameraWorker:

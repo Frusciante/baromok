@@ -64,7 +64,7 @@ class IndicatorCalculator:
         logger.info(f"IndicatorCalculator 초기화 완료 (캐싱 활성)")
 
     def refresh_settings(self):
-        """설정 파일에서 값을 읽어 내부 변수에 캐싱 (루프 외부 호출 권장)"""
+        """설정 파일에서 값을 읽어 내부 변수에 캐싱 (루프 오버헤드 방지)"""
         if not self.config:
             return
 
@@ -80,7 +80,7 @@ class IndicatorCalculator:
             self._eye_distance_threshold_cm = float(eye_cfg.get("distance_threshold_cm", 45.0))
             self._eye_sustain_seconds = float(eye_cfg.get("sustain_seconds", 2.0))
             
-            # 카메라 설정
+            # 카메라 설정 (CameraWorker와 동일한 설정 키 사용 보장)
             self._camera_frame_width = int(self.config.get_app_setting('camera_resolution_width', 1280))
             
             # 필터 갱신 (이미 존재하면 alpha만 업데이트, 없으면 생성)
@@ -191,18 +191,16 @@ class IndicatorCalculator:
         low_latency: bool = False,
         baseline_mode: bool = False
     ) -> Optional[PostureIndicators]:
-        """모든 자세 지표 계산"""
+        """모든 자세 지표 계산 (캐싱된 설정 사용)"""
         if (landmarks.get('left_cheek') is None or landmarks.get('right_cheek') is None):
             return None
 
         try:
-            # 필터 셋업
-            base_alpha = 0.15
-            if self.config:
-                try: base_alpha = self.config.get_posture_criteria().get("filters", {}).get("indicator_ema", {}).get("alpha", 0.15)
-                except Exception: pass
-            curr_alpha = 0.5 if low_latency else base_alpha
-            for f in self.ema_filters.values(): f.alpha = curr_alpha
+            # 저지연 모드 시에만 alpha 임시 조정
+            if low_latency:
+                for f in self.ema_filters.values(): f.alpha = 0.5
+            else:
+                for f in self.ema_filters.values(): f.alpha = self._ema_alpha
 
             # 1. 얼굴 지표
             cheek_dist_raw = self.calculate_cheek_distance(landmarks['left_cheek'], landmarks['right_cheek'])
@@ -257,7 +255,7 @@ class IndicatorCalculator:
                 else:
                     sh_w = None; sh_tilt = None; neck_off = None
 
-            # 홍채 거리
+            # 홍채 거리 (비교적 정확한 물리 거리 산출)
             eye_screen_cm = None; eye_warning = False
             try:
                 l_px = landmarks.get('left_iris_diameter_px_raw') or landmarks.get('left_iris_diameter_px')
@@ -268,6 +266,7 @@ class IndicatorCalculator:
                     px_vals = [px for px in (l_px, r_px) if px and px > 0]
                     if px_vals:
                         z_cm_vals = [((self._iris_diameter_mm * f_px) / float(px)) / 10.0 for px in px_vals]
+                        # [복구] 사용자 요청에 따라 20cm 오프셋 재적용
                         eye_screen_cm = max(0.0, float(min(z_cm_vals)) - 20.0)
                         now = timestamp if timestamp > 0 else time.time()
                         if eye_screen_cm <= self._eye_distance_threshold_cm:
@@ -280,15 +279,8 @@ class IndicatorCalculator:
             chin_occ_raw = self.calculate_chin_occlusion(landmarks.get('chin_points', []), landmarks)
             near_score = self.calculate_hand_near_score(landmarks, face_center)
             
-            # self.config에서 scoring_config 로드 (오류 수정 지점)
-            h_f_weights = {"near_score": 0.5, "occlusion_score": 0.5}
-            if self.config:
-                try:
-                    scoring_cfg = self.config.get_frame_scoring_config()
-                    h_f_weights = scoring_cfg.get("hand_face_weights", h_f_weights)
-                except Exception: pass
-            
-            h_f_score_raw = h_f_weights.get("near_score", 0.5) * near_score + h_f_weights.get("occlusion_score", 0.5) * chin_occ_raw
+            # 가중치 또는 기본값 사용
+            h_f_score_raw = 0.5 * near_score + 0.5 * chin_occ_raw
             
             if baseline_mode: h_f_score = h_f_score_raw; chin_occ = chin_occ_raw
             else:

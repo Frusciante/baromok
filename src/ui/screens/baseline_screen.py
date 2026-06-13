@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton,
-    QWidget, QSizePolicy
+    QWidget, QSizePolicy, QDialog
 )
 from src.ui.styles.theme import Colors, ThemeManager
 from src.ui.styles.font_loader import app_font
@@ -96,7 +96,7 @@ class BaselineScreen(QWidget):
         content_layout = QHBoxLayout()
         content_layout.setSpacing(20)
 
-        # 1. 왼쪽: 카메라 프리뷰 (고정 크기 — 영상 크기에 따라 흔들리지 않도록)
+        # 1. 왼쪽: 카메라 프리뷰 (고정 크기)
         self.preview_frame = QFrame()
         self.preview_frame.setStyleSheet(f"""
             background-color: {Colors.WHITE.value};
@@ -108,7 +108,6 @@ class BaselineScreen(QWidget):
         preview_vbox.setContentsMargins(8, 8, 8, 8)
         self.preview_label = QLabel("카메라 프리뷰")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # 픽스맵 크기가 레이아웃에 영향을 주지 않도록 — 박스 위치 고정
         self.preview_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored
         )
@@ -116,13 +115,13 @@ class BaselineScreen(QWidget):
         self.preview_label.setStyleSheet("border: none; background-color: transparent;")
         preview_vbox.addWidget(self.preview_label)
         self.preview_frame.setLayout(preview_vbox)
-        content_layout.addWidget(self.preview_frame, 3)  # 비율 조절
+        content_layout.addWidget(self.preview_frame, 3)
 
         # 2. 오른쪽: 그래프 및 실시간 상태 정보
         self.info_panel = QVBoxLayout()
         self.info_panel.setSpacing(15)
 
-        # 2-1. 초기 자세 설정 가이드 (간단한 핵심 안내 카드)
+        # 2-1. 초기 자세 설정 가이드
         self.guide_card = self._create_posture_guide_card()
         self.info_panel.addWidget(self.guide_card, 2)
 
@@ -233,8 +232,27 @@ class BaselineScreen(QWidget):
                 label.setStyleSheet("border: none; background-color: transparent;")
             return label
 
+        title_layout = QHBoxLayout()
         title = build_label("기준 자세 설정 가이드", font_size=18, bold=True, color=Colors.PRIMARY.value)
-        guide_layout.addWidget(title)
+        title_layout.addWidget(title)
+        
+        self.what_is_correct_btn = QPushButton("? 바른 자세란?")
+        self.what_is_correct_btn.setFixedSize(self.theme_manager.scale_pixel(110), self.theme_manager.scale_pixel(36))
+        self.what_is_correct_btn.setFont(app_font(self.theme_manager.scale_pixel(11), QFont.Weight.Bold))
+        self.what_is_correct_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.what_is_correct_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #FFF0F0;
+                color: {Colors.RED_DANGER.value};
+                border: 1px solid {Colors.RED_DANGER.value};
+                border-radius: 14px;
+            }}
+            QPushButton:hover {{ background-color: #FFE5E5; }}
+        """)
+        self.what_is_correct_btn.clicked.connect(self._show_correct_posture_popup)
+        title_layout.addWidget(self.what_is_correct_btn)
+        title_layout.addStretch()
+        guide_layout.addLayout(title_layout)
 
         pill_row = QHBoxLayout()
         pill_row.setSpacing(self.theme_manager.scale_pixel(5))
@@ -274,6 +292,31 @@ class BaselineScreen(QWidget):
 
         guide_card.setLayout(guide_layout)
         return guide_card
+
+    def _show_correct_posture_popup(self):
+        """바른 자세 가이드 팝업 표시"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("바른 자세 가이드")
+        dialog.setFixedSize(self.theme_manager.scale_pixel(650), self.theme_manager.scale_pixel(400))
+        dialog_layout = QVBoxLayout(dialog)
+        
+        from src.ui.widgets.settings_widgets import CorrectPostureGuideWidget
+        guide = CorrectPostureGuideWidget(self.theme_manager)
+        dialog_layout.addWidget(guide)
+        
+        close_btn = QPushButton("닫기")
+        close_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
+        close_btn.clicked.connect(dialog.accept)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Colors.PURPLE_PRIMARY.value};
+                color: {Colors.WHITE.value};
+                border-radius: 8px;
+            }}
+        """)
+        dialog_layout.addWidget(close_btn)
+        
+        dialog.exec()
 
     def start_camera_preview(self):
         """화면 진입 시 카메라 프리뷰만 미리 시작 (baseline 모드)"""
