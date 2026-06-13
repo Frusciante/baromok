@@ -7,12 +7,12 @@
   "popup_auto_close": true,
   "popup_auto_close_time": 8,
   "auto_start_detection": false,
-  "forward_head_sensitivity": 0.10595959595959596,
+  "forward_head_sensitivity": 0.10404040404040404,
   "recline_sensitivity": 0.10404040404040404,
   "chin_rest_sensitivity": 0.10404040404040404,
   "eye_close_sensitivity": 0.10404040404040404,
   "turned_head_sensitivity": 0.10404040404040404,
-  "side_tilt_sensitivity": 0.10212121212121213,
+  "side_tilt_sensitivity": 0.10404040404040404,
   "recommended_forward_head": 0.15000000000000002,
   "recommended_recline": 0.07500000000000001
 }

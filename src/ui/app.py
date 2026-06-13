@@ -162,6 +162,7 @@ class baromokApp:
             logger.debug("메인 윈도우 헤더 버튼 시그널 연결 실패")
 
         # 화면 생성 및 등록
+        self._screen_history = []  # 화면 이동 이력 스택
         self._setup_screens()
         self._apply_interactive_cursor_policy()
 
@@ -362,21 +363,24 @@ class baromokApp:
         4: "자세 감지",
     }
 
-    def switch_screen(self, screen_index: int):
+    def switch_screen(self, screen_index: int, record_history: bool = True):
         """
-        화면 전환
-
-        Args:
-            screen_index: 화면 인덱스
+        화면 전환 (히스토리 관리 포함)
         """
         if 0 <= screen_index < self.main_window.stacked_widget.count():
-            self._previous_screen_index = self.main_window.stacked_widget.currentIndex()
+            current_index = self.main_window.stacked_widget.currentIndex()
+            
+            if record_history and current_index != screen_index:
+                # 동일 화면 연속 기록 방지
+                if not self._screen_history or self._screen_history[-1] != current_index:
+                    self._screen_history.append(current_index)
+                    logger.debug(f"화면 히스토리 추가: {current_index} (현재 스택: {self._screen_history})")
 
-            if self._previous_screen_index == 2 and screen_index != 2:
+            if current_index == 2 and screen_index != 2:
                 self._persist_settings_if_dirty(reason="settings_screen_exit")
 
             # 이전 화면 정리
-            if self._previous_screen_index == 0 and screen_index != 0 and hasattr(self, "baseline_screen"):
+            if current_index == 0 and screen_index != 0 and hasattr(self, "baseline_screen"):
                 try:
                     self.baseline_screen.cancel_capture()
                     if screen_index != 4:
@@ -384,7 +388,7 @@ class baromokApp:
                 except Exception:
                     logger.debug("Baseline 화면 이탈 처리 실패")
 
-            if self._previous_screen_index == 4 and screen_index != 4:
+            if current_index == 4 and screen_index != 4:
                 try:
                     if screen_index != 0 and self.camera_worker.isRunning():
                         self.camera_worker.pause()
@@ -428,45 +432,48 @@ class baromokApp:
             logger.warning("잘못된 화면 인덱스: %s", screen_index)
 
     def _handle_header_back(self):
-        """헤더의 뒤로가기 버튼 처리: 직전 화면으로 복귀"""
+        """헤더의 뒤로가기 버튼 처리: 히스토리 스택 기반 복귀"""
         current_index = self.main_window.stacked_widget.currentIndex()
-        if current_index == 0 and hasattr(self, "baseline_screen"):
-            try:
-                self.baseline_screen.cancel_capture()
-                self.baseline_screen.pause_camera_preview()
-            except Exception:
-                logger.debug("베이스라인 취소 처리 중 오류")
-
-        if current_index == 3:
-            self.switch_screen(1)
+        
+        # 1. 특수 화면 처리 (세션 종료 등)
+        if current_index == 4: # Detection 화면에서 나갈 때
+            self._stop_detection()
+            self.switch_screen(1) # 감지 종료 시 무조건 Hub로
+            self._screen_history = [] # 히스토리 초기화 (Hub가 루트)
             return
 
-        if current_index in (0, 4):
-            self.switch_screen(1)
+        # 2. 히스토리 스택에서 대상 찾기
+        if not self._screen_history:
+            self.switch_screen(1) # 스택 없으면 Hub로
             return
-
-        target_index = self._previous_screen_index
-        if target_index == 2:
-            target_index = 1
-
-        # 감지 화면으로 복귀하는 경우: 카메라 resume + detection 모드
+            
+        target_index = self._screen_history.pop()
+        logger.debug(f"히스토리 복귀: {current_index} -> {target_index} (남은 스택: {self._screen_history})")
+        
+        # 3. 감지 화면(4)으로 복귀하는 경우에만 특별 처리 (이미 실행 중이었던 경우)
         if target_index == 4 and hasattr(self, "camera_worker"):
             try:
                 self.camera_worker.set_baseline_mode(False)
+                # 감지 상태인 경우에만 재개 (단순 일시정지 상태였다면 유지)
                 if not self.camera_worker.isRunning():
                     self.camera_worker.start()
                 elif self.camera_worker.is_paused:
                     self.camera_worker.resume()
+                
+                # 감지 로직 활성화
+                self.camera_worker.is_detecting = True
             except Exception:
-                logger.debug("감지 화면 복귀 시 카메라 재개 실패")
+                logger.debug("감지 화면 복귀 처리 실패")
 
-        self.switch_screen(target_index)
+        # 4. 화면 전환 (전환 자체를 기록하지 않음)
+        self.switch_screen(target_index, record_history=False)
 
+        # 5. 감지 화면 진입 후 부가 작업
         if target_index == 4 and hasattr(self, "detection_screen"):
             try:
                 self.detection_screen.on_detection_started()
             except Exception:
-                logger.debug("감지 화면 재개 처리 중 오류")
+                logger.debug("감지 화면 UI 재개 실패")
 
     def _start_detection(self):
         """감지 시작"""
@@ -541,6 +548,7 @@ class baromokApp:
             return
 
         # baseline이 있으면 기존 감지 시작 흐름 실행
+        self.camera_worker.is_detecting = True
         self.camera_worker.set_baseline_mode(False)
         self.state_machine.reset()
         self._hide_alert_popup()
@@ -561,6 +569,7 @@ class baromokApp:
         """허브 화면 진입 시 카메라를 백그라운드에서 예열한다."""
         try:
             if not self.camera_worker.isRunning():
+                self.camera_worker.is_detecting = False
                 self.camera_worker.set_baseline_mode(False)
                 self.camera_worker.start()
                 # 2초 후 일시정지 (이미 충분히 예열됨)
@@ -612,6 +621,7 @@ class baromokApp:
     def _stop_detection(self):
         """감지 중지"""
         logger.info("감지 중지")
+        self.camera_worker.is_detecting = False
         if self.camera_worker.isRunning():
             self.camera_worker.stop_capture()
         self.session_manager.end_session()

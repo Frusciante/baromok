@@ -74,6 +74,9 @@ class CameraWorker(QThread):
         # baseline 수집 모드
         self.is_baseline_mode = False
         self.current_step = 0
+        
+        # 실제 판정 수행 여부 (Warmup 모드에서는 False)
+        self.is_detecting = False
 
         # 프레임 카운터
         self.frame_count = 0
@@ -87,9 +90,27 @@ class CameraWorker(QThread):
         self._settings_dirty = True
         self._label_cache = {}
 
+        # 판정 시작 시간 (Warmup 제외, 실제 탐지 시간)
+        self._detection_start_time: Optional[float] = None
+        self._is_detecting = False
+
         logger.info(
             f"CameraWorker 초기화: {camera_width}x{camera_height} @ {camera_fps} FPS (멀티스레드 판정 활성)"
         )
+
+    @property
+    def is_detecting(self) -> bool:
+        return self._is_detecting
+
+    @is_detecting.setter
+    def is_detecting(self, value: bool):
+        if value and not self._is_detecting:
+            # 탐지 시작 시점 기록
+            self._detection_start_time = time.time()
+            logger.info("CameraWorker: 탐지 타이머 시작")
+        elif not value:
+            self._detection_start_time = None
+        self._is_detecting = value
 
     def mark_settings_dirty(self):
         """설정이 변경되었음을 알림 (플래그 설정)"""
@@ -200,14 +221,31 @@ class CameraWorker(QThread):
             self.is_running = False
 
     def process_frame(self, frame: np.ndarray) -> dict:
-        """프레임 처리 (멀티스레드 브로드캐스트 포함)"""
-        # 0. 설정 갱신 확인 (플래그 기반)
+        """프레임 처리 (탐지 단계가 아니면 로직 스킵)"""
+        # 0. 설정 갱신 확인 (플래그 기반 캐싱)
         self._sync_cached_settings()
 
         timestamp = datetime.now()
         current_timestamp_seconds = timestamp.timestamp()
 
-        # 1. 랜드마크 추출
+        # 1. 탐지 비활성 모드 (단순 예열) 처리
+        # 탐지 중도 아니고, 베이스라인 수집 중도 아닌 경우 로직 수행 안 함
+        if not self.is_detecting and not self.is_baseline_mode:
+            return {
+                "frame": frame.copy(),  # 효과 없는 원본 프레임
+                "frame_rgb": cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
+                "landmarks": None,
+                "indicators": None,
+                "posture_type": "warmup",
+                "probability": 0.0,
+                "display_label": "예열 중",
+                "state": PostureState.NORMAL.value,
+                "timestamp": timestamp,
+                "frame_number": self.frame_count,
+                "active_postures": []
+            }
+
+        # 2. 랜드마크 추출 (탐지 또는 베이스라인 모드일 때만 수행)
         landmarks = self.landmark_extractor.extract_landmarks(frame)
 
         # 2. 지표 계산
@@ -313,8 +351,8 @@ class CameraWorker(QThread):
         self.wait(2000)
 
     def get_elapsed_time(self) -> int:
-        if self.start_time is None: return 0
-        return int((datetime.now() - self.start_time).total_seconds())
+        if self._detection_start_time is None: return 0
+        return int((time.time() - self._detection_start_time))
 
 
 def create_camera_worker(le, ic, je, sm, config=None) -> CameraWorker:
