@@ -347,13 +347,13 @@ class DetectionScreen(QWidget):
         # 1. 마지막 자세 텍스트 유지 (글자색만 변경)
         self.posture_label.setStyleSheet("color: #888888;")
         
-        # 2. 강조 안내 박스 활성화 (확실한 박스 스타일 적용)
+        # 2. 강조 안내 박스 활성화 (보라색 테마 적용)
         self.session_msg_label.setText("감지가 종료되었습니다.\n아래 버튼으로 다시 시작하거나 결과를 확인하세요.")
         self.session_msg_label.setStyleSheet(f"""
             QLabel {{
-                color: #FFD700;
-                background-color: #1A1A1A; 
-                border: 3px solid #FFD700;
+                color: #FFFFFF;
+                background-color: {Colors.PURPLE_PRIMARY.value}; 
+                border: 2px solid #E3DCFF;
                 border-radius: 12px;
                 padding: 15px;
                 margin-top: 15px;
