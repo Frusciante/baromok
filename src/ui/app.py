@@ -93,6 +93,12 @@ class baromokApp:
         self._alert_state_lock = threading.Lock()
         self._previous_screen_index = 1
 
+        # [추가] 스트레칭 알림 관련 변수
+        self._stretching_timer = QTimer()
+        self._stretching_timer.setInterval(60000) # 1분마다 체크
+        self._stretching_timer.timeout.connect(self._check_stretching_reminder)
+        self._last_stretching_alert_minute = 0
+
         # 엔진 컴포넌트 초기화 (Phase 2)
         logger.info("엔진 컴포넌트 초기화...")
         self.landmark_extractor = LandmarkExtractor("assets/models")
@@ -569,6 +575,10 @@ class baromokApp:
 
         self.switch_screen(4)  # DetectionScreen으로 이동
         self.detection_screen.on_detection_started()
+        
+        # [추가] 스트레칭 알림 타이머 시작
+        self._last_stretching_alert_minute = 0
+        self._stretching_timer.start()
 
     def _start_camera_warmup(self):
         """허브 화면 진입 시 카메라를 백그라운드에서 예열한다."""
@@ -641,6 +651,9 @@ class baromokApp:
         
         # 2. 세션 종료 (순수 활성 시간 기록)
         self.session_manager.end_session(active_duration=active_duration)
+        
+        # [추가] 스트레칭 알림 타이머 중지
+        self._stretching_timer.stop()
         
         self._hide_alert_popup()
         self.detection_screen.on_detection_stopped()
@@ -883,6 +896,35 @@ class baromokApp:
 
         except Exception as e:
             logger.error(f"설정 위젯 변경 처리 실패: {e}", exc_info=True)
+
+    def _check_stretching_reminder(self):
+        """실시간 활성 시간을 체크하여 스트레칭 알림 발생"""
+        if not self.settings_config.stretching_reminder_enabled:
+            return
+            
+        if not self.camera_worker or not self.camera_worker.is_detecting:
+            return
+            
+        # 순수 탐지 시간(분 단위) 획득
+        elapsed_seconds = self.camera_worker.get_elapsed_time()
+        elapsed_minutes = elapsed_seconds // 60
+        
+        if elapsed_minutes <= 0:
+            return
+            
+        interval = self.settings_config.stretching_reminder_interval
+        
+        # 설정된 간격의 배수 시점이고, 아직 이번 분기에 알림을 띄우지 않았을 때
+        if elapsed_minutes % interval == 0 and elapsed_minutes != self._last_stretching_alert_minute:
+            self._last_stretching_alert_minute = elapsed_minutes
+            
+            msg = f"{elapsed_minutes}분간 열중하셨네요! 잠시 어깨를 펴고 스트레칭 시간을 가져보세요."
+            logger.info(f"스트레칭 알림 발생: {elapsed_minutes}분 경과")
+            
+            # 알림 팝업 및 효과음 재생 (info 타입 사용)
+            self.alert_bridge.alert_requested.emit("info", msg)
+            if self.settings_config.sound_enabled:
+                self.alert_bridge.sound_requested.emit(self.settings_config.sound_volume)
 
     def run(self):
         """애플리케이션 실행"""

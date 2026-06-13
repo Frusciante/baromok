@@ -257,6 +257,10 @@ class SettingsConfig:
     # 자동 시작
     auto_start_detection: bool = False
 
+    # 스트레칭 알림 설정
+    stretching_reminder_enabled: bool = True
+    stretching_reminder_interval: int = 30  # 분 (기본 30분)
+
     # 감도 설정 (기본값은 None이며 로드 시 JSON에서 가져옴)
     forward_head_sensitivity: Optional[float] = None
     recline_sensitivity: Optional[float] = None

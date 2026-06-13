@@ -7,6 +7,8 @@
   "popup_auto_close": true,
   "popup_auto_close_time": 8,
   "auto_start_detection": false,
+  "stretching_reminder_enabled": true,
+  "stretching_reminder_interval": 30,
   "forward_head_sensitivity": 0.15000000000000002,
   "recline_sensitivity": 0.07500000000000001,
   "chin_rest_sensitivity": 0.10404040404040404,

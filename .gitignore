@@ -219,5 +219,6 @@ debug_plots/
 작업분배_검토.md
 작업정리_인계_20260608.md
 
-.db
+*.db
 GEMINI.md
+data/baseline.json

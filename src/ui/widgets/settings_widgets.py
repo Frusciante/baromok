@@ -665,6 +665,114 @@ class AutoStartSettingsWidget(QWidget):
         self.toggle.setChecked(config.get("auto_start_detection", False))
 
 
+class StretchingSettingsWidget(QWidget):
+    """스트레칭 알림 설정 위젯: 토글 + 슬라이더"""
+
+    value_changed_signal = pyqtSignal(dict)
+
+    def __init__(self, theme_manager: ThemeManager, initial_config: dict = None):
+        super().__init__()
+        self.theme_manager = theme_manager
+        self.config = initial_config or {}
+        self.setup_ui()
+
+    def setup_ui(self):
+        """UI 구성"""
+        layout = QVBoxLayout()
+        layout.setContentsMargins(11, 10, 11, 10)
+        layout.setSpacing(10)
+        self.setObjectName("settings_card")
+        self.setStyleSheet(
+            f"#settings_card {{ background-color: {Colors.WHITE.value}; border: 1px solid #E3E0F2; border-radius: 12px; }}"
+        )
+
+        # 토글 섹션
+        toggle_layout = QHBoxLayout()
+        toggle_label = QLabel("장시간 작업 시 스트레칭 알림")
+        toggle_label.setFont(app_font(self.theme_manager.scale_pixel(14)))
+        toggle_label.setStyleSheet(FLAT_LABEL_STYLE)
+
+        self.toggle = ToggleSwitch(self.theme_manager)
+        self.toggle.setChecked(self.config.get("stretching_reminder_enabled", True))
+        self.toggle.stateChanged.connect(self._on_toggle_changed)
+
+        toggle_layout.addWidget(toggle_label)
+        toggle_layout.addStretch()
+        toggle_layout.addWidget(self.toggle)
+        layout.addLayout(toggle_layout)
+
+        # 슬라이더 섹션
+        slider_layout = QVBoxLayout()
+        slider_layout.setSpacing(6)
+
+        header_layout = QHBoxLayout()
+        slider_label = QLabel("알림 간격")
+        slider_label.setFont(app_font(self.theme_manager.scale_pixel(13)))
+        slider_label.setStyleSheet(FLAT_LABEL_STYLE)
+
+        self.value_label = QLabel("30분")
+        self.value_label.setFont(
+            app_font(self.theme_manager.scale_pixel(13), QFont.Weight.Bold)
+        )
+        self.value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.value_label.setStyleSheet(FLAT_LABEL_STYLE)
+
+        header_layout.addWidget(slider_label)
+        header_layout.addStretch()
+        header_layout.addWidget(self.value_label)
+        slider_layout.addLayout(header_layout)
+
+        self.slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.slider.setMinimum(10)
+        self.slider.setMaximum(120)
+        self.slider.setValue(self.config.get("stretching_reminder_interval", 30))
+        self.slider.setSingleStep(10)
+        self.slider.valueChanged.connect(self._on_slider_changed)
+        slider_layout.addWidget(self.slider)
+
+        range_layout = QHBoxLayout()
+        min_label = QLabel("10분")
+        min_label.setFont(app_font(self.theme_manager.scale_pixel(12)))
+        min_label.setStyleSheet(FLAT_LABEL_STYLE)
+        max_label = QLabel("120분")
+        max_label.setFont(app_font(self.theme_manager.scale_pixel(12)))
+        max_label.setStyleSheet(FLAT_LABEL_STYLE)
+        range_layout.addWidget(min_label)
+        range_layout.addStretch()
+        range_layout.addWidget(max_label)
+        slider_layout.addLayout(range_layout)
+
+        layout.addLayout(slider_layout)
+
+        self.setLayout(layout)
+        self._sync_slider_state()
+
+    def _on_toggle_changed(self):
+        self._sync_slider_state()
+        self._emit_value_changed()
+
+    def _on_slider_changed(self, value: int):
+        self.value_label.setText(f"{value}분")
+        self._emit_value_changed()
+
+    def _sync_slider_state(self):
+        is_enabled = self.toggle.isChecked()
+        self.slider.setEnabled(is_enabled)
+        self.value_label.setEnabled(is_enabled)
+
+    def _emit_value_changed(self):
+        self.value_changed_signal.emit({
+            "stretching_reminder_enabled": self.toggle.isChecked(),
+            "stretching_reminder_interval": self.slider.value(),
+        })
+
+    def set_value(self, config: dict):
+        self.toggle.setChecked(config.get("stretching_reminder_enabled", True))
+        self.slider.setValue(config.get("stretching_reminder_interval", 30))
+        self.value_label.setText(f"{self.slider.value()}분")
+        self._sync_slider_state()
+
+
 class SensitivitySettingsWidget(QWidget):
     """민감도 설정 위젯: 5종 자세 슬라이더 확장 (거북목 통합)"""
 
