@@ -133,6 +133,9 @@ python main.py
 - <a href=".github/rules/operation/posture_operation.md">자세 측정 운영 규칙</a>
 - <a href=".github/rules/operation/posture_system_summary.md">기술 설계 요약</a>
 
+## 이미지 출처
+<a href='https://kor.pngtree.com/freepng/correct-sitting-posture_5912965.html'>의 PNG 이미지 kor.pngtree.com/</a>
+
 ## 라이센스
 
 [라이센스 정보 추가 예정]
