@@ -64,6 +64,11 @@ class BaseJudgeWorker(QObject):
         except Exception as e:
             logger.error(f"{self.posture_type.value} 워커 설정 갱신 실패: {e}")
 
+    def reset(self):
+        """워커 상태 초기화 (EMA 필터 등)"""
+        self.filter.reset()
+        logger.debug(f"{self.posture_type.value} 워커 초기화됨")
+
     def handle_indicators(self, indicators: PostureIndicators):
         """지표를 전달받아 판정 수행 (하위 클래스에서 구현)"""
         pass
@@ -295,6 +300,14 @@ class PostureJudgeManager(QObject):
                 self.workers[p_type].sensitivity = val
                 self.workers[p_type].refresh_settings()
         logger.info("판정 워커 설정 캐시 갱신 완료")
+
+    def reset_all_workers(self):
+        """모든 워커의 내부 필터 및 상태 초기화"""
+        for worker in self.workers.values():
+            if hasattr(worker, "reset"):
+                worker.reset()
+        self.current_frame_results = {}
+        logger.info("모든 판정 워커 상태 초기화 완료")
 
     def _collect_result(self, result: dict):
         p_type = result["posture_type"]

@@ -125,6 +125,12 @@ class CameraWorker(QThread):
             self._detection_start_time = None
             self._total_paused_duration = 0.0
             self._pause_start_time = None
+            # [추가] 탐지 중지 시 결과 데이터 초기화 (Stuck 방지)
+            self._last_judgment_result = None
+            self._last_confirmed_postures = []
+            self.judgment_engine.reset_history()
+            self.judge_manager.reset_all_workers()
+            
         self._is_detecting = value
 
     def mark_settings_dirty(self):
@@ -360,7 +366,12 @@ class CameraWorker(QThread):
             # 탐지 중인 경우 일시정지 시작 시점 기록
             if self.is_detecting:
                 self._pause_start_time = time.time()
-                logger.debug("CameraWorker: 탐지 타이머 일시정지")
+                # [추가] 일시정지 시 stale 데이터 방지를 위해 판정 상태 초기화
+                self._last_judgment_result = None
+                self._last_confirmed_postures = []
+                self.judgment_engine.reset_history()
+                self.judge_manager.reset_all_workers()
+                logger.debug("CameraWorker: 탐지 타이머 일시정지 및 판정 상태 초기화")
 
     def resume(self):
         """캡처 및 판정 재개"""
@@ -375,11 +386,20 @@ class CameraWorker(QThread):
                 logger.debug(f"CameraWorker: 탐지 타이머 재개 (이번 정지: {pause_delta:.1f}초)")
 
     def stop_capture(self):
+        """카메라 캡처 완전 중단"""
         self._running_event.clear()
         self._paused_event.clear()
         self.is_running = False
-        self.judge_manager.stop_all() # 판정 워커들도 종료
+        # [수정] 판정 워커들을 여기서 종료하면 재시작이 불가능함.
+        # 판정 워커 종료는 앱 종료 시에만 수행하거나, 
+        # 논리적으로 is_detecting = False를 통해 처리를 멈추는 것으로 충분함.
+        self.is_detecting = False 
         self.wait(2000)
+
+    def cleanup(self):
+        """앱 종료 시 자원 정리"""
+        self.stop_capture()
+        self.judge_manager.stop_all()
 
     def get_elapsed_time(self) -> int:
         if self._detection_start_time is None: return 0

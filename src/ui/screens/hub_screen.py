@@ -140,6 +140,7 @@ class HubScreen(QWidget):
         # ----------------------------------------------------------
         sub_caption = QLabel()
         sub_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sub_caption.setWordWrap(True)
         sub_caption.setStyleSheet(f"""
             color: #1A1A1A;
             font-size: {self.theme_manager.scale_pixel(22)}px;
@@ -177,19 +178,19 @@ class HubScreen(QWidget):
 
             if average_score >= 90:
                 title_caption.setText("최고의 자세 유지율")
-                sub_caption.setText("바른 자세의 정석입니다. 좋은 습관을 잘 유지하고 계시네요.")
+                sub_caption.setText("바른 자세의 정석입니다.\n좋은 습관을 잘 유지하고 계시네요.")
             elif average_score >= 75:
                 title_caption.setText("안정적인 자세 수준")
-                sub_caption.setText("전반적으로 양호한 상태입니다. 흐트러짐 없는 자세를 유지 중입니다.")
+                sub_caption.setText("전반적으로 양호한 상태입니다.\n흐트러짐 없는 자세를 유지 중입니다.")
             elif average_score >= 50:
                 title_caption.setText("주의가 필요한 단계")
-                sub_caption.setText("거북목 경계 단계입니다. 의식적으로 고개를 뒤로 당겨주세요.")
+                sub_caption.setText("나쁜 자세 경계 단계입니다.\n의식적으로 자세를 바르게 유지해 주세요.")
             elif average_score >= 25:
-                title_caption.setText("위험! 거북목 주의보")
-                sub_caption.setText("자세 유지율이 많이 떨어졌습니다. 즉시 정자세로 교정이 필요합니다.")
+                title_caption.setText("위험! 자세 흐트러짐 주의")
+                sub_caption.setText("자세 유지율이 많이 떨어졌습니다.\n즉시 정자세로 교정이 필요합니다.")
             else:
                 title_caption.setText("경고!!! 척추가 위험합니다!")
-                sub_caption.setText("지속적인 불량 자세가 감지되었습니다. 스트레칭 후 재측정을 권장합니다.")
+                sub_caption.setText("지속적인 나쁜 자세가 감지되었습니다.\n스트레칭 후 재측정을 권장합니다.")
 
         # ----------------------------------------------------------
         # 3. 메인 일러스트 레이아웃에 최종 조립

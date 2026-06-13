@@ -118,6 +118,14 @@ class DetectionScreen(QWidget):
         self.posture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.posture_label.setFont(app_font(self.theme_manager.scale_pixel(19), QFont.Weight.Bold))
         left_panel.addWidget(self.posture_label)
+
+        # [추가] 감지 종료/안내 전용 메시지 라벨 (박스 형태)
+        self.session_msg_label = QLabel("")
+        self.session_msg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.session_msg_label.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
+        self.session_msg_label.setWordWrap(True)
+        self.session_msg_label.hide() # 초기 상태 숨김
+        left_panel.addWidget(self.session_msg_label)
         
         main_center_layout.addLayout(left_panel, 3) # 좌측 60%
 
@@ -179,10 +187,12 @@ class DetectionScreen(QWidget):
         self.post_stop_button_layout.addWidget(self.restart_btn)
         self.post_stop_button_layout.addWidget(self.results_btn)
         self.post_stop_button_layout.addStretch()
+        
         # initially hidden
         self.restart_btn.hide()
         self.results_btn.hide()
         layout.addLayout(self.post_stop_button_layout)
+        
         self.setLayout(layout)
 
     def _on_frame_processed(self, frame_data: dict):
@@ -191,22 +201,21 @@ class DetectionScreen(QWidget):
         if frame_data.get("posture_type") == "baseline":
             return
 
-        # 세션 기록은 UI 렌더링과 독립적으로 먼저 수행 (렌더링 예외가 기록을 막지 않도록)
+        # 세션 기록은 UI 렌더링과 독립적으로 먼저 수행
         try:
             if self.session_manager and getattr(self.session_manager, "current_session", None) is not None:
                 self.session_manager.add_frame_data(frame_data)
         except Exception as e:
             logger.error(f"프레임 기록 실패: {e}")
 
-        # UI 업데이트 (여기서 예외가 나도 위 세션 기록에는 영향 없음)
+        # UI 업데이트
         try:
             if self._waiting_for_first_frame:
                 self._waiting_for_first_frame = False
-                self._preview_stack.setCurrentIndex(1)  # 첫 프레임 도착 → 프리뷰 표시
+                self._preview_stack.setCurrentIndex(1)
             annotated_frame = frame_data.get("frame")
             if annotated_frame is not None:
                 pixmap = cv2_to_qpixmap(annotated_frame)
-                # 프레임의 실제 비율을 유지하며 가용한 공간에 맞춤 (밑이 잘리지 않도록)
                 scaled_pixmap = pixmap.scaled(
                     self.preview_frame.width(),
                     self.preview_frame.height(),
@@ -217,7 +226,6 @@ class DetectionScreen(QWidget):
 
             indicators = frame_data.get("indicators")
             if indicators is None:
-                # 얼굴(광대) 랜드마크도 감지되지 않는 경우에만 메시지 표시
                 self.posture_label.setText(RECOGNITION_DIFFICULT_MESSAGE)
                 self.cheek_detail_label.setText("광대 거리: - (예상: -)")
             else:
@@ -229,7 +237,6 @@ class DetectionScreen(QWidget):
                     frame_data.get("display_label", ""),
                 )
 
-                # 광대 거리 정보 업데이트
                 current_cheek = indicators.cheek_distance
                 if self.baseline_manager and indicators.shoulder_width is not None:
                     expected_cheek = self.baseline_manager.get_expected_cheek(indicators.shoulder_width)
@@ -238,7 +245,6 @@ class DetectionScreen(QWidget):
                 else:
                     self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (어깨 미감지)")
 
-                # 화면 거리 업데이트
                 dist_cm = indicators.eye_screen_distance_cm
                 if dist_cm is not None:
                     self.distance_label.setText(f"화면 거리: {dist_cm:.1f} cm")
@@ -249,11 +255,12 @@ class DetectionScreen(QWidget):
 
     def _update_posture_status(self, state: str, posture_type: str, probability: float, display_label: str = ""):
         from src.config import get_config
-        # display_label 이 지정된 경우(예: 자세 맞춤 중) 우선, 그 외엔 config 단일 소스
         korean_label = display_label if display_label else get_config().get_posture_label(posture_type)
         self.posture_label.setText(f"{korean_label} ({probability:.1%})")
+        
         state_text = {"normal": "바른 자세", "warning": "경고", "bad_posture": "나쁜 자세", "NORMAL": "바른 자세", "WARNING": "경고", "BAD_POSTURE": "나쁜 자세"}
         self.status_label.setText(state_text.get(state, "상태 알 수 없음"))
+        
         state_colors = {"normal": "status_normal", "warning": "status_warning", "bad_posture": "status_bad", "NORMAL": "status_normal", "WARNING": "status_warning", "BAD_POSTURE": "status_bad"}
         self.status_label.setObjectName(state_colors.get(state, "status_normal"))
         self.status_label.style().polish(self.status_label)
@@ -295,46 +302,70 @@ class DetectionScreen(QWidget):
         self.is_session_stopped = False
         self.is_detection_paused = False
         self._waiting_for_first_frame = True
-        self._preview_stack.setCurrentIndex(0)  # 스피너 표시
+        self._preview_stack.setCurrentIndex(0)
+        
         self.status_label.setText("바른 자세")
         self.status_label.setObjectName("status_normal")
         self.status_label.style().polish(self.status_label)
+        
+        # 자세 라벨 초기화
         self.posture_label.setText("감지 중")
+        self.posture_label.setStyleSheet("")
+        
+        # 안내 박스 숨김
+        self.session_msg_label.hide()
+        
         self.cheek_detail_label.setText("광대 거리: - (예상: -)")
         self.distance_label.setText("화면 거리: - cm")
         self.pause_btn.setText("일시정지")
         self.pause_btn.setEnabled(True)
         self.recalibrate_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
-        # hide post-stop actions if visible
+        
         try:
             self.restart_btn.hide()
             self.results_btn.hide()
-        except Exception:
-            pass
+        except: pass
+        
         self._update_elapsed_time()
         self.time_timer.start(1000)
 
     def on_detection_stopped(self):
+        """감지 중단 시 UI 처리 (마지막 자세 유지 + 강조 안내 박스)"""
         self.is_session_stopped = True
         self.time_timer.stop()
         self.is_detection_paused = False
-        self.pause_btn.setText("일시정지")
+        
         self.pause_btn.setEnabled(False)
         self.recalibrate_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
+        
         self.status_label.setText("세션 종료됨")
         self.status_label.setObjectName("status_warning")
         self.status_label.style().polish(self.status_label)
-        self.posture_label.setText("감지가 종료되었습니다. 아래 버튼으로 다시 시작하거나 결과를 확인하세요.")
-        self.cheek_detail_label.setText("광대 거리: - (예상: -)")
-        self.distance_label.setText("화면 거리: - cm")
-        # show post-stop actions
+        
+        # 1. 마지막 자세 텍스트 유지 (글자색만 변경)
+        self.posture_label.setStyleSheet("color: #888888;")
+        
+        # 2. 강조 안내 박스 활성화 (확실한 박스 스타일 적용)
+        self.session_msg_label.setText("감지가 종료되었습니다.\n아래 버튼으로 다시 시작하거나 결과를 확인하세요.")
+        self.session_msg_label.setStyleSheet(f"""
+            QLabel {{
+                color: #FFD700;
+                background-color: #1A1A1A; 
+                border: 3px solid #FFD700;
+                border-radius: 12px;
+                padding: 15px;
+                margin-top: 15px;
+            }}
+        """)
+        self.session_msg_label.show()
+        
+        # 버튼 보이기
         try:
             self.restart_btn.show()
             self.results_btn.show()
-        except Exception:
-            pass
+        except: pass
 
     def showEvent(self, event):
         super().showEvent(event)

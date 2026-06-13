@@ -398,10 +398,10 @@ class baromokApp:
             # 진입 화면 설정
             if screen_index == 0 and hasattr(self, "baseline_screen"):
                 try:
-                    # [추가] 재측정 진입 시 탐지 로직 및 타이머 비활성화
+                    # [강화] 재측정 진입 시 탐지 세션 및 타이머 완전 중단
                     if self.camera_worker:
-                        self.camera_worker.set_baseline_mode(True)
                         self.camera_worker.is_detecting = False
+                        self.camera_worker.set_baseline_mode(True)
                     
                     self.baseline_screen.cancel_capture()
                     self.baseline_screen.start_camera_preview()
