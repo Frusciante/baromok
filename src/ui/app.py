@@ -952,12 +952,11 @@ class baromokApp:
         # PyQt 종료 시점 처리를 위해 exec_ 호출 후 저장
         exit_code = self.qt_app.exec()
 
-        # 종료 시 카메라 완전 정지
+        # 종료 시 카메라/판정 스레드 완전 정지 (판정 워커 QThread 포함)
         try:
-            if self.camera_worker.isRunning():
-                self.camera_worker.stop_capture()
+            self.camera_worker.cleanup()
         except Exception:
-            logger.debug("종료 시 카메라 정지 실패")
+            logger.debug("종료 시 카메라/판정 스레드 정지 실패")
 
         # 종료 시 진행 중인 세션을 정상 종료 처리 (end_time/통계 저장)
         try:
