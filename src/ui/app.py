@@ -446,10 +446,10 @@ class baromokApp:
         """헤더의 뒤로가기 버튼 처리: 히스토리 스택 기반 복귀"""
         current_index = self.main_window.stacked_widget.currentIndex()
         
-        # 1. 특수 화면 처리 (세션 종료 등)
+        # 1. 감지 화면에서 뒤로가기: 세션을 종료하지 않고 Hub로 이동
+        #    (switch_screen이 카메라만 일시정지하므로 세션은 유지됨. 종료는 '종료' 버튼으로만)
         if current_index == 4: # Detection 화면에서 나갈 때
-            self._stop_detection()
-            self.switch_screen(1) # 감지 종료 시 무조건 Hub로
+            self.switch_screen(1) # 세션 유지한 채 Hub로
             self._screen_history = [] # 히스토리 초기화 (Hub가 루트)
             return
 
@@ -660,7 +660,9 @@ class baromokApp:
 
     def _handle_state_transition(self, event: StateTransitionEvent):
         """상태 전이 이벤트를 알림 팝업 요청으로 변환"""
-        if event.to_state == event.from_state:
+        # 같은 상태 반복 이벤트는 무시하되, 나쁜 자세 '지속'은 재알림을 위해 통과시킨다.
+        # (반복 주기는 아래 alert_cooldown_seconds(= 설정의 알림 주기)로 제어됨)
+        if event.to_state == event.from_state and event.to_state.value != "bad_posture":
             return
 
         if not self.settings_config.notification_enabled:

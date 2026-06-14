@@ -123,6 +123,7 @@ class HubScreen(QWidget):
         # 타이틀 캡션 라벨 (로고 컨테이너 내부용)
         title_caption = QLabel()
         title_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_caption.setWordWrap(True)  # 긴 제목이 잘리지 않고 줄바꿈되도록
         title_caption.setStyleSheet(f"""
             color: #000000;
             font-size: {self.theme_manager.scale_pixel(36)}px;
@@ -186,10 +187,10 @@ class HubScreen(QWidget):
                 title_caption.setText("주의가 필요한 단계")
                 sub_caption.setText("나쁜 자세 경계 단계입니다.\n의식적으로 자세를 바르게 유지해 주세요.")
             elif average_score >= 25:
-                title_caption.setText("위험! 자세 흐트러짐 주의")
+                title_caption.setText("위험!\n자세 흐트러짐 주의")
                 sub_caption.setText("자세 유지율이 많이 떨어졌습니다.\n즉시 정자세로 교정이 필요합니다.")
             else:
-                title_caption.setText("경고!!! 척추가 위험합니다!")
+                title_caption.setText("경고!!!\n척추가 위험합니다!")
                 sub_caption.setText("지속적인 나쁜 자세가 감지되었습니다.\n스트레칭 후 재측정을 권장합니다.")
 
         # ----------------------------------------------------------
