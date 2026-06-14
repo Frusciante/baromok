@@ -559,8 +559,11 @@ class baromokApp:
             return
 
         # baseline이 있으면 기존 감지 시작 흐름 실행
-        self.camera_worker.is_detecting = True
+        # '감지 시작'은 새 세션이므로, is_detecting이 True로 유지된 상태여도
+        # False→True로 토글해 카메라 타이머·판정 히스토리를 확실히 리셋한다.
         self.camera_worker.set_baseline_mode(False)
+        self.camera_worker.is_detecting = False
+        self.camera_worker.is_detecting = True
         self.state_machine.reset()
         self._hide_alert_popup()
         # 재시작 시 기존 세션이 end_session() 없이 덮어써지는 버그 방지
