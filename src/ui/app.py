@@ -394,12 +394,9 @@ class baromokApp:
                 except Exception:
                     logger.debug("Baseline 화면 이탈 처리 실패")
 
-            if current_index == 4 and screen_index != 4:
-                try:
-                    if screen_index != 0 and self.camera_worker.isRunning():
-                        self.camera_worker.pause()
-                except Exception:
-                    logger.debug("Detection 화면 이탈 시 카메라 일시정지 실패")
+            # [B안] 감지 세션은 다른 화면(설정/통계/Hub)으로 이동해도 계속 유지한다.
+            #       이전엔 감지 화면 이탈 시 카메라를 일시정지했으나, 감지 지속을 위해 제거.
+            #       (기준자세설정 화면 진입 시에는 아래에서 별도로 감지를 중단한다.)
 
             # 진입 화면 설정
             if screen_index == 0 and hasattr(self, "baseline_screen"):
@@ -446,8 +443,8 @@ class baromokApp:
         """헤더의 뒤로가기 버튼 처리: 히스토리 스택 기반 복귀"""
         current_index = self.main_window.stacked_widget.currentIndex()
         
-        # 1. 감지 화면에서 뒤로가기: 세션을 종료하지 않고 Hub로 이동
-        #    (switch_screen이 카메라만 일시정지하므로 세션은 유지됨. 종료는 '종료' 버튼으로만)
+        # 1. 감지 화면에서 뒤로가기: 세션을 종료하지 않고 Hub로 이동 (감지는 백그라운드 유지).
+        #    종료는 화면 안 '종료' 버튼으로만. Hub '감지 시작'을 누르면 진행 중 세션으로 복귀한다.
         if current_index == 4: # Detection 화면에서 나갈 때
             self.switch_screen(1) # 세션 유지한 채 Hub로
             self._screen_history = [] # 히스토리 초기화 (Hub가 루트)
@@ -558,12 +555,24 @@ class baromokApp:
             logger.error(f"Baseline 확인 중 예상치 못한 오류: {e}", exc_info=True)
             return
 
+        # 이미 진행 중인 감지 세션이 있으면(다른 화면에 다녀온 경우) 새로 시작하지 않고
+        # 진행 중인 세션 화면으로 복귀한다. (타이머·기록 유지)
+        if (self.session_manager.current_session is not None
+                and self.camera_worker.is_detecting):
+            self.camera_worker.set_baseline_mode(False)
+            if not self.camera_worker.isRunning():
+                self.camera_worker.start()
+            elif self.camera_worker.is_paused:
+                self.camera_worker.resume()
+            self.switch_screen(4)
+            self.detection_screen.on_detection_started()
+            if not self._stretching_timer.isActive():
+                self._stretching_timer.start()
+            return
+
         # baseline이 있으면 기존 감지 시작 흐름 실행
-        # '감지 시작'은 새 세션이므로, is_detecting이 True로 유지된 상태여도
-        # False→True로 토글해 카메라 타이머·판정 히스토리를 확실히 리셋한다.
-        self.camera_worker.set_baseline_mode(False)
-        self.camera_worker.is_detecting = False
         self.camera_worker.is_detecting = True
+        self.camera_worker.set_baseline_mode(False)
         self.state_machine.reset()
         self._hide_alert_popup()
         # 재시작 시 기존 세션이 end_session() 없이 덮어써지는 버그 방지
@@ -586,6 +595,9 @@ class baromokApp:
     def _start_camera_warmup(self):
         """허브 화면 진입 시 카메라를 백그라운드에서 예열한다."""
         try:
+            # 감지 세션 진행 중에는 예열이 감지 상태(is_detecting/타이머)를 건드리지 않도록 건너뛴다.
+            if self.camera_worker.is_detecting:
+                return
             if not self.camera_worker.isRunning():
                 self.camera_worker.is_detecting = False
                 self.camera_worker.set_baseline_mode(False)
