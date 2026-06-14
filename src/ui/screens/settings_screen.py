@@ -30,6 +30,7 @@ class SettingsScreen(QWidget):
             PopupSettingsWidget,
             SoundSettingsWidget,
             SensitivitySettingsWidget,
+            StretchingSettingsWidget,
         )
 
         layout = QVBoxLayout()
@@ -55,7 +56,8 @@ class SettingsScreen(QWidget):
             ("소리 설정", SoundSettingsWidget, (0, 1, 1, 1)),
             ("팝업 설정", PopupSettingsWidget, (1, 0, 1, 1)),
             ("감도 설정", SensitivitySettingsWidget, (1, 1, 1, 1)),
-            ("자동 감지 시작", AutoStartSettingsWidget, (2, 0, 1, 2)),
+            ("스트레칭 알림", StretchingSettingsWidget, (2, 0, 1, 1)),
+            ("자동 감지 시작", AutoStartSettingsWidget, (2, 1, 1, 1)),
         ]
 
         for cat, widget_class, (row, col, rspan, cspan) in category_specs:
@@ -112,30 +114,6 @@ class SettingsScreen(QWidget):
         scroll_area.setWidget(scroll_content)
         layout.addWidget(scroll_area, 1)
 
-        # 하단 버튼 레이아웃 (기존 주석 코드 유지)
-        # button_layout = QHBoxLayout()
-        # button_layout.setSpacing(20)
-
-        # confirm_btn = QPushButton("저장")
-        # confirm_btn.setFixedSize(self.theme_manager.scale_pixel(168), self.theme_manager.scale_pixel(43))
-        # confirm_btn.setFont(app_font(self.theme_manager.scale_pixel(17), QFont.Weight.Bold))
-        # confirm_btn.setStyleSheet(f"""
-        #     QPushButton {{
-        #         background-color: {Colors.PURPLE_PRIMARY.value};
-        #         color: {Colors.WHITE.value};
-        #         border-radius: 10px;
-        #     }}
-        #     QPushButton:hover {{
-        #         background-color: #5343B6;
-        #     }}
-        # """)
-        # confirm_btn.clicked.connect(self._save_settings)
-        
-        # button_layout.addStretch()
-        # button_layout.addWidget(confirm_btn)
-        # button_layout.addStretch()
-        
-        # layout.addLayout(button_layout)
         self.setLayout(layout)
 
     def _on_widget_value_changed(self, value_dict: dict):

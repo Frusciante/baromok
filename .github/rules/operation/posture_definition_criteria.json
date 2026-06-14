@@ -50,7 +50,8 @@
     "metrics": [
       "shoulder_width",
       "cheek_distance",
-      "eye_distance"
+      "eye_distance",
+      "head_height"
     ]
   },
   "global_rules": {

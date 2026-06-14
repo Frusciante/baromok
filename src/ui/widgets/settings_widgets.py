@@ -15,7 +15,8 @@ from PyQt6.QtWidgets import (
     QPushButton,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QFont, QPainter, QColor
+from PyQt6.QtGui import QFont, QPainter, QColor, QPixmap
+from pathlib import Path
 import logging
 
 from src.ui.styles.theme import Colors, ThemeManager
@@ -664,31 +665,147 @@ class AutoStartSettingsWidget(QWidget):
         self.toggle.setChecked(config.get("auto_start_detection", False))
 
 
+class StretchingSettingsWidget(QWidget):
+    """스트레칭 알림 설정 위젯: 토글 + 슬라이더"""
+
+    value_changed_signal = pyqtSignal(dict)
+
+    def __init__(self, theme_manager: ThemeManager, initial_config: dict = None):
+        super().__init__()
+        self.theme_manager = theme_manager
+        self.config = initial_config or {}
+        self.setup_ui()
+
+    def setup_ui(self):
+        """UI 구성"""
+        layout = QVBoxLayout()
+        layout.setContentsMargins(11, 10, 11, 10)
+        layout.setSpacing(10)
+        self.setObjectName("settings_card")
+        self.setStyleSheet(
+            f"#settings_card {{ background-color: {Colors.WHITE.value}; border: 1px solid #E3E0F2; border-radius: 12px; }}"
+        )
+
+        # 토글 섹션
+        toggle_layout = QHBoxLayout()
+        toggle_label = QLabel("장시간 작업 시 스트레칭 알림")
+        toggle_label.setFont(app_font(self.theme_manager.scale_pixel(14)))
+        toggle_label.setStyleSheet(FLAT_LABEL_STYLE)
+
+        self.toggle = ToggleSwitch(self.theme_manager)
+        self.toggle.setChecked(self.config.get("stretching_reminder_enabled", True))
+        self.toggle.stateChanged.connect(self._on_toggle_changed)
+
+        toggle_layout.addWidget(toggle_label)
+        toggle_layout.addStretch()
+        toggle_layout.addWidget(self.toggle)
+        layout.addLayout(toggle_layout)
+
+        # 슬라이더 섹션
+        slider_layout = QVBoxLayout()
+        slider_layout.setSpacing(6)
+
+        header_layout = QHBoxLayout()
+        slider_label = QLabel("알림 간격")
+        slider_label.setFont(app_font(self.theme_manager.scale_pixel(13)))
+        slider_label.setStyleSheet(FLAT_LABEL_STYLE)
+
+        self.value_label = QLabel("30분")
+        self.value_label.setFont(
+            app_font(self.theme_manager.scale_pixel(13), QFont.Weight.Bold)
+        )
+        self.value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.value_label.setStyleSheet(FLAT_LABEL_STYLE)
+
+        header_layout.addWidget(slider_label)
+        header_layout.addStretch()
+        header_layout.addWidget(self.value_label)
+        slider_layout.addLayout(header_layout)
+
+        self.slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.slider.setMinimum(10)
+        self.slider.setMaximum(120)
+        self.slider.setValue(self.config.get("stretching_reminder_interval", 30))
+        self.slider.setSingleStep(10)
+        self.slider.valueChanged.connect(self._on_slider_changed)
+        slider_layout.addWidget(self.slider)
+
+        range_layout = QHBoxLayout()
+        min_label = QLabel("10분")
+        min_label.setFont(app_font(self.theme_manager.scale_pixel(12)))
+        min_label.setStyleSheet(FLAT_LABEL_STYLE)
+        max_label = QLabel("120분")
+        max_label.setFont(app_font(self.theme_manager.scale_pixel(12)))
+        max_label.setStyleSheet(FLAT_LABEL_STYLE)
+        range_layout.addWidget(min_label)
+        range_layout.addStretch()
+        range_layout.addWidget(max_label)
+        slider_layout.addLayout(range_layout)
+
+        layout.addLayout(slider_layout)
+
+        self.setLayout(layout)
+        self._sync_slider_state()
+
+    def _on_toggle_changed(self):
+        self._sync_slider_state()
+        self._emit_value_changed()
+
+    def _on_slider_changed(self, value: int):
+        self.value_label.setText(f"{value}분")
+        self._emit_value_changed()
+
+    def _sync_slider_state(self):
+        is_enabled = self.toggle.isChecked()
+        self.slider.setEnabled(is_enabled)
+        self.value_label.setEnabled(is_enabled)
+
+    def _emit_value_changed(self):
+        self.value_changed_signal.emit({
+            "stretching_reminder_enabled": self.toggle.isChecked(),
+            "stretching_reminder_interval": self.slider.value(),
+        })
+
+    def set_value(self, config: dict):
+        self.toggle.setChecked(config.get("stretching_reminder_enabled", True))
+        self.slider.setValue(config.get("stretching_reminder_interval", 30))
+        self.value_label.setText(f"{self.slider.value()}분")
+        self._sync_slider_state()
+
+
 class SensitivitySettingsWidget(QWidget):
-    """민감도 설정 위젯: 슬라이더로 조절"""
+    """민감도 설정 위젯: 5종 자세 슬라이더 확장 (거북목 통합)"""
 
     value_changed_signal = pyqtSignal(dict)
     reset_requested_signal = pyqtSignal()
 
-    # 감도 범위
-    FWD_MIN, FWD_MAX = 0.00, 0.15
-    REC_MIN, REC_MAX = 0.01, 0.10
+    # 감도 범위 정의 (0.01 ~ 0.20, 낮을수록 민감)
+    RANGE = (0.01, 0.20)
 
     def __init__(self, theme_manager: ThemeManager, initial_config: dict = None):
         super().__init__()
         self.theme_manager = theme_manager
         self.config = initial_config or {}
 
-        # 현재 값 (설정 파일에서 로드, 범위 내로 클램프)
-        self.fwd_val = self._clamp(
-            self.config.get("forward_head_sensitivity", 0.1),
-            self.FWD_MIN, self.FWD_MAX,
-        )
-        self.rec_val = self._clamp(
-            self.config.get("recline_sensitivity", 0.04),
-            self.REC_MIN, self.REC_MAX,
-        )
+        # 자세 키 리스트 (거북목 통합 완료)
+        self.posture_keys = [
+            ("forward_head", "거북목"),
+            ("recline", "기댄 자세"),
+            ("chin_rest_sensitivity", "턱 괸 자세"),
+            ("turned_head_sensitivity", "고개 돌림"),
+            ("side_tilt_sensitivity", "고개 기울임")
+        ]
+        
+        # 내부 값 저장소
+        self.values = {}
+        for key, _ in self.posture_keys:
+            val = self.config.get(key if "sensitivity" in key else f"{key}_sensitivity")
+            if val is None:
+                val = 0.04 if key == "recline" else 0.10
+            self.values[key] = self._clamp(val, *self.RANGE)
 
+        self.sliders = {}
+        self.labels = {}
         self.setup_ui()
 
     @staticmethod
@@ -697,47 +814,42 @@ class SensitivitySettingsWidget(QWidget):
 
     @staticmethod
     def _to_slider(val: float, lo: float, hi: float) -> int:
-        """실수값 → 슬라이더 위치(0~100)"""
-        val = max(lo, min(hi, val))
-        return round((val - lo) / (hi - lo) * 100)
+        """소수점 실제 수치를 1-100 사이 정수로 변환"""
+        return round((val - lo) / (hi - lo) * 99 + 1)
 
     @staticmethod
     def _from_slider(pos: int, lo: float, hi: float) -> float:
-        """슬라이더 위치(0~100) → 실수값"""
-        return lo + (pos / 100.0) * (hi - lo)
+        """1-100 사이 정수를 실제 소수점 수치로 변환"""
+        return lo + ((pos - 1) / 99.0) * (hi - lo)
 
     def setup_ui(self):
         """UI 구성"""
         layout = QVBoxLayout()
         layout.setContentsMargins(11, 10, 11, 10)
-        layout.setSpacing(9)
+        layout.setSpacing(6)
 
         self.setObjectName("settings_card")
         self.setStyleSheet(
             f"#settings_card {{ background-color: {Colors.WHITE.value}; border: 1px solid #E3E0F2; border-radius: 12px; }}"
         )
 
-        # 상단 헤더 (제목 + 초기화 버튼)
+        # 헤더
         header_layout = QHBoxLayout()
         title_main = QLabel("정밀 감지 설정")
         title_main.setFont(app_font(self.theme_manager.scale_pixel(15), QFont.Weight.Bold))
-        title_main.setStyleSheet(
-            f"color: {Colors.PURPLE_PRIMARY.value}; {FLAT_LABEL_STYLE}"
-        )
+        title_main.setStyleSheet(f"color: {Colors.PURPLE_PRIMARY.value}; {FLAT_LABEL_STYLE}")
 
         self.reset_btn = QPushButton("감도 초기화")
-        self.reset_btn.setFixedSize(self.theme_manager.scale_pixel(120), self.theme_manager.scale_pixel(40))
-        self.reset_btn.setFont(app_font(self.theme_manager.scale_pixel(12), QFont.Weight.Bold))
+        self.reset_btn.setFixedSize(self.theme_manager.scale_pixel(100), self.theme_manager.scale_pixel(32))
+        self.reset_btn.setFont(app_font(self.theme_manager.scale_pixel(11), QFont.Weight.Bold))
         self.reset_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Colors.WHITE.value};
                 color: {Colors.PURPLE_PRIMARY.value};
                 border: 1px solid {Colors.PURPLE_PRIMARY.value};
-                border-radius: 8px;
+                border-radius: 6px;
             }}
-            QPushButton:hover {{
-                background-color: #F4F0FF;
-            }}
+            QPushButton:hover {{ background-color: #F4F0FF; }}
         """)
         self.reset_btn.clicked.connect(self.reset_requested_signal.emit)
 
@@ -746,51 +858,37 @@ class SensitivitySettingsWidget(QWidget):
         header_layout.addWidget(self.reset_btn)
         layout.addLayout(header_layout)
 
-        # 거북목 감도 슬라이더
-        self.fwd_slider, self.fwd_label = self._create_slider_row(
-            "거북목 감도",
-            self.fwd_val, self.FWD_MIN, self.FWD_MAX,
-            self._on_fwd_slider_changed,
-        )
-        layout.addLayout(self._last_row_layout)
+        # 5개 슬라이더 생성
+        for key, name in self.posture_keys:
+            slider, label = self._create_slider_row(
+                name, self.values[key], *self.RANGE,
+                lambda pos, k=key: self._on_slider_changed(k, pos)
+            )
+            self.sliders[key] = slider
+            self.labels[key] = label
+            layout.addLayout(self._last_row_layout)
 
-        # 기댄 자세 감도 슬라이더
-        self.rec_slider, self.rec_label = self._create_slider_row(
-            "기댄 자세 감도",
-            self.rec_val, self.REC_MIN, self.REC_MAX,
-            self._on_rec_slider_changed,
-        )
-        layout.addLayout(self._last_row_layout)
-
-        # 설명
-        description = QLabel(
-            "값이 낮을수록 작은 변화에도 알림이 발생하며,\n높을수록 확실한 변화가 있을 때만 알림이 발생합니다."
-        )
-        description.setFont(app_font(self.theme_manager.scale_pixel(14)))
-        description.setStyleSheet(
-            f"color: {Colors.GRAY_DARK.value}; {FLAT_LABEL_STYLE}"
-        )
+        # 하단 힌트
+        description = QLabel("낮음(1): 민감하게 반응 | 높음(100): 확실할 때만 반응")
+        description.setFont(app_font(self.theme_manager.scale_pixel(12)))
+        description.setStyleSheet(f"color: {Colors.GRAY_DARK.value}; {FLAT_LABEL_STYLE}")
+        description.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(description)
 
         self.setLayout(layout)
 
-    def _create_slider_row(self, title, initial_val, lo, hi, on_changed):
-        """슬라이더 조절 행 생성
-
-        반환: (slider, value_label) — 행 레이아웃은 self._last_row_layout에 저장
-        """
+    def _create_slider_row(self, title, initial_val, lo, hi, on_changed_callback):
         row_layout = QVBoxLayout()
-        row_layout.setSpacing(5)
+        row_layout.setSpacing(2)
 
-        # 헤더 (제목 + 현재 수치)
         header = QHBoxLayout()
         title_label = QLabel(title)
-        title_label.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
-        title_label.setStyleSheet(f"color: #1A1A1A; {FLAT_LABEL_STYLE}")
+        title_label.setFont(app_font(self.theme_manager.scale_pixel(13), QFont.Weight.Bold))
+        title_label.setStyleSheet(f"color: #333333; {FLAT_LABEL_STYLE}")
 
-        value_label = QLabel(f"{initial_val:.3f}")
-        value_label.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
-        value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        display_val = self._to_slider(initial_val, lo, hi)
+        value_label = QLabel(f"{display_val}")
+        value_label.setFont(app_font(self.theme_manager.scale_pixel(12), QFont.Weight.Bold))
         value_label.setStyleSheet(f"color: #4333A6; {FLAT_LABEL_STYLE}")
 
         header.addWidget(title_label)
@@ -798,67 +896,116 @@ class SensitivitySettingsWidget(QWidget):
         header.addWidget(value_label)
         row_layout.addLayout(header)
 
-        # 슬라이더
         slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        slider.setMinimum(0)
+        slider.setFixedHeight(self.theme_manager.scale_pixel(24))
+        slider.setMinimum(1)
         slider.setMaximum(100)
-        slider.setValue(self._to_slider(initial_val, lo, hi))
-        slider.setSingleStep(1)
-        slider.valueChanged.connect(on_changed)
+        slider.setValue(display_val)
+        slider.valueChanged.connect(on_changed_callback)
         row_layout.addWidget(slider)
-
-        # 범위 표시 (0 / 100)
-        range_layout = QHBoxLayout()
-        min_label = QLabel("0")
-        min_label.setFont(app_font(self.theme_manager.scale_pixel(12)))
-        min_label.setStyleSheet(FLAT_LABEL_STYLE)
-        max_label = QLabel("100")
-        max_label.setFont(app_font(self.theme_manager.scale_pixel(12)))
-        max_label.setStyleSheet(FLAT_LABEL_STYLE)
-        range_layout.addWidget(min_label)
-        range_layout.addStretch()
-        range_layout.addWidget(max_label)
-        row_layout.addLayout(range_layout)
 
         self._last_row_layout = row_layout
         return slider, value_label
 
-    def _on_fwd_slider_changed(self, pos: int):
-        self.fwd_val = self._from_slider(pos, self.FWD_MIN, self.FWD_MAX)
-        self.fwd_label.setText(f"{self.fwd_val:.3f}")
-        self._emit_value_changed()
-
-    def _on_rec_slider_changed(self, pos: int):
-        self.rec_val = self._from_slider(pos, self.REC_MIN, self.REC_MAX)
-        self.rec_label.setText(f"{self.rec_val:.3f}")
+    def _on_slider_changed(self, key: str, pos: int):
+        val = self._from_slider(pos, *self.RANGE)
+        self.values[key] = val
+        self.labels[key].setText(f"{pos}")
         self._emit_value_changed()
 
     def _emit_value_changed(self):
-        self.value_changed_signal.emit({
-            "forward_head_sensitivity": self.fwd_val,
-            "recline_sensitivity": self.rec_val
-        })
+        res = {}
+        for k, v in self.values.items():
+            key_name = k if "sensitivity" in k else f"{k}_sensitivity"
+            res[key_name] = v
+        self.value_changed_signal.emit(res)
 
     def get_value(self) -> dict:
-        return {
-            "forward_head_sensitivity": self.fwd_val,
-            "recline_sensitivity": self.rec_val
-        }
+        res = {}
+        for k, v in self.values.items():
+            key_name = k if "sensitivity" in k else f"{k}_sensitivity"
+            res[key_name] = v
+        return res
 
     def set_value(self, config: dict):
-        self.fwd_val = self._clamp(
-            config.get("forward_head_sensitivity", 0.1),
-            self.FWD_MIN, self.FWD_MAX,
-        )
-        self.rec_val = self._clamp(
-            config.get("recline_sensitivity", 0.04),
-            self.REC_MIN, self.REC_MAX,
-        )
-        self.fwd_slider.blockSignals(True)
-        self.rec_slider.blockSignals(True)
-        self.fwd_slider.setValue(self._to_slider(self.fwd_val, self.FWD_MIN, self.FWD_MAX))
-        self.rec_slider.setValue(self._to_slider(self.rec_val, self.REC_MIN, self.REC_MAX))
-        self.fwd_slider.blockSignals(False)
-        self.rec_slider.blockSignals(False)
-        self.fwd_label.setText(f"{self.fwd_val:.3f}")
-        self.rec_label.setText(f"{self.rec_val:.3f}")
+        for key, _ in self.posture_keys:
+            key_name = key if "sensitivity" in key else f"{key}_sensitivity"
+            if key_name in config:
+                val = self._clamp(config[key_name], *self.RANGE)
+                self.values[key] = val
+                display_val = self._to_slider(val, *self.RANGE)
+                self.sliders[key].blockSignals(True)
+                self.sliders[key].setValue(display_val)
+                self.sliders[key].blockSignals(False)
+                self.labels[key].setText(f"{display_val}")
+
+
+class CorrectPostureGuideWidget(QWidget):
+    """바른 자세 가이드 위젯 (이미지 + 지침)"""
+
+    def __init__(self, theme_manager: ThemeManager, vertical: bool = False):
+        super().__init__()
+        self.theme_manager = theme_manager
+        self.vertical = vertical
+        self.setup_ui()
+
+    def setup_ui(self):
+        if self.vertical:
+            layout = QVBoxLayout(self)
+        else:
+            layout = QHBoxLayout(self)
+            
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(30) # 이미지와 텍스트 간격 확대
+
+        # 1. 이미지 영역 (고정 비율 축소)
+        img_label = QLabel()
+        img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        img_path = Path("assets/ui/correct_posture.png")
+        if img_path.exists():
+            pixmap = QPixmap(str(img_path))
+            if not pixmap.isNull():
+                # 세로 모드(감지 화면)일 때 이미지 크기 대폭 축소하여 잘림 방지
+                target_h = 180 if self.vertical else 240
+                img_label.setPixmap(pixmap.scaledToHeight(
+                    self.theme_manager.scale_pixel(target_h),
+                    Qt.TransformationMode.SmoothTransformation
+                ))
+        else:
+            img_label.setText("[이미지]")
+        
+        # 이미지가 너무 많은 공간을 차지하지 않도록 설정
+        img_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        layout.addWidget(img_label, 1)
+
+        # 2. 텍스트 지침 영역 (공간 최대 확보)
+        text_container = QWidget()
+        text_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        text_layout = QVBoxLayout(text_container)
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(15)
+        text_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        title = QLabel("바른 자세 핵심 지침")
+        title.setFont(app_font(self.theme_manager.scale_pixel(18), QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {Colors.PURPLE_PRIMARY.value}; border: none;")
+        title.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        text_layout.addWidget(title)
+
+        tips = [
+            "• 엉덩이를 의자 안쪽 끝까지 밀착하기",
+            "• 허리를 등받이에 대고 곧게 펴기",
+            "• 양발은 바닥에 완전히 닿게 놓기",
+            "• 턱은 가볍게 몸쪽으로 당기기"
+        ]
+        
+        for tip in tips:
+            label = QLabel(tip)
+            label.setFont(app_font(self.theme_manager.scale_pixel(14)))
+            label.setStyleSheet("color: #333333; border: none;")
+            label.setWordWrap(False) # 가급적 줄바꿈 방지
+            label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            text_layout.addWidget(label)
+            
+        layout.addWidget(text_container, 2) # 텍스트 영역에 2배의 가중치 부여
+        self.setLayout(layout)

@@ -6,6 +6,7 @@ PyQt UI 애플리케이션
 
 import time
 import threading
+from dataclasses import asdict
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal, Qt
 from PyQt6.QtWidgets import (
@@ -92,6 +93,12 @@ class baromokApp:
         self._alert_state_lock = threading.Lock()
         self._previous_screen_index = 1
 
+        # [추가] 스트레칭 알림 관련 변수
+        self._stretching_timer = QTimer()
+        self._stretching_timer.setInterval(60000) # 1분마다 체크
+        self._stretching_timer.timeout.connect(self._check_stretching_reminder)
+        self._last_stretching_alert_minute = 0
+
         # 엔진 컴포넌트 초기화 (Phase 2)
         logger.info("엔진 컴포넌트 초기화...")
         self.landmark_extractor = LandmarkExtractor("assets/models")
@@ -132,11 +139,8 @@ class baromokApp:
         self._settings_dirty = False
         logger.info("사용자 설정 로드 완료")
 
-        # 로드된 감도를 판정 엔진에 적용
-        self.judgment_engine.update_sensitivities(
-            self.settings_config.forward_head_sensitivity,
-            self.settings_config.recline_sensitivity,
-        )
+        # 로드된 감도를 엔진 및 워커에 적용
+        self._apply_settings()
 
         # 알림음 관리자
         self.sound_manager = SoundManager()
@@ -164,6 +168,7 @@ class baromokApp:
             logger.debug("메인 윈도우 헤더 버튼 시그널 연결 실패")
 
         # 화면 생성 및 등록
+        self._screen_history = []  # 화면 이동 이력 스택
         self._setup_screens()
         self._apply_interactive_cursor_policy()
 
@@ -192,7 +197,7 @@ class baromokApp:
             self.baseline_manager,
         )
         self.settings_screen = SettingsScreen(
-            self.theme_manager, vars(self.settings_config)  # dataclass를 dict로 변환
+            self.theme_manager, self._settings_to_dict()
         )
         self.statistics_screen = StatisticsScreen(
             self.theme_manager, self.session_manager
@@ -272,7 +277,7 @@ class baromokApp:
 
     def _settings_to_dict(self) -> dict:
         """현재 설정 dataclass를 dict 형태로 변환한다."""
-        return vars(self.settings_config)
+        return asdict(self.settings_config)
 
     def _refresh_settings_screen_values(self):
         """설정 화면 위젯을 앱의 최신 설정값으로 동기화한다."""
@@ -364,21 +369,24 @@ class baromokApp:
         4: "자세 감지",
     }
 
-    def switch_screen(self, screen_index: int):
+    def switch_screen(self, screen_index: int, record_history: bool = True):
         """
-        화면 전환
-
-        Args:
-            screen_index: 화면 인덱스
+        화면 전환 (히스토리 관리 포함)
         """
         if 0 <= screen_index < self.main_window.stacked_widget.count():
-            self._previous_screen_index = self.main_window.stacked_widget.currentIndex()
+            current_index = self.main_window.stacked_widget.currentIndex()
+            
+            if record_history and current_index != screen_index:
+                # 동일 화면 연속 기록 방지
+                if not self._screen_history or self._screen_history[-1] != current_index:
+                    self._screen_history.append(current_index)
+                    logger.debug(f"화면 히스토리 추가: {current_index} (현재 스택: {self._screen_history})")
 
-            if self._previous_screen_index == 2 and screen_index != 2:
+            if current_index == 2 and screen_index != 2:
                 self._persist_settings_if_dirty(reason="settings_screen_exit")
 
             # 이전 화면 정리
-            if self._previous_screen_index == 0 and screen_index != 0 and hasattr(self, "baseline_screen"):
+            if current_index == 0 and screen_index != 0 and hasattr(self, "baseline_screen"):
                 try:
                     self.baseline_screen.cancel_capture()
                     if screen_index != 4:
@@ -386,7 +394,7 @@ class baromokApp:
                 except Exception:
                     logger.debug("Baseline 화면 이탈 처리 실패")
 
-            if self._previous_screen_index == 4 and screen_index != 4:
+            if current_index == 4 and screen_index != 4:
                 try:
                     if screen_index != 0 and self.camera_worker.isRunning():
                         self.camera_worker.pause()
@@ -396,6 +404,11 @@ class baromokApp:
             # 진입 화면 설정
             if screen_index == 0 and hasattr(self, "baseline_screen"):
                 try:
+                    # [강화] 재측정 진입 시 탐지 세션 및 타이머 완전 중단
+                    if self.camera_worker:
+                        self.camera_worker.is_detecting = False
+                        self.camera_worker.set_baseline_mode(True)
+                    
                     self.baseline_screen.cancel_capture()
                     self.baseline_screen.start_camera_preview()
                 except Exception:
@@ -430,45 +443,48 @@ class baromokApp:
             logger.warning("잘못된 화면 인덱스: %s", screen_index)
 
     def _handle_header_back(self):
-        """헤더의 뒤로가기 버튼 처리: 직전 화면으로 복귀"""
+        """헤더의 뒤로가기 버튼 처리: 히스토리 스택 기반 복귀"""
         current_index = self.main_window.stacked_widget.currentIndex()
-        if current_index == 0 and hasattr(self, "baseline_screen"):
-            try:
-                self.baseline_screen.cancel_capture()
-                self.baseline_screen.pause_camera_preview()
-            except Exception:
-                logger.debug("베이스라인 취소 처리 중 오류")
-
-        if current_index == 3:
-            self.switch_screen(1)
+        
+        # 1. 특수 화면 처리 (세션 종료 등)
+        if current_index == 4: # Detection 화면에서 나갈 때
+            self._stop_detection()
+            self.switch_screen(1) # 감지 종료 시 무조건 Hub로
+            self._screen_history = [] # 히스토리 초기화 (Hub가 루트)
             return
 
-        if current_index in (0, 4):
-            self.switch_screen(1)
+        # 2. 히스토리 스택에서 대상 찾기
+        if not self._screen_history:
+            self.switch_screen(1) # 스택 없으면 Hub로
             return
-
-        target_index = self._previous_screen_index
-        if target_index == 2:
-            target_index = 1
-
-        # 감지 화면으로 복귀하는 경우: 카메라 resume + detection 모드
+            
+        target_index = self._screen_history.pop()
+        logger.debug(f"히스토리 복귀: {current_index} -> {target_index} (남은 스택: {self._screen_history})")
+        
+        # 3. 감지 화면(4)으로 복귀하는 경우에만 특별 처리 (이미 실행 중이었던 경우)
         if target_index == 4 and hasattr(self, "camera_worker"):
             try:
                 self.camera_worker.set_baseline_mode(False)
+                # 감지 상태인 경우에만 재개 (단순 일시정지 상태였다면 유지)
                 if not self.camera_worker.isRunning():
                     self.camera_worker.start()
                 elif self.camera_worker.is_paused:
                     self.camera_worker.resume()
+                
+                # 감지 로직 활성화
+                self.camera_worker.is_detecting = True
             except Exception:
-                logger.debug("감지 화면 복귀 시 카메라 재개 실패")
+                logger.debug("감지 화면 복귀 처리 실패")
 
-        self.switch_screen(target_index)
+        # 4. 화면 전환 (전환 자체를 기록하지 않음)
+        self.switch_screen(target_index, record_history=False)
 
+        # 5. 감지 화면 진입 후 부가 작업
         if target_index == 4 and hasattr(self, "detection_screen"):
             try:
                 self.detection_screen.on_detection_started()
             except Exception:
-                logger.debug("감지 화면 재개 처리 중 오류")
+                logger.debug("감지 화면 UI 재개 실패")
 
     def _start_detection(self):
         """감지 시작"""
@@ -543,6 +559,7 @@ class baromokApp:
             return
 
         # baseline이 있으면 기존 감지 시작 흐름 실행
+        self.camera_worker.is_detecting = True
         self.camera_worker.set_baseline_mode(False)
         self.state_machine.reset()
         self._hide_alert_popup()
@@ -558,11 +575,16 @@ class baromokApp:
 
         self.switch_screen(4)  # DetectionScreen으로 이동
         self.detection_screen.on_detection_started()
+        
+        # [추가] 스트레칭 알림 타이머 시작
+        self._last_stretching_alert_minute = 0
+        self._stretching_timer.start()
 
     def _start_camera_warmup(self):
         """허브 화면 진입 시 카메라를 백그라운드에서 예열한다."""
         try:
             if not self.camera_worker.isRunning():
+                self.camera_worker.is_detecting = False
                 self.camera_worker.set_baseline_mode(False)
                 self.camera_worker.start()
                 # 2초 후 일시정지 (이미 충분히 예열됨)
@@ -586,6 +608,10 @@ class baromokApp:
 
     def _handle_baseline_captured(self):
         """Baseline 완료 후 다음 동작 처리"""
+        # 베이스라인 완료 후 탐지 모드로 전환 준비
+        if self.camera_worker:
+            self.camera_worker.set_baseline_mode(False)
+
         if self.settings_config.auto_start_detection:
             logger.info("자동 감지 시작 설정 활성화: 바로 감지 시작")
             self._start_detection()
@@ -614,9 +640,21 @@ class baromokApp:
     def _stop_detection(self):
         """감지 중지"""
         logger.info("감지 중지")
-        if self.camera_worker.isRunning():
-            self.camera_worker.stop_capture()
-        self.session_manager.end_session()
+        
+        # 1. 실제 활성 탐지 시간 획득 (일시정지 제외)
+        active_duration = 0
+        if self.camera_worker:
+            active_duration = self.camera_worker.get_elapsed_time()
+            self.camera_worker.is_detecting = False
+            if self.camera_worker.isRunning():
+                self.camera_worker.stop_capture()
+        
+        # 2. 세션 종료 (순수 활성 시간 기록)
+        self.session_manager.end_session(active_duration=active_duration)
+        
+        # [추가] 스트레칭 알림 타이머 중지
+        self._stretching_timer.stop()
+        
         self._hide_alert_popup()
         self.detection_screen.on_detection_stopped()
 
@@ -779,27 +817,36 @@ class baromokApp:
             logger.error(f"설정 초기화 실패: {e}")
 
     def _apply_settings(self):
-        """설정값 즉시 적용"""
+        """설정값 즉시 반영 (v1.2: 6종 감도 및 캐싱 지원)"""
         logger.info("설정값 적용:")
         logger.info(f"  - 알림 활성화: {self.settings_config.notification_enabled}")
-        logger.info(f"  - 알림 간격: {self.settings_config.notification_interval}초")
-        logger.info(f"  - 팝업 위치: {self.settings_config.popup_position}")
-        logger.info(
-            f"  - 팝업 자동 닫기: {self.settings_config.popup_auto_close} "
-            f"({self.settings_config.popup_auto_close_time}초)"
-        )
-        logger.info(
-            f"  - 거북목 감도: {self.settings_config.forward_head_sensitivity:.3f}"
-        )
-        logger.info(
-            f"  - 기댄자세 감도: {self.settings_config.recline_sensitivity:.3f}"
-        )
+        logger.info(f"  - 거북목 감도: {self.settings_config.forward_head_sensitivity:.3f}")
+        logger.info(f"  - 기댄자세 감도: {self.settings_config.recline_sensitivity:.3f}")
+        logger.info(f"  - 턱괸자세 감도: {self.settings_config.chin_rest_sensitivity:.3f}")
+        logger.info(f"  - 화면가까움 감도: {self.settings_config.eye_close_sensitivity:.3f}")
+        logger.info(f"  - 고개돌림 감도: {self.settings_config.turned_head_sensitivity:.3f}")
+        logger.info(f"  - 고개기울임 감도: {self.settings_config.side_tilt_sensitivity:.3f}")
 
-        # 판정 엔진에 감도 업데이트
+        # 1. 조정자(JudgmentEngine) 감도 업데이트
         self.judgment_engine.update_sensitivities(
             self.settings_config.forward_head_sensitivity,
             self.settings_config.recline_sensitivity,
         )
+
+        # 2. 멀티스레드 워커 감도 및 캐시 갱신 요청
+        if hasattr(self, "camera_worker") and self.camera_worker:
+            sensitivity_map = {
+                "forward_head": self.settings_config.forward_head_sensitivity,
+                "recline": self.settings_config.recline_sensitivity,
+                "chin_rest_estimated": self.settings_config.chin_rest_sensitivity,
+                "eye_close": self.settings_config.eye_close_sensitivity,
+                "turned_head": self.settings_config.turned_head_sensitivity,
+                "side_tilt": self.settings_config.side_tilt_sensitivity
+            }
+            # 워커 감도 갱신
+            self.camera_worker.judge_manager.update_sensitivities(sensitivity_map)
+            # [유저 요청] 루프 내 설정 재사용을 위한 플래그 설정
+            self.camera_worker.mark_settings_dirty()
 
         if not self.settings_config.notification_enabled:
             self.alert_hide_timer.stop()
@@ -849,6 +896,35 @@ class baromokApp:
 
         except Exception as e:
             logger.error(f"설정 위젯 변경 처리 실패: {e}", exc_info=True)
+
+    def _check_stretching_reminder(self):
+        """실시간 활성 시간을 체크하여 스트레칭 알림 발생"""
+        if not self.settings_config.stretching_reminder_enabled:
+            return
+            
+        if not self.camera_worker or not self.camera_worker.is_detecting:
+            return
+            
+        # 순수 탐지 시간(분 단위) 획득
+        elapsed_seconds = self.camera_worker.get_elapsed_time()
+        elapsed_minutes = elapsed_seconds // 60
+        
+        if elapsed_minutes <= 0:
+            return
+            
+        interval = self.settings_config.stretching_reminder_interval
+        
+        # 설정된 간격의 배수 시점이고, 아직 이번 분기에 알림을 띄우지 않았을 때
+        if elapsed_minutes % interval == 0 and elapsed_minutes != self._last_stretching_alert_minute:
+            self._last_stretching_alert_minute = elapsed_minutes
+            
+            msg = f"{elapsed_minutes}분간 열중하셨네요! 잠시 어깨를 펴고 스트레칭 시간을 가져보세요."
+            logger.info(f"스트레칭 알림 발생: {elapsed_minutes}분 경과")
+            
+            # 알림 팝업 및 효과음 재생 (info 타입 사용)
+            self.alert_bridge.alert_requested.emit("info", msg)
+            if self.settings_config.sound_enabled:
+                self.alert_bridge.sound_requested.emit(self.settings_config.sound_volume)
 
     def run(self):
         """애플리케이션 실행"""

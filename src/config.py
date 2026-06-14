@@ -257,9 +257,17 @@ class SettingsConfig:
     # 자동 시작
     auto_start_detection: bool = False
 
+    # 스트레칭 알림 설정
+    stretching_reminder_enabled: bool = True
+    stretching_reminder_interval: int = 30  # 분 (기본 30분)
+
     # 감도 설정 (기본값은 None이며 로드 시 JSON에서 가져옴)
     forward_head_sensitivity: Optional[float] = None
     recline_sensitivity: Optional[float] = None
+    chin_rest_sensitivity: Optional[float] = None
+    eye_close_sensitivity: Optional[float] = None
+    turned_head_sensitivity: Optional[float] = None
+    side_tilt_sensitivity: Optional[float] = None
 
     # 자세 맞춤 기반 권장(최신 오차 기반) 감도 저장 (초기화 시 사용)
     recommended_forward_head: Optional[float] = None
@@ -277,19 +285,30 @@ class SettingsConfig:
                     instance.forward_head_sensitivity = sensitivities.get("forward_head", 0.1)
                 if instance.recline_sensitivity is None:
                     instance.recline_sensitivity = sensitivities.get("recline", 0.04)
-                if instance.recommended_forward_head is None:
-                    instance.recommended_forward_head = sensitivities.get("forward_head", 0.1)
-                if instance.recommended_recline is None:
-                    instance.recommended_recline = sensitivities.get("recline", 0.04)
-            else:
-                if instance.forward_head_sensitivity is None:
-                    instance.forward_head_sensitivity = 0.1
-                if instance.recline_sensitivity is None:
-                    instance.recline_sensitivity = 0.04
+                if instance.chin_rest_sensitivity is None:
+                    instance.chin_rest_sensitivity = sensitivities.get("chin_rest_estimated", 0.1)
+                if instance.eye_close_sensitivity is None:
+                    instance.eye_close_sensitivity = sensitivities.get("eye_close", 0.1)
+                if instance.turned_head_sensitivity is None:
+                    instance.turned_head_sensitivity = sensitivities.get("turned_head", 0.1)
+                if instance.side_tilt_sensitivity is None:
+                    instance.side_tilt_sensitivity = sensitivities.get("side_tilt", 0.1)
+
                 if instance.recommended_forward_head is None:
                     instance.recommended_forward_head = instance.forward_head_sensitivity
                 if instance.recommended_recline is None:
                     instance.recommended_recline = instance.recline_sensitivity
+            else:
+                # Fallback defaults
+                instance.forward_head_sensitivity = instance.forward_head_sensitivity or 0.1
+                instance.recline_sensitivity = instance.recline_sensitivity or 0.04
+                instance.chin_rest_sensitivity = instance.chin_rest_sensitivity or 0.1
+                instance.eye_close_sensitivity = instance.eye_close_sensitivity or 0.1
+                instance.turned_head_sensitivity = instance.turned_head_sensitivity or 0.1
+                instance.side_tilt_sensitivity = instance.side_tilt_sensitivity or 0.1
+                
+                instance.recommended_forward_head = instance.recommended_forward_head or 0.1
+                instance.recommended_recline = instance.recommended_recline or 0.04
             return instance
 
         try:
@@ -330,4 +349,4 @@ class SettingsConfig:
         if self.recommended_recline is not None:
             self.recline_sensitivity = self.recommended_recline
             
-        logger.info(f"민감도 설정이 권장값으로 초기화되었습니다: Fwd={self.forward_head_sensitivity:.3f}, Rec={self.recline_sensitivity:.3f}")
+        logger.info(f"민감도 설정이 권장값으로 초기화되었습니다.")

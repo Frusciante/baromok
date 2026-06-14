@@ -23,6 +23,7 @@ class PostureIndicators:
     cheek_distance: float  # 양쪽 광대 거리
     eye_distance: float  # 양쪽 눈 거리
     face_vertical_length: float # 얼굴 세로 길이
+    head_height: float  # 머리 높이 (1.0 - Y중앙값)
     shoulder_width: Optional[float]  # 양쪽 어깨 거리
     shoulder_tilt_deg: Optional[float]  # 어깨 기울기 (도)
     neck_offset: Optional[float]  # 목-어깨 정렬 오차
@@ -48,42 +49,55 @@ class IndicatorCalculator:
         self.normalization_helper = NormalizationHelper()
         self._shoulder_tilt_history = deque(maxlen=5)
         
-        alpha = 0.15
-        if self.config:
-            try:
-                alpha = self.config.get_posture_criteria().get("filters", {}).get("indicator_ema", {}).get("alpha", 0.15)
-            except Exception: pass
-            
-        self.ema_filters = {
-            'cheek_distance': EMAFilter(alpha=alpha),
-            'eye_distance': EMAFilter(alpha=alpha),
-            'face_vertical_length': EMAFilter(alpha=alpha),
-            'shoulder_width': EMAFilter(alpha=alpha),
-            'shoulder_tilt_deg': EMAFilter(alpha=alpha),
-            'neck_offset': EMAFilter(alpha=alpha),
-            'eye_line_tilt': EMAFilter(alpha=alpha),
-            'chin_occlusion': EMAFilter(alpha=alpha),
-            'hand_face_score': EMAFilter(alpha=alpha),
-        }
+        # 설정 캐시 변수들
+        self._ema_alpha = 0.15
+        self._iris_diameter_mm = 11.5
+        self._camera_hfov_deg = 60.0
+        self._eye_distance_threshold_cm = 45.0
+        self._eye_sustain_seconds = 2.0
+        self._camera_frame_width = 1280
         
-        # 설정 로드
-        self._eye_monitoring_cfg = {}
-        if self.config:
-            try: self._eye_monitoring_cfg = self.config.get_posture_criteria().get("eye_monitoring", {})
-            except Exception: pass
-
-        self._iris_diameter_mm = float(self._eye_monitoring_cfg.get("iris_diameter_mm", 11.5))
-        self._camera_hfov_deg = float(self._eye_monitoring_cfg.get("camera_horizontal_fov_deg", 60.0))
-        self._eye_distance_threshold_cm = float(self._eye_monitoring_cfg.get("distance_threshold_cm", 45.0))
-        self._eye_sustain_seconds = float(self._eye_monitoring_cfg.get("sustain_seconds", 2.0))
+        self.ema_filters = {}
+        self.refresh_settings()
+        
         self._eye_close_start_time: Optional[float] = None
-        
+        logger.info(f"IndicatorCalculator 초기화 완료 (캐싱 활성)")
+
+    def refresh_settings(self):
+        """설정 파일에서 값을 읽어 내부 변수에 캐싱 (루프 오버헤드 방지)"""
+        if not self.config:
+            return
+
         try:
-            self._camera_frame_width = int(self.config.get_app_setting('camera_resolution_width', 1280)) if self.config else 1280
-        except Exception:
-            self._camera_frame_width = 1280
+            criteria = self.config.get_posture_criteria()
+            # EMA Alpha
+            self._ema_alpha = criteria.get("filters", {}).get("indicator_ema", {}).get("alpha", 0.15)
             
-        logger.info(f"IndicatorCalculator 초기화 완료 (alpha={alpha})")
+            # 홍채 모니터링 설정
+            eye_cfg = criteria.get("eye_monitoring", {})
+            self._iris_diameter_mm = float(eye_cfg.get("iris_diameter_mm", 11.5))
+            self._camera_hfov_deg = float(eye_cfg.get("camera_horizontal_fov_deg", 60.0))
+            self._eye_distance_threshold_cm = float(eye_cfg.get("distance_threshold_cm", 45.0))
+            self._eye_sustain_seconds = float(eye_cfg.get("sustain_seconds", 2.0))
+            
+            # 카메라 설정 (CameraWorker와 동일한 설정 키 사용 보장)
+            self._camera_frame_width = int(self.config.get_app_setting('camera_resolution_width', 1280))
+            
+            # 필터 갱신 (이미 존재하면 alpha만 업데이트, 없으면 생성)
+            filter_keys = [
+                'cheek_distance', 'eye_distance', 'face_vertical_length', 'head_height',
+                'shoulder_width', 'shoulder_tilt_deg', 'neck_offset', 'eye_line_tilt',
+                'chin_occlusion', 'hand_face_score'
+            ]
+            for key in filter_keys:
+                if key in self.ema_filters:
+                    self.ema_filters[key].alpha = self._ema_alpha
+                else:
+                    self.ema_filters[key] = EMAFilter(alpha=self._ema_alpha)
+                    
+            logger.debug("IndicatorCalculator 설정 캐시 갱신 완료")
+        except Exception as e:
+            logger.error(f"IndicatorCalculator 설정 갱신 실패: {e}")
 
     def calculate_cheek_distance(self, left_cheek, right_cheek) -> float:
         if left_cheek is None or right_cheek is None: return 0.0
@@ -92,6 +106,13 @@ class IndicatorCalculator:
     def calculate_eye_distance(self, left_eye, right_eye) -> float:
         if left_eye is None or right_eye is None: return 0.0
         return float(np.clip(self.geometry_helper.calculate_distance(np.array(left_eye), np.array(right_eye)), 0.0, 1.0))
+
+    def calculate_head_height(self, left_eye, right_eye, left_cheek, right_cheek) -> float:
+        """머리 높이 계산 (1.0 - Y좌표 중앙값)"""
+        pts = [p for p in [left_eye, right_eye, left_cheek, right_cheek] if p is not None]
+        if not pts: return 0.0
+        avg_y = sum(p[1] for p in pts) / len(pts)
+        return float(np.clip(1.0 - avg_y, 0.0, 1.0))
 
     def calculate_face_vertical_length(self, left_eye, right_eye, chin) -> float:
         if left_eye is None or right_eye is None or chin is None: return 0.0
@@ -170,22 +191,24 @@ class IndicatorCalculator:
         low_latency: bool = False,
         baseline_mode: bool = False
     ) -> Optional[PostureIndicators]:
-        """모든 자세 지표 계산"""
+        """모든 자세 지표 계산 (캐싱된 설정 사용)"""
         if (landmarks.get('left_cheek') is None or landmarks.get('right_cheek') is None):
             return None
 
         try:
-            # 필터 셋업
-            base_alpha = 0.15
-            if self.config:
-                try: base_alpha = self.config.get_posture_criteria().get("filters", {}).get("indicator_ema", {}).get("alpha", 0.15)
-                except Exception: pass
-            curr_alpha = 0.5 if low_latency else base_alpha
-            for f in self.ema_filters.values(): f.alpha = curr_alpha
+            # 저지연 모드 시에만 alpha 임시 조정
+            if low_latency:
+                for f in self.ema_filters.values(): f.alpha = 0.5
+            else:
+                for f in self.ema_filters.values(): f.alpha = self._ema_alpha
 
             # 1. 얼굴 지표
             cheek_dist_raw = self.calculate_cheek_distance(landmarks['left_cheek'], landmarks['right_cheek'])
             eye_dist_raw = self.calculate_eye_distance(landmarks.get('left_eye'), landmarks.get('right_eye'))
+            head_height_raw = self.calculate_head_height(
+                landmarks.get('left_eye'), landmarks.get('right_eye'),
+                landmarks.get('left_cheek'), landmarks.get('right_cheek')
+            )
             chin_pt = landmarks.get('chin_points')[0] if landmarks.get('chin_points') else None
             face_v_len_raw = self.calculate_face_vertical_length(landmarks.get('left_eye'), landmarks.get('right_eye'), chin_pt)
             eye_tilt_raw = self.calculate_eye_line_tilt(landmarks.get('left_eye'), landmarks.get('right_eye'))
@@ -213,10 +236,12 @@ class IndicatorCalculator:
             # 필터링
             if baseline_mode:
                 cheek_dist = cheek_dist_raw; eye_dist = eye_dist_raw; face_v_len = face_v_len_raw; eye_tilt = eye_tilt_raw
+                head_height = head_height_raw
                 sh_w = sh_w_raw; sh_tilt = sh_tilt_raw; neck_off = neck_off_raw
             else:
                 cheek_dist = self.ema_filters['cheek_distance'].process(cheek_dist_raw)
                 eye_dist = self.ema_filters['eye_distance'].process(eye_dist_raw)
+                head_height = self.ema_filters['head_height'].process(head_height_raw)
                 face_v_len = self.ema_filters['face_vertical_length'].process(face_v_len_raw)
                 eye_tilt = self.ema_filters['eye_line_tilt'].process(eye_tilt_raw)
                 if has_sh:
@@ -230,7 +255,7 @@ class IndicatorCalculator:
                 else:
                     sh_w = None; sh_tilt = None; neck_off = None
 
-            # 홍채 거리
+            # 홍채 거리 (비교적 정확한 물리 거리 산출)
             eye_screen_cm = None; eye_warning = False
             try:
                 l_px = landmarks.get('left_iris_diameter_px_raw') or landmarks.get('left_iris_diameter_px')
@@ -241,6 +266,7 @@ class IndicatorCalculator:
                     px_vals = [px for px in (l_px, r_px) if px and px > 0]
                     if px_vals:
                         z_cm_vals = [((self._iris_diameter_mm * f_px) / float(px)) / 10.0 for px in px_vals]
+                        # [복구] 사용자 요청에 따라 20cm 오프셋 재적용
                         eye_screen_cm = max(0.0, float(min(z_cm_vals)) - 20.0)
                         now = timestamp if timestamp > 0 else time.time()
                         if eye_screen_cm <= self._eye_distance_threshold_cm:
@@ -253,15 +279,8 @@ class IndicatorCalculator:
             chin_occ_raw = self.calculate_chin_occlusion(landmarks.get('chin_points', []), landmarks)
             near_score = self.calculate_hand_near_score(landmarks, face_center)
             
-            # self.config에서 scoring_config 로드 (오류 수정 지점)
-            h_f_weights = {"near_score": 0.5, "occlusion_score": 0.5}
-            if self.config:
-                try:
-                    scoring_cfg = self.config.get_frame_scoring_config()
-                    h_f_weights = scoring_cfg.get("hand_face_weights", h_f_weights)
-                except Exception: pass
-            
-            h_f_score_raw = h_f_weights.get("near_score", 0.5) * near_score + h_f_weights.get("occlusion_score", 0.5) * chin_occ_raw
+            # 가중치 또는 기본값 사용
+            h_f_score_raw = 0.5 * near_score + 0.5 * chin_occ_raw
             
             if baseline_mode: h_f_score = h_f_score_raw; chin_occ = chin_occ_raw
             else:
@@ -270,6 +289,7 @@ class IndicatorCalculator:
 
             return PostureIndicators(
                 cheek_distance=cheek_dist, eye_distance=eye_dist, face_vertical_length=face_v_len,
+                head_height=head_height,
                 shoulder_width=sh_w, shoulder_tilt_deg=sh_tilt, neck_offset=neck_off,
                 eye_line_tilt=eye_tilt, hand_near_face=self.calculate_hand_near_face(landmarks, face_center),
                 chin_occlusion=chin_occ, eye_screen_distance_cm=eye_screen_cm, eye_close_warning=eye_warning,
