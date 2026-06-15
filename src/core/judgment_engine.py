@@ -91,15 +91,7 @@ class JudgmentEngine:
         for res in results:
             p_type = res["posture_type"]
             
-            # 충돌 해결 1: 거북목(또는 화면 가까움)이 감지되면 기댄 자세 억제
-            if is_forward_head_triggered and p_type == PostureType.RECLINE.value:
-                res["triggered"] = False
-                res["likelihood"] = 0.0
-            
-            # 충돌 해결 2: 고개를 돌린 경우 고개 기울임 억제
-            if is_turned_head_triggered and p_type == PostureType.SIDE_TILT.value:
-                res["triggered"] = False
-                res["likelihood"] = 0.0
+            # [수정] 모든 억제 로직 제거 -> 다중 자세 동시 탐지 허용
 
             if res["triggered"]:
                 active_list.append(res)

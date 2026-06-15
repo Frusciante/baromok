@@ -303,7 +303,7 @@ class SessionManager:
     # ------------------------------------------------------------------
     def _calculate_stats_from_db(self, session_id: str, duration_seconds: int = 0) -> dict:
         try:
-            with self._get_conn() as conn:
+            with self._lock, self._get_conn() as conn:
                 # 1. 기본 카운트 및 배분 정보 (프레임 기반)
                 row = conn.execute(
                     """SELECT
@@ -404,9 +404,6 @@ class SessionManager:
         except Exception as e:
             logger.error(f"DB 통계 계산 실패: {e}", exc_info=True)
             return {}
-        except Exception as e:
-            logger.error(f"DB 통계 계산 실패: {e}", exc_info=True)
-            return {}
 
     def calculate_session_stats(self, session: SessionData) -> dict:
         """frame_records 기반 통계 계산 (JSON 마이그레이션 호환용)"""
@@ -469,7 +466,7 @@ class SessionManager:
     def load_recent_sessions(self, count: int = 30) -> List[SessionData]:
         """최근 N개 세션 로드 (통계만, frame_records 미포함)"""
         try:
-            with self._get_conn() as conn:
+            with self._lock, self._get_conn() as conn:
                 rows = conn.execute(
                     """SELECT session_id, start_time, end_time,
                               duration_seconds, total_frames, statistics, notes
@@ -536,7 +533,7 @@ class SessionManager:
     def load_sessions_by_date_range(self, start_date: str, end_date: str) -> List[SessionData]:
         """날짜 범위로 세션 로드 (start_date 이상 end_date 미만, ISO 형식)"""
         try:
-            with self._get_conn() as conn:
+            with self._lock, self._get_conn() as conn:
                 rows = conn.execute(
                     """SELECT session_id, start_time, end_time,
                               duration_seconds, total_frames, statistics, notes

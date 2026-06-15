@@ -163,7 +163,8 @@ class ReclineWorker(BaseJudgeWorker):
             expected_height = max(1e-6, self.baseline_manager.get_expected_height(proxy_val, is_shoulder=has_sh))
             deviation = (indicators.head_height - expected_height) / expected_height
 
-            if deviation >= primary_th or self._is_guarded(indicators):
+            # [수정] Y축 높이 기반 알고리즘은 고개 돌림/기울임에 독립적이므로 가드 체크 제거
+            if deviation >= primary_th:
                 self._emit_result(0.0)
                 return
 
