@@ -183,8 +183,18 @@ class ReclineWorker(BaseJudgeWorker):
         sh_tilt = False
         if indicators.shoulder_tilt_deg is not None:
             sh_tilt = abs(indicators.shoulder_tilt_deg) > self.guards.get("max_shoulder_tilt", 10.0)
-        
-        return side_tilt or eye_sym or cheek_sym or chin_off or sh_tilt
+
+        # 턱 당김(고개 끄덕임) 억제 가드:
+        # 뒤로 기대면 눈-턱 세로길이(face_vertical_length)는 거의 유지되지만,
+        # 턱을 당기면 고개가 숙여지며 이 값이 짧아진다. baseline 대비 일정 비율(%) 이상
+        # 감소하면 기댐이 아니라 끄덕임으로 보고 기댐 판정을 억제한다.
+        tuck_guard = False
+        fvl = getattr(indicators, "face_vertical_length", 0.0)
+        if fvl and fvl > 0:
+            fvl_change_pct = self.baseline_manager.calculate_change_percentage(fvl, "face_vertical_length")
+            tuck_guard = fvl_change_pct < self.guards.get("face_v_len_stable_threshold", -4.0)
+
+        return side_tilt or eye_sym or cheek_sym or chin_off or sh_tilt or tuck_guard
 
 
 class ChinRestWorker(BaseJudgeWorker):

@@ -23,7 +23,6 @@ class PostureType(Enum):
     FORWARD_HEAD = "forward_head"  # 거북목
     RECLINE = "recline"  # 기댄 자세
     CHIN_REST = "chin_rest_estimated"  # 턱 괸 자세
-    EYE_CLOSE = "eye_close"  # 화면과 눈 거리 가까움
     TURNED_HEAD = "turned_head"  # 고개 돌린 자세 (Yaw)
     SIDE_TILT = "side_tilt"  # 고개 기울인 자세 (Roll)
 

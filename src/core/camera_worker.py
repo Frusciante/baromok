@@ -315,9 +315,19 @@ class CameraWorker(QThread):
                             break
                 
                 if len(self._last_judgment_result.active_postures) > 1:
-                    active_names = [self._label_cache.get(p["posture_type"], p["posture_type"]) 
-                                    for p in self._last_judgment_result.active_postures]
-                    display_label = f"{', '.join(active_names)} 동시 감지"
+                    # likelihood 내림차순 정렬: 상위 3개만 줄바꿈 표시, 초과분은 "외 N건"
+                    sorted_postures = sorted(
+                        self._last_judgment_result.active_postures,
+                        key=lambda p: p.get("likelihood", 0.0),
+                        reverse=True,
+                    )
+                    names = [self._label_cache.get(p["posture_type"], p["posture_type"])
+                             for p in sorted_postures]
+                    shown = names[:3]
+                    remaining = len(names) - len(shown)
+                    if remaining > 0:
+                        shown.append(f"외 {remaining}건")
+                    display_label = "\n".join(shown)
 
         current_state = self.state_machine.get_current_state()
 

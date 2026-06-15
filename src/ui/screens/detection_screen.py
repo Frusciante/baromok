@@ -146,6 +146,7 @@ class DetectionScreen(QWidget):
         self.cheek_detail_label.setFont(app_font(self.theme_manager.scale_pixel(15)))
         self.cheek_detail_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
         layout.addWidget(self.cheek_detail_label)
+        self.cheek_detail_label.hide()  # 내부 디버그 지표: 사용자 화면에서 숨김 (필요 시 show()로 복구)
 
         self.distance_label = QLabel("화면 거리: - cm")
         self.distance_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -256,7 +257,7 @@ class DetectionScreen(QWidget):
     def _update_posture_status(self, state: str, posture_type: str, probability: float, display_label: str = ""):
         from src.config import get_config
         korean_label = display_label if display_label else get_config().get_posture_label(posture_type)
-        self.posture_label.setText(f"{korean_label} ({probability:.1%})")
+        self.posture_label.setText(korean_label)
         
         state_text = {"normal": "바른 자세", "warning": "경고", "bad_posture": "나쁜 자세", "NORMAL": "바른 자세", "WARNING": "경고", "BAD_POSTURE": "나쁜 자세"}
         self.status_label.setText(state_text.get(state, "상태 알 수 없음"))
