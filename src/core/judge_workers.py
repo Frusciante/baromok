@@ -163,11 +163,18 @@ class ReclineWorker(BaseJudgeWorker):
             expected_height = max(1e-6, self.baseline_manager.get_expected_height(proxy_val, is_shoulder=has_sh))
             deviation = (indicators.head_height - expected_height) / expected_height
 
-            if deviation >= primary_th or self._is_guarded(indicators):
+            # [수정] 가드 조건이 충족되면 점수를 0으로 만드는 대신, 판정 대상에서 제외하거나 감쇄함
+            # 기댄 자세는 편차가 음수(-)일 때 발생하므로 편차가 양수(+)면 바른 자세로 간주
+            if deviation >= primary_th:
                 self._emit_result(0.0)
                 return
 
             score = (abs(deviation) / max(0.01, self.sensitivity)) * self.warning_anchor
+            
+            # [추가] 가드 조건에 따른 점수 감쇄 (완전 무시 방지)
+            if self._is_guarded(indicators):
+                score *= 0.5 # 고개가 돌아가거나 기울어지면 기댄 자세 점수 50% 감쇄
+                
             self._emit_result(float(np.clip(score, 0.0, 1.0)))
         except Exception as e:
             logger.error(f"ReclineWorker 판정 실패: {e}")

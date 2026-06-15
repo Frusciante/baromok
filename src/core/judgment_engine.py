@@ -73,17 +73,6 @@ class JudgmentEngine:
         """
         워커들로부터 수집된 다중 결과를 처리하여 통합된 결과 생성
         """
-        # 1. 충돌 방지 우선순위 확인
-        is_forward_head_triggered = False # (구 eye_close 포함)
-        is_turned_head_triggered = False
-        
-        for res in results:
-            if res["triggered"]:
-                if res["posture_type"] == PostureType.FORWARD_HEAD.value:
-                    is_forward_head_triggered = True
-                elif res["posture_type"] == PostureType.TURNED_HEAD.value:
-                    is_turned_head_triggered = True
-
         active_list = []
         dominant_p = None
         max_likelihood = -1.0
@@ -91,15 +80,8 @@ class JudgmentEngine:
         for res in results:
             p_type = res["posture_type"]
             
-            # 충돌 해결 1: 거북목(또는 화면 가까움)이 감지되면 기댄 자세 억제
-            if is_forward_head_triggered and p_type == PostureType.RECLINE.value:
-                res["triggered"] = False
-                res["likelihood"] = 0.0
-            
-            # 충돌 해결 2: 고개를 돌린 경우 고개 기울임 억제
-            if is_turned_head_triggered and p_type == PostureType.SIDE_TILT.value:
-                res["triggered"] = False
-                res["likelihood"] = 0.0
+            # [수정] 충돌 해결/억제 로직 제거 -> 다중 자세 동시 탐지 허용
+            # 사용자가 기댄 채 고개를 돌린 경우 두 가지 모두를 데이터로 수집함
 
             if res["triggered"]:
                 active_list.append(res)
