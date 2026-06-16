@@ -12,6 +12,8 @@ from pydantic_settings import BaseSettings
 from pydantic import Field
 import logging
 
+from src.utils.paths import get_data_path, CRITERIA_JSON_PATH
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,12 +33,7 @@ class PostureSettings(BaseSettings):
             json.JSONDecodeError: JSON 파싱 실패
             ValueError: 스키마 검증 실패
         """
-        # src/config.py -> src/ -> baromok/ -> data/
-        criteria_path = (
-            Path(__file__).parent.parent
-            / "data"
-            / "posture_definition_criteria.json"
-        )
+        criteria_path = CRITERIA_JSON_PATH
 
         if not criteria_path.exists():
             raise FileNotFoundError(

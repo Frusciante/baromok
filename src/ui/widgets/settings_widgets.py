@@ -21,6 +21,7 @@ import logging
 
 from src.ui.styles.theme import Colors, ThemeManager
 from src.ui.styles.font_loader import app_font
+from src.utils.paths import UI_ASSETS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -1001,7 +1002,7 @@ class CorrectPostureGuideWidget(QWidget):
         # 1. 이미지 영역 (고정 비율 축소)
         img_label = QLabel()
         img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        img_path = Path("assets/ui/correct_posture.png")
+        img_path = UI_ASSETS_DIR / "correct_posture.png"
         if img_path.exists():
             pixmap = QPixmap(str(img_path))
             if not pixmap.isNull():

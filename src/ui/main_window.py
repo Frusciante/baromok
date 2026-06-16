@@ -24,6 +24,7 @@ import sys
 from src.utils.logger import get_logger
 from src.ui.styles.theme import ThemeManager, Colors, FontSize, Spacing
 from src.ui.styles.font_loader import app_font
+from src.utils.paths import UI_ASSETS_DIR
 
 logger = get_logger(__name__)
 
@@ -59,14 +60,13 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 1152, 768)
         self.setFixedSize(1152, 768)
 
-        logo_path = Path(__file__).resolve().parents[2] / "assets" / "ui" / "바로목로고.png"
+        logo_path = UI_ASSETS_DIR / "바로목로고.png"
         if logo_path.exists():
             self.setWindowIcon(QIcon(str(logo_path)))
 
         # 프로그램 아이콘 및 작업 표시줄 설정
-        current_dir = Path(__file__).resolve().parent # src/ui 폴더 위치
         # 프로젝트 루트 폴더 기준으로 assets/ui/바로목로고.png 경로 지정
-        logo_path = current_dir.parent.parent / "assets" / "ui" / "바로목로고.png"
+        logo_path = UI_ASSETS_DIR / "바로목로고.png"
 
         if logo_path.exists():
             # 시스템 기본 크기(보통 32x32나 48x48)에 맞춰 배율을 적용해 아이콘 생성
@@ -154,8 +154,7 @@ class MainWindow(QMainWindow):
         back_btn.setVisible(False)
         layout.addWidget(back_btn)
 
-        icon_dir = Path(__file__).resolve().parents[2] / "assets" / "ui"
-        self._icon_dir = icon_dir
+        self._icon_dir = UI_ASSETS_DIR
 
         # 화면별 타이틀 아이콘 + 타이틀 (아이콘-텍스트 간격 5px)
         title_layout = QHBoxLayout()
@@ -183,8 +182,8 @@ class MainWindow(QMainWindow):
         def create_header_button(text: str, icon_name: str, callback):
             btn = QToolButton()
             btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-            default_icon = icon_dir / icon_name
-            purple_icon = icon_dir / (Path(icon_name).stem + "_purple.png")
+            default_icon = self._icon_dir / icon_name
+            purple_icon = self._icon_dir / (Path(icon_name).stem + "_purple.png")
             btn.setIcon(QIcon(str(default_icon)))
             btn.setIconSize(QSize(int(34 * self.dpi_scale), int(34 * self.dpi_scale)))
             btn.setText(text)

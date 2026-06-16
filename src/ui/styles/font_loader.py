@@ -10,10 +10,11 @@ from PyQt6.QtGui import QFontDatabase, QFont
 from PyQt6.QtWidgets import QApplication
 
 from src.utils.logger import get_logger
+from src.utils.paths import ASSETS_DIR
 
 logger = get_logger(__name__)
 
-FONT_DIR = Path(__file__).resolve().parents[3] / "assets" / "fonts"
+FONT_DIR = ASSETS_DIR / "fonts"
 BUNDLED_FAMILY = "Pretendard"
 
 # 굵기별 폰트 파일 (모두 같은 패밀리 "Pretendard")

@@ -11,6 +11,7 @@ from PyQt6.QtMultimedia import QSoundEffect
 from PyQt6.QtWidgets import QApplication
 
 from src.utils.logger import get_logger
+from src.utils.paths import SOUNDS_DIR
 
 logger = get_logger(__name__)
 
@@ -22,9 +23,7 @@ class SoundManager:
         """SoundManager 초기화"""
         self._volume_percent = 70
         self._effect = None
-        self._alert_wav = (
-            Path(__file__).resolve().parents[2] / "assets" / "sounds" / "alert.wav"
-        )
+        self._alert_wav = SOUNDS_DIR / "alert.wav"
 
         # QApplication이 존재하고 alert.wav 파일이 있으면 QSoundEffect 초기화
         if QApplication.instance() is not None and self._alert_wav.exists():

@@ -13,29 +13,32 @@ matplotlib.use("QtAgg")  # PyQt6 환경에서 안정적으로 동작하는 Qt �
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
 from pathlib import Path
-
-_font_dir = Path(__file__).resolve().parents[3] / "assets" / "fonts"
-_bundled_fonts = ["Pretendard-Regular.otf", "Pretendard-Bold.otf"]
-_loaded_any = False
-for _f in _bundled_fonts:
-    _fp = _font_dir / _f
-    if _fp.exists():
-        font_manager.fontManager.addfont(str(_fp))
-        _loaded_any = True
-if _loaded_any:
-    plt.rcParams["font.sans-serif"] = ["Pretendard", "Malgun Gothic", "DejaVu Sans"]
-else:
-    plt.rcParams["font.sans-serif"] = ["Malgun Gothic", "DejaVu Sans"]
-plt.rcParams["axes.unicode_minus"] = False
-
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 import logging
 
 from src.ui.styles.theme import ThemeManager, Colors
+from src.utils.paths import ASSETS_DIR
 
 logger = logging.getLogger(__name__)
+
+# 폰트 설정
+_font_dir = ASSETS_DIR / "fonts"
+_bundled_fonts = ["Pretendard-Regular.otf", "Pretendard-Bold.otf"]
+_loaded_any = False
+
+for _f in _bundled_fonts:
+    _fp = _font_dir / _f
+    if _fp.exists():
+        font_manager.fontManager.addfont(str(_fp))
+        _loaded_any = True
+
+if _loaded_any:
+    plt.rcParams["font.sans-serif"] = ["Pretendard", "Malgun Gothic", "DejaVu Sans"]
+else:
+    plt.rcParams["font.sans-serif"] = ["Malgun Gothic", "DejaVu Sans"]
+plt.rcParams["axes.unicode_minus"] = False
 
 
 class CalibrationScatterChart(QWidget):

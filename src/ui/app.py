@@ -26,6 +26,7 @@ import sys
 
 from src.utils.logger import get_logger
 from src.config import ConfigManager, SettingsConfig
+from src.utils.paths import MODELS_DIR, get_data_path
 from src.core.landmark_extractor import LandmarkExtractor
 from src.core.indicator_calculator import IndicatorCalculator
 from src.core.baseline_manager import BaselineManager
@@ -101,7 +102,7 @@ class baromokApp:
 
         # 엔진 컴포넌트 초기화 (Phase 2)
         logger.info("엔진 컴포넌트 초기화...")
-        self.landmark_extractor = LandmarkExtractor("assets/models")
+        self.landmark_extractor = LandmarkExtractor(str(MODELS_DIR))
         self.indicator_calculator = IndicatorCalculator(self.config)
         self.baseline_manager = BaselineManager(self.config)
         # ⬇ [추가] 앱 시작 시 기존 베이스라인 로드 시도
@@ -134,7 +135,7 @@ class baromokApp:
 
         # 설정 로드 (ConfigManager를 전달하여 기본값 처리)
         self.settings_config = SettingsConfig.load_from_json(
-            "data/config.json", self.config
+            str(get_data_path("data/config.json")), self.config
         )
         self._settings_dirty = False
         logger.info("사용자 설정 로드 완료")
@@ -296,7 +297,7 @@ class baromokApp:
         if not force and not self._settings_dirty:
             return
 
-        self.settings_config.save_to_json("data/config.json")
+        self.settings_config.save_to_json(str(get_data_path("data/config.json")))
         self._settings_dirty = False
         if reason:
             logger.info("설정 저장 완료 (%s)", reason)
