@@ -51,9 +51,6 @@ venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 ```
 
-### 모델 파일 다운로드
-필요한 모델 파일(`.task`)을 지정된 디렉토리에 배치하십시오. 상세 목록은 프로젝트 구조를 참조하십시오.
-
 ## 사용 방법
 
 ### 애플리케이션 실행
