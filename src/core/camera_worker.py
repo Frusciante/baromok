@@ -318,6 +318,9 @@ class CameraWorker(QThread):
                     active_names = [self._label_cache.get(p["posture_type"], p["posture_type"]) 
                                     for p in self._last_judgment_result.active_postures]
                     display_label = f"{', '.join(active_names)} 동시 감지"
+                else:
+                    # 감지된 자세가 1개뿐이거나 없는 경우 별도의 '동시 감지' 문구 필요 없음
+                    display_label = ""
 
         current_state = self.state_machine.get_current_state()
 

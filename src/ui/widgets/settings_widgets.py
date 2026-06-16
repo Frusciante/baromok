@@ -847,7 +847,7 @@ class SensitivitySettingsWidget(QWidget):
         title_main.setStyleSheet(f"color: {Colors.PURPLE_PRIMARY.value}; {FLAT_LABEL_STYLE}")
 
         self.reset_btn = QPushButton("감도 초기화")
-        self.reset_btn.setFixedSize(self.theme_manager.scale_pixel(100), self.theme_manager.scale_pixel(32))
+        self.reset_btn.setFixedSize(self.theme_manager.scale_pixel(115), self.theme_manager.scale_pixel(32))
         self.reset_btn.setFont(app_font(self.theme_manager.scale_pixel(11), QFont.Weight.Bold))
         self.reset_btn.setStyleSheet(f"""
             QPushButton {{
