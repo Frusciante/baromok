@@ -32,7 +32,7 @@ MediaPipe 기반 실시간 상체 자세 분석 및 PyQt UI를 활용한 데스�
 ## 설치
 
 ### 설치 파일 다운로드 (Windows)
-<a href="https://github.com/Frusciante/baromok/releases">Release 페이지에서 최신 버전 다운로드"</a>
+<a href="https://github.com/Frusciante/baromok/releases">Release 페이지에서 최신 버전 다운로드</a>
 
 ### 저장소 클론
 ```bash
