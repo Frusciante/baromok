@@ -789,7 +789,8 @@ class SensitivitySettingsWidget(QWidget):
 
         # 자세 키 리스트 (거북목 통합 완료)
         self.posture_keys = [
-            ("forward_head", "거북목"),
+            ("forward_head", "거북목 감도"),
+            ("forward_head_distance_threshold", "거북목 감지 거리"),
             ("recline", "기댄 자세"),
             ("chin_rest_sensitivity", "턱 괸 자세"),
             ("turned_head_sensitivity", "고개 돌림"),
@@ -799,10 +800,16 @@ class SensitivitySettingsWidget(QWidget):
         # 내부 값 저장소
         self.values = {}
         for key, _ in self.posture_keys:
-            val = self.config.get(key if "sensitivity" in key else f"{key}_sensitivity")
+            val = self.config.get(key if ("sensitivity" in key or "threshold" in key) else f"{key}_sensitivity")
             if val is None:
-                val = 0.04 if key == "recline" else 0.10
-            self.values[key] = self._clamp(val, *self.RANGE)
+                if key == "recline": val = 0.04
+                elif key == "forward_head_distance_threshold": val = 45.0
+                else: val = 0.10
+            
+            if key == "forward_head_distance_threshold":
+                self.values[key] = max(30.0, min(80.0, float(val)))
+            else:
+                self.values[key] = self._clamp(float(val), *self.RANGE)
 
         self.sliders = {}
         self.labels = {}
@@ -826,7 +833,7 @@ class SensitivitySettingsWidget(QWidget):
         """UI 구성"""
         layout = QVBoxLayout()
         layout.setContentsMargins(11, 10, 11, 10)
-        layout.setSpacing(6)
+        layout.setSpacing(5) # 간격 약간 축소
 
         self.setObjectName("settings_card")
         self.setStyleSheet(
@@ -858,37 +865,50 @@ class SensitivitySettingsWidget(QWidget):
         header_layout.addWidget(self.reset_btn)
         layout.addLayout(header_layout)
 
-        # 5개 슬라이더 생성
+        # 6개 슬라이더 생성
         for key, name in self.posture_keys:
-            slider, label = self._create_slider_row(
-                name, self.values[key], *self.RANGE,
-                lambda pos, k=key: self._on_slider_changed(k, pos)
-            )
+            if key == "forward_head_distance_threshold":
+                # 거리 임계값은 30~80cm 범위 사용
+                slider, label = self._create_slider_row(
+                    name, self.values[key], 30.0, 80.0,
+                    lambda pos, k=key: self._on_distance_slider_changed(k, pos),
+                    unit="cm"
+                )
+            else:
+                slider, label = self._create_slider_row(
+                    name, self.values[key], *self.RANGE,
+                    lambda pos, k=key: self._on_slider_changed(k, pos)
+                )
             self.sliders[key] = slider
             self.labels[key] = label
             layout.addLayout(self._last_row_layout)
 
         # 하단 힌트
-        description = QLabel("낮음(1): 민감하게 반응 | 높음(100): 확실할 때만 반응")
-        description.setFont(app_font(self.theme_manager.scale_pixel(12)))
+        description = QLabel("감도: 낮음(민감) ~ 높음(둔감) | 거리: 낮을수록 가까울 때 알림")
+        description.setFont(app_font(self.theme_manager.scale_pixel(11)))
         description.setStyleSheet(f"color: {Colors.GRAY_DARK.value}; {FLAT_LABEL_STYLE}")
         description.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(description)
 
         self.setLayout(layout)
 
-    def _create_slider_row(self, title, initial_val, lo, hi, on_changed_callback):
+    def _create_slider_row(self, title, initial_val, lo, hi, on_changed_callback, unit=None):
         row_layout = QVBoxLayout()
-        row_layout.setSpacing(2)
+        row_layout.setSpacing(1)
 
         header = QHBoxLayout()
         title_label = QLabel(title)
-        title_label.setFont(app_font(self.theme_manager.scale_pixel(13), QFont.Weight.Bold))
+        title_label.setFont(app_font(self.theme_manager.scale_pixel(12), QFont.Weight.Bold))
         title_label.setStyleSheet(f"color: #333333; {FLAT_LABEL_STYLE}")
 
         display_val = self._to_slider(initial_val, lo, hi)
-        value_label = QLabel(f"{display_val}")
-        value_label.setFont(app_font(self.theme_manager.scale_pixel(12), QFont.Weight.Bold))
+        if unit:
+            text = f"{int(initial_val)}{unit}"
+        else:
+            text = f"{display_val}"
+            
+        value_label = QLabel(text)
+        value_label.setFont(app_font(self.theme_manager.scale_pixel(11), QFont.Weight.Bold))
         value_label.setStyleSheet(f"color: #4333A6; {FLAT_LABEL_STYLE}")
 
         header.addWidget(title_label)
@@ -897,7 +917,7 @@ class SensitivitySettingsWidget(QWidget):
         row_layout.addLayout(header)
 
         slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        slider.setFixedHeight(self.theme_manager.scale_pixel(24))
+        slider.setFixedHeight(self.theme_manager.scale_pixel(20))
         slider.setMinimum(1)
         slider.setMaximum(100)
         slider.setValue(display_val)
@@ -913,31 +933,51 @@ class SensitivitySettingsWidget(QWidget):
         self.labels[key].setText(f"{pos}")
         self._emit_value_changed()
 
+    def _on_distance_slider_changed(self, key: str, pos: int):
+        val = self._from_slider(pos, 30.0, 80.0)
+        self.values[key] = val
+        self.labels[key].setText(f"{int(val)}cm")
+        self._emit_value_changed()
+
     def _emit_value_changed(self):
         res = {}
         for k, v in self.values.items():
-            key_name = k if "sensitivity" in k else f"{k}_sensitivity"
-            res[key_name] = v
+            if k == "forward_head_distance_threshold":
+                res[k] = v
+            else:
+                key_name = k if "sensitivity" in k else f"{k}_sensitivity"
+                res[key_name] = v
         self.value_changed_signal.emit(res)
 
     def get_value(self) -> dict:
         res = {}
         for k, v in self.values.items():
-            key_name = k if "sensitivity" in k else f"{k}_sensitivity"
-            res[key_name] = v
+            if k == "forward_head_distance_threshold":
+                res[k] = v
+            else:
+                key_name = k if "sensitivity" in k else f"{k}_sensitivity"
+                res[key_name] = v
         return res
 
     def set_value(self, config: dict):
         for key, _ in self.posture_keys:
-            key_name = key if "sensitivity" in key else f"{key}_sensitivity"
+            key_name = key if ("sensitivity" in key or "threshold" in key) else f"{key}_sensitivity"
             if key_name in config:
-                val = self._clamp(config[key_name], *self.RANGE)
-                self.values[key] = val
-                display_val = self._to_slider(val, *self.RANGE)
+                val = config[key_name]
+                if key == "forward_head_distance_threshold":
+                    val = max(30.0, min(80.0, float(val)))
+                    self.values[key] = val
+                    display_val = self._to_slider(val, 30.0, 80.0)
+                    self.labels[key].setText(f"{int(val)}cm")
+                else:
+                    val = self._clamp(float(val), *self.RANGE)
+                    self.values[key] = val
+                    display_val = self._to_slider(val, *self.RANGE)
+                    self.labels[key].setText(f"{display_val}")
+                
                 self.sliders[key].blockSignals(True)
                 self.sliders[key].setValue(display_val)
                 self.sliders[key].blockSignals(False)
-                self.labels[key].setText(f"{display_val}")
 
 
 class CorrectPostureGuideWidget(QWidget):

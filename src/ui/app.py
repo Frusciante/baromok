@@ -838,6 +838,7 @@ class baromokApp:
         logger.info("설정값 적용:")
         logger.info(f"  - 알림 활성화: {self.settings_config.notification_enabled}")
         logger.info(f"  - 거북목 감도: {self.settings_config.forward_head_sensitivity:.3f}")
+        logger.info(f"  - 거북목 거리: {self.settings_config.forward_head_distance_threshold}cm")
         logger.info(f"  - 기댄자세 감도: {self.settings_config.recline_sensitivity:.3f}")
         logger.info(f"  - 턱괸자세 감도: {self.settings_config.chin_rest_sensitivity:.3f}")
         logger.info(f"  - 화면가까움 감도: {self.settings_config.eye_close_sensitivity:.3f}")
@@ -850,18 +851,25 @@ class baromokApp:
             self.settings_config.recline_sensitivity,
         )
 
-        # 2. 멀티스레드 워커 감도 및 캐시 갱신 요청
+        # 2. 지표 계산기(IndicatorCalculator) 임계값 업데이트
+        if hasattr(self, "indicator_calculator"):
+            self.indicator_calculator.set_eye_distance_threshold(
+                self.settings_config.forward_head_distance_threshold
+            )
+
+        # 3. 멀티스레드 워커 감도 및 캐시 갱신 요청
         if hasattr(self, "camera_worker") and self.camera_worker:
-            sensitivity_map = {
+            settings_map = {
                 "forward_head": self.settings_config.forward_head_sensitivity,
+                "forward_head_distance_threshold": self.settings_config.forward_head_distance_threshold,
                 "recline": self.settings_config.recline_sensitivity,
                 "chin_rest_estimated": self.settings_config.chin_rest_sensitivity,
                 "eye_close": self.settings_config.eye_close_sensitivity,
                 "turned_head": self.settings_config.turned_head_sensitivity,
                 "side_tilt": self.settings_config.side_tilt_sensitivity
             }
-            # 워커 감도 갱신
-            self.camera_worker.judge_manager.update_sensitivities(sensitivity_map)
+            # 워커 감도 및 임계값 갱신
+            self.camera_worker.judge_manager.update_sensitivities(settings_map)
             # [유저 요청] 루프 내 설정 재사용을 위한 플래그 설정
             self.camera_worker.mark_settings_dirty()
 

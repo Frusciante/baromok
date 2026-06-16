@@ -77,7 +77,13 @@ class IndicatorCalculator:
             eye_cfg = criteria.get("eye_monitoring", {})
             self._iris_diameter_mm = float(eye_cfg.get("iris_diameter_mm", 11.5))
             self._camera_hfov_deg = float(eye_cfg.get("camera_horizontal_fov_deg", 60.0))
-            self._eye_distance_threshold_cm = float(eye_cfg.get("distance_threshold_cm", 45.0))
+            
+            # dist_threshold가 외부에서 명시적으로 설정되지 않았을 때만 config에서 로드
+            if not hasattr(self, "_eye_distance_threshold_override"):
+                self._eye_distance_threshold_cm = float(eye_cfg.get("distance_threshold_cm", 45.0))
+            else:
+                self._eye_distance_threshold_cm = self._eye_distance_threshold_override
+
             self._eye_sustain_seconds = float(eye_cfg.get("sustain_seconds", 2.0))
             
             # 카메라 설정 (CameraWorker와 동일한 설정 키 사용 보장)
@@ -98,6 +104,12 @@ class IndicatorCalculator:
             logger.debug("IndicatorCalculator 설정 캐시 갱신 완료")
         except Exception as e:
             logger.error(f"IndicatorCalculator 설정 갱신 실패: {e}")
+
+    def set_eye_distance_threshold(self, val: float):
+        """외부에서 거리 임계값 동적 설정"""
+        self._eye_distance_threshold_override = float(val)
+        self._eye_distance_threshold_cm = float(val)
+        logger.debug(f"IndicatorCalculator: 거리 임계값 변경 -> {val}cm")
 
     def calculate_cheek_distance(self, left_cheek, right_cheek) -> float:
         if left_cheek is None or right_cheek is None: return 0.0
