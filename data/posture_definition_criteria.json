@@ -1,0 +1,250 @@
+{
+  "version": "1.1.0",
+  "domain": "posture_detection",
+  "description": "Bad posture decision criteria and thresholds (v1.0 algorithm integrated)",
+  "mediapipe": {
+    "face": {
+      "min_detection_confidence": 0.5,
+      "min_presence_confidence": 0.5,
+      "min_tracking_confidence": 0.5
+    },
+    "pose": {
+      "min_detection_confidence": 0.5,
+      "min_presence_confidence": 0.5,
+      "min_tracking_confidence": 0.5
+    },
+    "hand": {
+      "min_detection_confidence": 0.5,
+      "min_presence_confidence": 0.5,
+      "min_tracking_confidence": 0.5
+    }
+  },
+  "camera": {
+    "h_fov_deg": 60.0,
+    "focal_length_px": null,
+    "iris_diameter_cm": 1.17,
+    "close_threshold_cm": 45.0,
+    "close_sustain_seconds": 2.0
+  },
+  "filters": {
+    "one_euro": {
+      "min_cutoff": 0.7,
+      "beta": 0,
+      "d_cutoff": 5.0
+    },
+    "ema": {
+      "alpha": 0.15
+    },
+    "indicator_ema": {
+      "alpha": 0.15
+    }
+  },
+  "baseline": {
+    "capture": {
+      "method": "distance_movement_ransac",
+      "wait_seconds": 3.0,
+      "collect_seconds": 1.0,
+      "expected_samples": 5,
+      "minimum_valid_frames": 30
+    },
+    "metrics": [
+      "shoulder_width",
+      "cheek_distance",
+      "eye_distance",
+      "head_height"
+    ]
+  },
+  "global_rules": {
+    "state_machine": {
+      "states": [
+        "NORMAL",
+        "WARNING",
+        "BAD_POSTURE"
+      ],
+      "transitions": [
+        "NORMAL->WARNING",
+        "WARNING->BAD_POSTURE",
+        "BAD_POSTURE->WARNING",
+        "WARNING->NORMAL"
+      ],
+      "thresholds": {
+        "warning": 0.45,
+        "bad_posture": 0.60
+      },
+      "temporal_validation": {
+        "min_duration_sec": 1.5,
+        "min_state_hold_sec": 1.8
+      }
+    }
+  },
+  "posture_types": {
+    "recline": {
+      "display_label": "기댄 자세",
+      "alert_message": "몸이 뒤로 기울었어요. 허리를 세워 바르게 앉아 주세요.",
+      "primary_conditions": {
+        "deviation": {
+          "operator": "<",
+          "threshold": 0.0
+        }
+      },
+      "guards": {
+        "max_eye_tilt": 12.0,
+        "max_shoulder_tilt": 10.0,
+        "max_eye_symmetry_ratio": 0.12,
+        "max_cheek_symmetry_ratio": 0.12,
+        "max_chin_alignment_offset": 0.15,
+        "max_eye_turn_percent": -8.0,
+        "face_v_len_stable_threshold": -4.0
+      },
+      "sustain_seconds": 1.5
+    },
+    "forward_head": {
+      "display_label": "거북목",
+      "alert_message": "거북목이 감지됐어요. 고개를 뒤로 당겨 화면과 맞춰 주세요.",
+      "primary_conditions": {
+        "deviation": {
+          "operator": ">",
+          "threshold": 0.0
+        }
+      },
+      "guards": {
+        "max_eye_tilt": 12.0,
+        "max_shoulder_tilt": 10.0,
+        "max_eye_symmetry_ratio": 0.15,
+        "max_cheek_symmetry_ratio": 0.15,
+        "max_chin_alignment_offset": 0.15,
+        "max_shoulder_decrease_pct": -15.0
+      },
+      "sustain_seconds": 1.5
+    },
+    "chin_rest_estimated": {
+      "display_label": "턱 괸 자세",
+      "alert_message": "턱을 괴고 있어요. 손을 내리고 바르게 앉아 주세요.",
+      "primary_conditions": {
+        "eye_line_tilt_deg": {
+          "operator": ">=",
+          "threshold": 8
+        },
+        "shoulder_tilt_deg": {
+          "operator": ">=",
+          "threshold": 6
+        },
+        "neck_offset_baseline_change_percent": {
+          "operator": ">=",
+          "threshold_percent": 10
+        }
+      },
+      "auxiliary_signals": {
+        "hand_near_face": {
+          "distance_metric": "distance(hand_point, face_center)",
+          "threshold": 0.12,
+          "stability": {
+            "window_seconds": 2,
+            "frame_ratio_threshold": 0.6
+          }
+        },
+        "chin_occlusion": {
+          "occlusion_ratio_formula": "hand_pixels_in_lower_face / lower_face_pixels",
+          "threshold": 0.25,
+          "fallback": {
+            "landmark_count_near_chin": {
+              "operator": ">=",
+              "threshold": 2
+            }
+          }
+        },
+        "hand_face_score": {
+          "formula": "0.5 * near_score + 0.5 * occlusion_score"
+        }
+      },
+      "sustain_seconds": 2
+    }
+    ,
+    "eye_close": {
+      "display_label": "화면 가까움",
+      "alert_message": "화면과 너무 가까워요. 잠시 뒤로 물러나 주세요.",
+      "primary_conditions": {
+        "distance_threshold_cm": {
+          "operator": "<=",
+          "threshold": 45.0
+        }
+      },
+      "sustain_seconds": 2.0
+    },
+    "turned_head": {
+      "display_label": "고개 돌린 자세",
+      "alert_message": "고개가 돌아갔어요. 정면을 바라봐 주세요.",
+      "sustain_seconds": 1.5,
+      "thresholds": {
+        "eye_symmetry": 0.4,
+        "cheek_symmetry": 0.4,
+        "chin_alignment": 0.3
+      }
+    },
+    "side_tilt": {
+      "display_label": "고개 기울인 자세",
+      "alert_message": "고개가 기울었어요. 머리를 수직으로 세워 주세요.",
+      "primary_conditions": {
+        "eye_line_tilt_deg": {
+          "operator": ">=",
+          "threshold": 27.0
+        }
+      },
+      "sustain_seconds": 2.0
+    }
+  },
+  "frame_scoring": {
+    "score_range": [
+      0.0,
+      1.0
+    ],
+    "likelihood_weights": {
+      "forward_head": {
+        "deviation": 1.0
+      },
+      "recline": {
+        "deviation": 1.0
+      },
+      "chin_rest": {
+        "eye": 0.35,
+        "shoulder": 0.2,
+        "neck": 0.15,
+        "hand": 0.3
+      }
+    },
+    "ratio_scale_k": 1.5,
+    "score_normalization_max": 2.0,
+    "warning_anchor": 0.5,
+    "hand_face_weights": {
+      "near_score": 0.5,
+      "occlusion_score": 0.5
+    },
+    "sensitivities": {
+      "forward_head": 0.10,
+      "recline": 0.04,
+      "neck_offset": 10.0
+    }
+  },
+  "eye_monitoring": {
+    "iris_diameter_mm": 11.7,
+    "camera_horizontal_fov_deg": 60.0,
+    "distance_threshold_cm": 45.0,
+    "sustain_seconds": 2.0
+  },
+  "event_judgment": {
+    "immediate": "frame_threshold_exceeded",
+    "confirmed": "sustained_for_n_seconds"
+  },
+  "message_policy": {
+    "style": "use_estimation_phrasing",
+    "examples": [
+      "턱 괸 자세 의심",
+      "거북목 경향"
+    ]
+  },
+  "shoulder_guard": {
+    "shoulder_bottom_threshold": 0.98,
+    "chin_low_threshold": 0.83,
+    "shoulder_top_threshold": 0.01
+  }
+}
