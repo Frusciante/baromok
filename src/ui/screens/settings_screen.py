@@ -1,9 +1,11 @@
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget, QMessageBox
+    QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout,
+    QGridLayout, QWidget, QMessageBox
 )
 from src.ui.styles.theme import Colors, ThemeManager
+from src.ui.styles.font_loader import app_font
 from src.config import get_config
 
 class SettingsScreen(QWidget):
@@ -28,22 +30,13 @@ class SettingsScreen(QWidget):
             PopupSettingsWidget,
             SoundSettingsWidget,
             SensitivitySettingsWidget,
+            StretchingSettingsWidget,
         )
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(14)
-
-        title = QLabel("환경 설정")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFont(
-            QFont("Noto Sans KR", self.theme_manager.scale_pixel(30), QFont.Weight.Bold)
-        )
-        title.setStyleSheet(
-            f"color: {Colors.WHITE.value}; background-color: {Colors.PURPLE_PRIMARY.value}; "
-            f"padding: {self.theme_manager.scale_pixel(10)}px; border-radius: 14px;"
-        )
-        layout.addWidget(title)
+        # 위아래 레이아웃 마진 및 위젯 간 스페이싱 약 15% 축소
+        layout.setContentsMargins(14, 6, 14, 6)
+        layout.setSpacing(6)
 
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -51,99 +44,88 @@ class SettingsScreen(QWidget):
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         scroll_content = QWidget()
-        scroll_layout = QVBoxLayout()
-        scroll_layout.setContentsMargins(0, 0, 0, 0)
-        scroll_layout.setSpacing(12)
-        scroll_content.setLayout(scroll_layout)
+        grid_layout = QGridLayout()
+        grid_layout.setContentsMargins(0, 0, 0, 0)
+        grid_layout.setHorizontalSpacing(8)
+        grid_layout.setVerticalSpacing(5) # 그리드 세로 간격 축소 (8 -> 5)
+        scroll_content.setLayout(grid_layout)
 
-        categories = [
-            "알림 설정",
-            "소리 설정",
-            "팝업 설정",
-            "감도 설정",
-            "컴퓨터 부팅 시\n프로그램 자동 시작",
-        ]
-        category_widget_classes = [
-            NotificationSettingsWidget,
-            SoundSettingsWidget,
-            PopupSettingsWidget,
-            SensitivitySettingsWidget,
-            AutoStartSettingsWidget,
+        # (카테고리명, 위젯 클래스, grid 위치 (row, col, rowspan, colspan))
+        category_specs = [
+            ("알림 설정", NotificationSettingsWidget, (0, 0, 1, 1)),
+            ("소리 설정", SoundSettingsWidget, (0, 1, 1, 1)),
+            ("팝업 설정", PopupSettingsWidget, (1, 0, 1, 1)),
+            ("감도 설정", SensitivitySettingsWidget, (1, 1, 1, 1)),
+            ("스트레칭 알림", StretchingSettingsWidget, (2, 0, 1, 1)),
+            ("자동 감지 시작", AutoStartSettingsWidget, (2, 1, 1, 1)),
         ]
 
-        for cat, widget_class in zip(categories, category_widget_classes):
+        for cat, widget_class, (row, col, rspan, cspan) in category_specs:
             row_frame = QFrame()
             row_frame.setStyleSheet(
                 f"background-color: {Colors.WHITE.value}; border: 1px solid #E3E0F2; border-radius: {self.theme_manager.scale_pixel(8)}px;"
             )
-            row_frame.setMinimumHeight(self.theme_manager.scale_pixel(220))
+            
+            # 기본 프레임 최소 높이 축소 (126 -> 108)
+            row_frame.setMinimumHeight(self.theme_manager.scale_pixel(108))
             row_layout = QHBoxLayout()
-            row_layout.setContentsMargins(16, 16, 16, 16)
-            row_layout.setSpacing(16)
+            row_layout.setContentsMargins(8, 6, 8, 6) # 내부 패딩 위아래 축소
+            row_layout.setSpacing(9)
             row_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
             category_label = QLabel(cat)
-            category_label.setFixedWidth(self.theme_manager.scale_pixel(210))
+            category_label.setFixedWidth(self.theme_manager.scale_pixel(97))
             category_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            category_label.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(16), QFont.Weight.Bold))
+            category_label.setFont(app_font(self.theme_manager.scale_pixel(13), QFont.Weight.Bold))
             category_label.setStyleSheet(
                 f"background-color: {Colors.PURPLE_PRIMARY.value}; color: {Colors.WHITE.value}; "
-                f"border-radius: {self.theme_manager.scale_pixel(10)}px; padding: {self.theme_manager.scale_pixel(10)}px;"
+                f"border-radius: {self.theme_manager.scale_pixel(8)}px; padding: {self.theme_manager.scale_pixel(5)}px;"
             )
+            category_label.setWordWrap(True)
 
             widget = widget_class(self.theme_manager, self.settings_config)
+            
+            # 각 내부 위젯 세로 높이 크기 약 15%씩 축소 적용
             if cat == "팝업 설정":
-                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(360))
-                widget.setMinimumHeight(self.theme_manager.scale_pixel(320))
+                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(198)) # 232 -> 198
+                widget.setMinimumHeight(self.theme_manager.scale_pixel(174))    # 204 -> 174
             elif cat == "감도 설정":
-                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(280))
-                widget.setMinimumHeight(self.theme_manager.scale_pixel(240))
-                # 로컬 초기화 신호 연결
+                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(185)) # 218 -> 185
+                widget.setMinimumHeight(self.theme_manager.scale_pixel(160))    # 189 -> 160
                 if hasattr(widget, "reset_requested_signal"):
                     widget.reset_requested_signal.connect(self._reset_settings)
+            elif cat == "소리 설정":
+                row_frame.setMinimumHeight(self.theme_manager.scale_pixel(185)) # 218 -> 185
+                widget.setMinimumHeight(self.theme_manager.scale_pixel(160))    # 189 -> 160
             else:
-                widget.setMinimumHeight(self.theme_manager.scale_pixel(188))
-            
+                widget.setMinimumHeight(self.theme_manager.scale_pixel(98))     # 115 -> 98
+
             widget.value_changed_signal.connect(self._on_widget_value_changed)
             self.category_widgets.append(widget)
 
             row_layout.addWidget(category_label)
             row_layout.addWidget(widget, 1)
             row_frame.setLayout(row_layout)
-            scroll_layout.addWidget(row_frame)
+            grid_layout.addWidget(row_frame, row, col, rspan, cspan)
 
-        scroll_layout.addStretch()
+        grid_layout.setColumnStretch(0, 1)
+        grid_layout.setColumnStretch(1, 1)
+        grid_layout.setRowStretch(3, 1)
         scroll_area.setWidget(scroll_content)
         layout.addWidget(scroll_area, 1)
 
-        # 하단 버튼 레이아웃
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(20)
-
-        confirm_btn = QPushButton("저장 및 적용")
-        confirm_btn.setFixedSize(self.theme_manager.scale_pixel(200), self.theme_manager.scale_pixel(56))
-        confirm_btn.setFont(QFont("Noto Sans KR", self.theme_manager.scale_pixel(20), QFont.Weight.Bold))
-        confirm_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Colors.PURPLE_PRIMARY.value};
-                color: {Colors.WHITE.value};
-                border-radius: 10px;
-            }}
-            QPushButton:hover {{
-                background-color: #5343B6;
-            }}
-        """)
-        confirm_btn.clicked.connect(self._save_settings)
-        
-        button_layout.addStretch()
-        button_layout.addWidget(confirm_btn)
-        button_layout.addStretch()
-        
-        layout.addLayout(button_layout)
         self.setLayout(layout)
 
     def _on_widget_value_changed(self, value_dict: dict):
         self.settings_config.update(value_dict)
+
+    def update_settings(self, settings_dict: dict):
+        """앱의 최신 설정값으로 화면 위젯을 동기화한다."""
+        self.settings_config = dict(settings_dict)
+        for widget in self.category_widgets:
+            widget.blockSignals(True)
+            widget.set_value(self.settings_config)
+            widget.blockSignals(False)
 
     def _save_settings(self):
         all_settings = {}
@@ -153,12 +135,23 @@ class SettingsScreen(QWidget):
         self.back_to_hub_signal.emit()
 
     def _reset_settings(self):
-        reply = QMessageBox.question(
-            self, "감도 초기화",
-            "민감도 설정을 마지막 자세 맞춤 기반 권장값으로 초기화하시겠습니까?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setWindowTitle("감도 초기화")
+        msg.setText(
+            "민감도 설정을 마지막 자세 맞춤 기반 권장값으로 초기화하시겠습니까?"
         )
-        
-        if reply == QMessageBox.StandardButton.Yes:
+        msg.setStandardButtons(
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
+
+        ok_button = msg.button(QMessageBox.StandardButton.Ok)
+        cancel_button = msg.button(QMessageBox.StandardButton.Cancel)
+        if ok_button is not None:
+            ok_button.setText("확인")
+        if cancel_button is not None:
+            cancel_button.setText("취소")
+
+        reply = msg.exec()
+        if reply == QMessageBox.StandardButton.Ok:
             self.settings_reset_signal.emit()

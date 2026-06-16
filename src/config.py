@@ -127,44 +127,67 @@ class ConfigManager:
         """판정 기준 조회"""
         return self.posture_criteria
 
+    def get_mediapipe_config(self) -> Dict[str, Any]:
+        """MediaPipe 설정 조회"""
+        return self.posture_criteria.get("mediapipe", {})
+
+    def get_filters_config(self) -> Dict[str, Any]:
+        """필터 설정 조회
+
+        posture_definition_criteria.json 내의 `filters` 항목을 반환합니다.
+        """
+        return self.posture_criteria.get("filters", {})
+
     def get_baseline_config(self) -> Dict[str, Any]:
         """Baseline 설정 조회"""
-        try:
-            return self.posture_criteria.get("baseline", {})
-        except KeyError as e:
-            raise ValueError(f"'baseline' 키를 찾을 수 없습니다: {e}")
+        return self.posture_criteria.get("baseline", {})
 
     def get_posture_type_config(self, posture_type: str) -> Dict[str, Any]:
         """특정 자세 유형의 설정 조회"""
-        try:
-            posture_types = self.posture_criteria.get("posture_types", {})
-            if posture_type not in posture_types:
-                raise KeyError(f"미알려진 자세 유형: {posture_type}")
-            return posture_types[posture_type]
-        except KeyError as e:
-            raise ValueError(f"자세 유형 설정 조회 실패: {e}")
+        posture_types = self.posture_criteria.get("posture_types", {})
+        if posture_type not in posture_types:
+            raise ValueError(f"미알려진 자세 유형: {posture_type}")
+        return posture_types[posture_type]
+
+    # 자세 표시 이름/알림 문구의 단일 소스 (모든 UI는 아래 헬퍼만 사용할 것)
+    _POSTURE_LABEL_SPECIAL = {
+        "normal": "바른 자세",
+        "neutral": "바른 자세",
+        "baseline": "자세 맞춤 중",
+    }
+
+    def get_posture_label(self, posture_type: str) -> str:
+        """자세 유형의 한글 표시 이름을 반환 (단일 소스).
+
+        normal/baseline 등 특수 키는 내장 매핑, 그 외 자세는 config의
+        display_label을 사용한다. 알 수 없는 키는 키 문자열을 그대로 반환.
+        """
+        if posture_type in self._POSTURE_LABEL_SPECIAL:
+            return self._POSTURE_LABEL_SPECIAL[posture_type]
+        entry = self.posture_criteria.get("posture_types", {}).get(posture_type)
+        if entry and entry.get("display_label"):
+            return entry["display_label"]
+        return posture_type
+
+    def get_posture_alert_message(self, posture_type: str) -> str:
+        """자세 유형의 알림(토스트) 문구를 반환. 없으면 빈 문자열."""
+        entry = self.posture_criteria.get("posture_types", {}).get(posture_type)
+        if entry and entry.get("alert_message"):
+            return entry["alert_message"]
+        return ""
 
     def get_event_judgment_config(self) -> Dict[str, Any]:
         """이벤트 판정 설정 조회"""
-        try:
-            return self.posture_criteria.get("event_judgment", {})
-        except KeyError as e:
-            raise ValueError(f"'event_judgment' 키를 찾을 수 없습니다: {e}")
+        return self.posture_criteria.get("event_judgment", {})
 
     def get_state_machine_config(self) -> Dict[str, Any]:
         """상태 머신 설정 조회"""
-        try:
-            global_rules = self.posture_criteria.get("global_rules", {})
-            return global_rules.get("state_machine", {})
-        except KeyError as e:
-            raise ValueError(f"'state_machine' 키를 찾을 수 없습니다: {e}")
+        global_rules = self.posture_criteria.get("global_rules", {})
+        return global_rules.get("state_machine", {})
 
     def get_frame_scoring_config(self) -> Dict[str, Any]:
         """프레임 점수 설정 조회"""
-        try:
-            return self.posture_criteria.get("frame_scoring", {})
-        except KeyError as e:
-            raise ValueError(f"'frame_scoring' 키를 찾을 수 없습니다: {e}")
+        return self.posture_criteria.get("frame_scoring", {})
 
     def get_app_setting(self, key: str, default: Any = None) -> Any:
         """애플리케이션 설정 조회"""
@@ -190,13 +213,20 @@ class ConfigManager:
             raise
 
 
-# 글로벌 설정 관리자 인스턴스
-config_manager = ConfigManager()
+# 글로벌 설정 관리자 인스턴스 (지연 초기화)
+_config_manager: Optional["ConfigManager"] = None
 
 
-def get_config() -> ConfigManager:
-    """설정 관리자 조회 (유틸 함수)"""
-    return config_manager
+def get_config() -> "ConfigManager":
+    """설정 관리자 조회 (유틸 함수) — 첫 호출 시 초기화"""
+    global _config_manager
+    if _config_manager is None:
+        _config_manager = ConfigManager()
+    return _config_manager
+
+
+# 하위 호환성을 위한 별칭 (기존 코드에서 config_manager를 직접 참조하는 경우)
+config_manager = get_config()
 
 
 # ============================================================================
@@ -227,9 +257,17 @@ class SettingsConfig:
     # 자동 시작
     auto_start_detection: bool = False
 
+    # 스트레칭 알림 설정
+    stretching_reminder_enabled: bool = True
+    stretching_reminder_interval: int = 30  # 분 (기본 30분)
+
     # 감도 설정 (기본값은 None이며 로드 시 JSON에서 가져옴)
     forward_head_sensitivity: Optional[float] = None
     recline_sensitivity: Optional[float] = None
+    chin_rest_sensitivity: Optional[float] = None
+    eye_close_sensitivity: Optional[float] = None
+    turned_head_sensitivity: Optional[float] = None
+    side_tilt_sensitivity: Optional[float] = None
 
     # 자세 맞춤 기반 권장(최신 오차 기반) 감도 저장 (초기화 시 사용)
     recommended_forward_head: Optional[float] = None
@@ -238,6 +276,41 @@ class SettingsConfig:
     @classmethod
     def load_from_json(cls, file_path: str, config_manager: Optional[ConfigManager] = None) -> "SettingsConfig":
         """JSON 파일에서 설정 로드"""
+        def _apply_sensitivity_defaults(instance: "SettingsConfig") -> "SettingsConfig":
+            if config_manager:
+                scoring_config = config_manager.get_frame_scoring_config()
+                sensitivities = scoring_config.get("sensitivities", {})
+
+                if instance.forward_head_sensitivity is None:
+                    instance.forward_head_sensitivity = sensitivities.get("forward_head", 0.1)
+                if instance.recline_sensitivity is None:
+                    instance.recline_sensitivity = sensitivities.get("recline", 0.04)
+                if instance.chin_rest_sensitivity is None:
+                    instance.chin_rest_sensitivity = sensitivities.get("chin_rest_estimated", 0.1)
+                if instance.eye_close_sensitivity is None:
+                    instance.eye_close_sensitivity = sensitivities.get("eye_close", 0.1)
+                if instance.turned_head_sensitivity is None:
+                    instance.turned_head_sensitivity = sensitivities.get("turned_head", 0.1)
+                if instance.side_tilt_sensitivity is None:
+                    instance.side_tilt_sensitivity = sensitivities.get("side_tilt", 0.1)
+
+                if instance.recommended_forward_head is None:
+                    instance.recommended_forward_head = instance.forward_head_sensitivity
+                if instance.recommended_recline is None:
+                    instance.recommended_recline = instance.recline_sensitivity
+            else:
+                # Fallback defaults
+                instance.forward_head_sensitivity = instance.forward_head_sensitivity or 0.1
+                instance.recline_sensitivity = instance.recline_sensitivity or 0.04
+                instance.chin_rest_sensitivity = instance.chin_rest_sensitivity or 0.1
+                instance.eye_close_sensitivity = instance.eye_close_sensitivity or 0.1
+                instance.turned_head_sensitivity = instance.turned_head_sensitivity or 0.1
+                instance.side_tilt_sensitivity = instance.side_tilt_sensitivity or 0.1
+                
+                instance.recommended_forward_head = instance.recommended_forward_head or 0.1
+                instance.recommended_recline = instance.recommended_recline or 0.04
+            return instance
+
         try:
             instance = cls()
             
@@ -253,28 +326,11 @@ class SettingsConfig:
                 if k in field_names:
                     setattr(instance, k, v)
             
-            # 민감도 기본값 적용 (JSON 기준 파일에서 로드)
-            if config_manager:
-                scoring_config = config_manager.get_frame_scoring_config()
-                sensitivities = scoring_config.get("sensitivities", {})
-                
-                # 현재 설정값이 없으면 기본값(Factory Default) 사용
-                if instance.forward_head_sensitivity is None:
-                    instance.forward_head_sensitivity = sensitivities.get("forward_head", 0.10)
-                if instance.recline_sensitivity is None:
-                    instance.recline_sensitivity = sensitivities.get("recline", 0.04)
-                
-                # 권장값이 없으면 역시 기본값으로 초기화
-                if instance.recommended_forward_head is None:
-                    instance.recommended_forward_head = sensitivities.get("forward_head", 0.10)
-                if instance.recommended_recline is None:
-                    instance.recommended_recline = sensitivities.get("recline", 0.04)
-                    
-            return instance
+            return _apply_sensitivity_defaults(instance)
             
         except Exception as e:
             logger.warning("설정 파일 로드 실패, 기본값 사용: %s", e)
-            return cls()
+            return _apply_sensitivity_defaults(cls())
 
     def save_to_json(self, file_path: str) -> None:
         """JSON 파일에 설정 저장"""
@@ -286,11 +342,11 @@ class SettingsConfig:
         except Exception as e:
             logger.error("설정 저장 실패: %s", e)
 
-    def reset_to_defaults(self, config_manager: ConfigManager):
+    def reset_to_defaults(self):
         """기본값으로 초기화 (최신 자세 맞춤 권장값 사용)"""
         if self.recommended_forward_head is not None:
             self.forward_head_sensitivity = self.recommended_forward_head
         if self.recommended_recline is not None:
             self.recline_sensitivity = self.recommended_recline
             
-        logger.info(f"민감도 설정이 권장값으로 초기화되었습니다: Fwd={self.forward_head_sensitivity:.3f}, Rec={self.recline_sensitivity:.3f}")
+        logger.info(f"민감도 설정이 권장값으로 초기화되었습니다.")

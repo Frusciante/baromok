@@ -8,12 +8,13 @@ import mediapipe as mp
 import numpy as np
 import cv2
 import time
+from src.utils.helpers import OneEuroFilter
 from typing import Dict, Tuple, Optional, List
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from src.utils.logger import get_logger
-from src.utils.helpers import OneEuroFilter
-import time
+from src.config import get_config
 
 logger = get_logger(__name__)
 
@@ -52,78 +53,59 @@ class LandmarkExtractor:
         self.face_landmarker = None
         self.hand_landmarker = None
         self.one_euro_filter = None
+        # ghosting: sliding window (ms) for retaining recent landmark values
+        self._ghost_window_ms = 1000  # 1 second
+        self._ghost_windows: Dict[str, deque] = {}
+        # OneEuro filters for representative scalar points (applied between representative values)
+        self._one_euro_filters: Dict[str, OneEuroFilter] = {}
+
+        # 설정 로드
+        self.config = get_config()
+        self.mp_config = self.config.get_mediapipe_config()
+        # 필터 설정 로드 (posture_definition_criteria.json의 filters)
+        try:
+            self._filters_config = self.config.get_filters_config()
+        except Exception:
+            # 호환성: fallback to raw posture criteria
+            self._filters_config = self.config.get_posture_criteria().get("filters", {})
+
+        one_euro_cfg = self._filters_config.get("one_euro", {}) if self._filters_config else {}
+        self._one_euro_min_cutoff = float(one_euro_cfg.get("min_cutoff", 0.05))
+        self._one_euro_beta = float(one_euro_cfg.get("beta", 0.005))
+        self._one_euro_d_cutoff = float(one_euro_cfg.get("d_cutoff", 1.0))
 
         self._initialize_models()
         logger.info("LandmarkExtractor 초기화 완료")
 
-    # def _initialize_models(self):
-    #     """MediaPipe 모델 로드"""
-    #     model_dir = Path(self.model_base_path)
-
-    #     try:
-    #         # Pose Landmarker 로드
-    #         BaseOptions = mp.tasks.BaseOptions
-    #         PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
-    #         VisionRunningMode = mp.tasks.vision.RunningMode
-
-    #         options = PoseLandmarkerOptions(
-    #             base_options=BaseOptions(
-    #                 model_asset_path=str(model_dir / "pose_landmarker.task")
-    #             ),
-    #             running_mode=VisionRunningMode.IMAGE,
-    #             num_poses=1,
-    #         )
-    #         self.pose_landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(
-    #             options
-    #         )
-    #         logger.info("Pose Landmarker 로드 완료")
-
-    #     except Exception as e:
-    #         logger.warning(f"Pose Landmarker 로드 실패: {e}. 대체 모델 사용...")
-    #         self.pose_landmarker = None
-
-    #     try:
-    #         # Face Landmarker 로드
-    #         FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
-
-    #         options = FaceLandmarkerOptions(
-    #             base_options=BaseOptions(
-    #                 model_asset_path=str(model_dir / "face_landmarker.task")
-    #             ),
-    #             running_mode=VisionRunningMode.IMAGE,
-    #             num_faces=1,
-    #         )
-    #         self.face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
-    #             options
-    #         )
-    #         logger.info("Face Landmarker 로드 완료")
-
-    #     except Exception as e:
-    #         logger.warning(f"Face Landmarker 로드 실패: {e}. 대체 모델 사용...")
-    #         self.face_landmarker = None
-
-    #     try:
-    #         # Hand Landmarker 로드
-    #         HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
-
-    #         options = HandLandmarkerOptions(
-    #             base_options=BaseOptions(
-    #                 model_asset_path=str(model_dir / "hand_landmarker.task")
-    #             ),
-    #             running_mode=VisionRunningMode.IMAGE,
-    #             num_hands=2,
-    #         )
-    #         self.hand_landmarker = mp.tasks.vision.HandLandmarker.create_from_options(
-    #             options
-    #         )
-    #         logger.info("Hand Landmarker 로드 완료")
-
-    #     except Exception as e:
-    #         logger.warning(f"Hand Landmarker 로드 실패: {e}. 대체 모델 사용...")
-    #         self.hand_landmarker = None
     def _initialize_models(self):
         """MediaPipe 모델 로드"""
         model_dir = Path(self.model_base_path)
+
+        # 기본 임계값 설정
+        face_cfg = self.mp_config.get(
+            "face",
+            {
+                "min_detection_confidence": 0.5,
+                "min_presence_confidence": 0.5,
+                "min_tracking_confidence": 0.5,
+            },
+        )
+        pose_cfg = self.mp_config.get(
+            "pose",
+            {
+                "min_detection_confidence": 0.5,
+                "min_presence_confidence": 0.5,
+                "min_tracking_confidence": 0.5,
+            },
+        )
+        hand_cfg = self.mp_config.get(
+            "hand",
+            {
+                "min_detection_confidence": 0.5,
+                "min_presence_confidence": 0.5,
+                "min_tracking_confidence": 0.5,
+            },
+        )
 
         try:
             # Pose Landmarker 로드
@@ -135,16 +117,22 @@ class LandmarkExtractor:
                 base_options=BaseOptions(
                     model_asset_path=str(model_dir / "pose_landmarker.task")
                 ),
-                running_mode=VisionRunningMode.IMAGE,
+                running_mode=VisionRunningMode.VIDEO,
                 num_poses=1,
-                # 👇 [추가된 부분] 자세 인식 엄격도 상향 (기본 0.5 -> 0.7)
-                min_pose_detection_confidence=0.7,
-                min_pose_presence_confidence=0.7,
+                min_pose_detection_confidence=pose_cfg.get(
+                    "min_detection_confidence", 0.5
+                ),
+                min_pose_presence_confidence=pose_cfg.get(
+                    "min_presence_confidence", 0.5
+                ),
+                min_tracking_confidence=pose_cfg.get("min_tracking_confidence", 0.5),
             )
             self.pose_landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(
                 options
             )
-            logger.info("Pose Landmarker 로드 완료")
+            logger.info(
+                f"Pose Landmarker 로드 완료 (mode: VIDEO, conf: {pose_cfg.get('min_detection_confidence')})"
+            )
 
         except Exception as e:
             logger.warning(f"Pose Landmarker 로드 실패: {e}. 대체 모델 사용...")
@@ -158,16 +146,22 @@ class LandmarkExtractor:
                 base_options=BaseOptions(
                     model_asset_path=str(model_dir / "face_landmarker.task")
                 ),
-                running_mode=VisionRunningMode.IMAGE,
+                running_mode=VisionRunningMode.VIDEO,
                 num_faces=1,
-                # 👇 [추가된 부분] 얼굴 인식 엄격도 상향
-                min_face_detection_confidence=0.7,
-                min_face_presence_confidence=0.7,
+                min_face_detection_confidence=face_cfg.get(
+                    "min_detection_confidence", 0.5
+                ),
+                min_face_presence_confidence=face_cfg.get(
+                    "min_presence_confidence", 0.5
+                ),
+                min_tracking_confidence=face_cfg.get("min_tracking_confidence", 0.5),
             )
             self.face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
                 options
             )
-            logger.info("Face Landmarker 로드 완료")
+            logger.info(
+                f"Face Landmarker 로드 완료 (mode: VIDEO, conf: {face_cfg.get('min_detection_confidence')})"
+            )
 
         except Exception as e:
             logger.warning(f"Face Landmarker 로드 실패: {e}. 대체 모델 사용...")
@@ -181,20 +175,112 @@ class LandmarkExtractor:
                 base_options=BaseOptions(
                     model_asset_path=str(model_dir / "hand_landmarker.task")
                 ),
-                running_mode=VisionRunningMode.IMAGE,
+                running_mode=VisionRunningMode.VIDEO,
                 num_hands=2,
-                # 👇 [추가된 부분] 손 인식 엄격도 상향 (가짜 손 모양 오작동 방지)
-                min_hand_detection_confidence=0.7,
-                min_hand_presence_confidence=0.7,
+                min_hand_detection_confidence=hand_cfg.get(
+                    "min_detection_confidence", 0.5
+                ),
+                min_hand_presence_confidence=hand_cfg.get(
+                    "min_presence_confidence", 0.5
+                ),
+                min_tracking_confidence=hand_cfg.get("min_tracking_confidence", 0.5),
             )
             self.hand_landmarker = mp.tasks.vision.HandLandmarker.create_from_options(
                 options
             )
-            logger.info("Hand Landmarker 로드 완료")
+            logger.info(
+                f"Hand Landmarker 로드 완료 (mode: VIDEO, conf: {hand_cfg.get('min_detection_confidence')})"
+            )
 
         except Exception as e:
             logger.warning(f"Hand Landmarker 로드 실패: {e}. 대체 모델 사용...")
             self.hand_landmarker = None
+
+    def _extract_landmark_list(self, obj, candidate_attrs: tuple[str, ...]):
+        """MediaPipe 결과 객체에서 랜드마크 리스트를 공통 방식으로 추출한다."""
+        for attr in candidate_attrs:
+            val = getattr(obj, attr, None)
+            if val:
+                try:
+                    if hasattr(val, "landmark"):
+                        inner = getattr(val, "landmark")
+                        if inner:
+                            return inner
+                except Exception:
+                    pass
+                return val
+        return None
+
+    def _build_landmark_data(self, landmarks, timestamp_ms: int) -> LandmarkData:
+        """랜드마크 객체 목록을 LandmarkData로 변환한다."""
+        coords = []
+        confidences = []
+        for lm in landmarks:
+            # x/y 접근 — 속성 존재 여부를 한 번만 확인
+            x = lm.x if hasattr(lm, "x") else getattr(lm, "position_x", None)
+            y = lm.y if hasattr(lm, "y") else getattr(lm, "position_y", None)
+            if x is None or y is None:
+                continue
+            z = lm.z if hasattr(lm, "z") else getattr(lm, "position_z", 0.0)
+            coords.append((x, y, z))
+            # presence > visibility 순으로 신뢰도 추출
+            p = getattr(lm, "presence", None) or getattr(lm, "visibility", None)
+            confidences.append(float(p) if p is not None else 1.0)
+
+        return LandmarkData(
+            landmarks=coords,
+            confidences=confidences,
+            timestamp_ms=timestamp_ms,
+        )
+
+    def _get_pixel_point(
+        self, landmark, confidence: float, frame_width: int, frame_height: int
+    ):
+        """정규화 좌표를 픽셀 좌표로 변환한다."""
+        x = int(min(max(landmark[0] * frame_width, 0), frame_width - 1))
+        y = int(min(max(landmark[1] * frame_height, 0), frame_height - 1))
+        return (x, y, confidence)
+
+    def _map_hand_landmarks(
+        self,
+        extracted,
+        landmarks,
+        frame_width: int,
+        frame_height: int,
+        confidence_threshold: float,
+    ):
+        """손 랜드마크를 handedness 기준으로 left/right에 채운다."""
+        if extracted.hands is None:
+            return
+
+        for hand_idx, hand_data in enumerate(extracted.hands):
+            if not hand_data.landmarks:
+                continue
+
+            finger_tips = []
+            for tip_idx in [4, 8, 12, 16, 20]:
+                if (
+                    len(hand_data.landmarks) > tip_idx
+                    and hand_data.confidences[tip_idx] > confidence_threshold
+                ):
+                    finger_point = self._get_pixel_point(
+                        hand_data.landmarks[tip_idx],
+                        hand_data.confidences[tip_idx],
+                        frame_width,
+                        frame_height,
+                    )
+                    finger_tips.append(
+                        (
+                            finger_point[0],
+                            finger_point[1],
+                            hand_data.landmarks[tip_idx][2],
+                        )
+                    )
+
+            if hand_idx == 0:
+                landmarks["right_hand_tips"] = finger_tips
+            else:
+                landmarks["left_hand_tips"] = finger_tips
 
     def extract_landmarks(self, frame: np.ndarray) -> ExtractedLandmarks:
         """
@@ -214,11 +300,9 @@ class LandmarkExtractor:
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
-        # mp.Image may not provide timestamp_ms in some MediaPipe builds; fall back to current time
-        try:
-            timestamp_ms = int(mp_image.timestamp_ms)
-        except Exception:
-            timestamp_ms = int(time.time() * 1000)
+        # VIDEO 모드에서는 명시적인 타임스탬프가 필요함
+        timestamp_ms = int(time.time() * 1000)
+
         pose_data = None
         face_data = None
         hands_data = None
@@ -226,204 +310,76 @@ class LandmarkExtractor:
         # Pose 추출
         if self.pose_landmarker is not None:
             try:
-                pose_result = self.pose_landmarker.detect(mp_image)
-                try:
-                    logger.debug(
-                        f"pose_result type={type(pose_result)} attrs={dir(pose_result)}"
-                    )
-                except Exception:
-                    logger.debug(f"pose_result repr: {repr(pose_result)}")
-
-                def _extract_list(obj):
-                    # try common attribute names that may contain landmark lists
-                    for attr in (
+                pose_result = self.pose_landmarker.detect_for_video(
+                    mp_image, timestamp_ms
+                )
+                pose_list = self._extract_landmark_list(
+                    pose_result,
+                    (
                         "landmarks",
                         "pose_landmarks",
                         "keypoints",
                         "world_landmarks",
                         "landmark",
-                    ):
-                        val = getattr(obj, attr, None)
-                        if val:
-                            # If the returned object wraps landmarks under 'landmark', unwrap it
-                            try:
-                                if hasattr(val, "landmark"):
-                                    inner = getattr(val, "landmark")
-                                    if inner:
-                                        return inner
-                            except Exception:
-                                pass
-                            return val
-                    return None
-
-                pose_list = _extract_list(pose_result)
+                    ),
+                )
                 if pose_list:
                     landmarks = (
                         pose_list[0]
                         if isinstance(pose_list, list) and len(pose_list) > 0
                         else pose_list
                     )
-                    # build coords and confidences with fallbacks
-                    coords = []
-                    confs = []
-                    for lm in landmarks:
-                        x = getattr(lm, "x", getattr(lm, "position_x", None))
-                        y = getattr(lm, "y", getattr(lm, "position_y", None))
-                        z = getattr(lm, "z", getattr(lm, "position_z", 0.0))
-                        # 안전하게 None 처리
-                        if x is None or y is None:
-                            continue
-                        coords.append((x, y, z))
-                        p = getattr(lm, "presence", None)
-                        if p is None:
-                            p = getattr(lm, "visibility", None)
-                        try:
-                            confs.append(float(p) if p is not None else 1.0)
-                        except Exception:
-                            confs.append(1.0)
-
-                    pose_data = LandmarkData(
-                        landmarks=[(c[0], c[1], c[2]) for c in coords],
-                        confidences=confs,
-                        timestamp_ms=timestamp_ms,
-                    )
-                else:
-                    logger.debug(
-                        f"Pose 결과에 랜드마크 속성이 없습니다: attrs={dir(pose_result)}"
-                    )
+                    pose_data = self._build_landmark_data(landmarks, timestamp_ms)
             except Exception as e:
                 logger.debug(f"Pose 추출 실패: {e}")
 
         # Face 추출
         if self.face_landmarker is not None:
             try:
-                face_result = self.face_landmarker.detect(mp_image)
-                try:
-                    logger.debug(
-                        f"face_result type={type(face_result)} attrs={dir(face_result)}"
-                    )
-                except Exception:
-                    logger.debug(f"face_result repr: {repr(face_result)}")
-
-                def _extract_list(obj):
-                    for attr in (
-                        "landmarks",
-                        "face_landmarks",
-                        "keypoints",
-                        "landmark",
-                    ):
-                        val = getattr(obj, attr, None)
-                        if val:
-                            # If the returned object wraps landmarks under 'landmark', unwrap it
-                            try:
-                                if hasattr(val, "landmark"):
-                                    inner = getattr(val, "landmark")
-                                    if inner:
-                                        return inner
-                            except Exception:
-                                pass
-                            return val
-                    return None
-
-                face_list = _extract_list(face_result)
+                face_result = self.face_landmarker.detect_for_video(
+                    mp_image, timestamp_ms
+                )
+                face_list = self._extract_landmark_list(
+                face_result,
+                (
+                    "landmarks",
+                    "face_landmarks",
+                    "keypoints",
+                    "landmark",
+                ),
+                )
                 if face_list:
                     landmarks = (
                         face_list[0]
                         if isinstance(face_list, list) and len(face_list) > 0
                         else face_list
                     )
-                    coords = []
-                    confs = []
-                    for lm in landmarks:
-                        x = getattr(lm, "x", getattr(lm, "position_x", None))
-                        y = getattr(lm, "y", getattr(lm, "position_y", None))
-                        z = getattr(lm, "z", getattr(lm, "position_z", 0.0))
-                        if x is None or y is None:
-                            continue
-                        coords.append((x, y, z))
-                        p = getattr(lm, "presence", None)
-                        if p is None:
-                            p = getattr(lm, "visibility", None)
-                        try:
-                            confs.append(float(p) if p is not None else 1.0)
-                        except Exception:
-                            confs.append(1.0)
-
-                    face_data = LandmarkData(
-                        landmarks=[(c[0], c[1], c[2]) for c in coords],
-                        confidences=confs,
-                        timestamp_ms=timestamp_ms,
-                    )
-                else:
-                    logger.debug(
-                        f"Face 결과에 랜드마크 속성이 없습니다: attrs={dir(face_result)}"
-                    )
+                    logger.debug(f"Detected face landmarks count: {len(landmarks)}")
+                    face_data = self._build_landmark_data(landmarks, timestamp_ms)
             except Exception as e:
                 logger.debug(f"Face 추출 실패: {e}")
 
         # Hand 추출
         if self.hand_landmarker is not None:
             try:
-                hand_result = self.hand_landmarker.detect(mp_image)
-                try:
-                    logger.debug(
-                        f"hand_result type={type(hand_result)} attrs={dir(hand_result)}"
-                    )
-                except Exception:
-                    logger.debug(f"hand_result repr: {repr(hand_result)}")
-
-                def _extract_list(obj):
-                    for attr in (
+                hand_result = self.hand_landmarker.detect_for_video(
+                    mp_image, timestamp_ms
+                )
+                hand_list = self._extract_landmark_list(
+                    hand_result,
+                    (
                         "landmarks",
                         "hand_landmarks",
                         "keypoints",
                         "landmark",
-                    ):
-                        val = getattr(obj, attr, None)
-                        if val:
-                            # If the returned object wraps landmarks under 'landmark', unwrap it
-                            try:
-                                if hasattr(val, "landmark"):
-                                    inner = getattr(val, "landmark")
-                                    if inner:
-                                        return inner
-                            except Exception:
-                                pass
-                            return val
-                    return None
-
-                hand_list = _extract_list(hand_result)
+                    ),
+                )
                 if hand_list:
                     hands_data = []
                     iterable = hand_list if isinstance(hand_list, list) else [hand_list]
                     for hand_idx, landmarks in enumerate(iterable):
-                        coords = []
-                        confs = []
-                        for lm in landmarks:
-                            x = getattr(lm, "x", getattr(lm, "position_x", None))
-                            y = getattr(lm, "y", getattr(lm, "position_y", None))
-                            z = getattr(lm, "z", getattr(lm, "position_z", 0.0))
-                            if x is None or y is None:
-                                continue
-                            coords.append((x, y, z))
-                            p = getattr(lm, "presence", None)
-                            if p is None:
-                                p = getattr(lm, "visibility", None)
-                            try:
-                                confs.append(float(p) if p is not None else 1.0)
-                            except Exception:
-                                confs.append(1.0)
-
-                        hand_data = LandmarkData(
-                            landmarks=[(c[0], c[1], c[2]) for c in coords],
-                            confidences=confs,
-                            timestamp_ms=timestamp_ms,
-                        )
+                        hand_data = self._build_landmark_data(landmarks, timestamp_ms)
                         hands_data.append(hand_data)
-                else:
-                    logger.debug(
-                        f"Hand 결과에 랜드마크 속성이 없습니다: attrs={dir(hand_result)}"
-                    )
             except Exception as e:
                 logger.debug(f"Hand 추출 실패: {e}")
 
@@ -471,10 +427,14 @@ class LandmarkExtractor:
                 """Face landmark index를 픽셀 좌표로 변환"""
                 if len(face_lms) > index and len(face_conf) > index:
                     if face_conf[index] > confidence_threshold:
-                        x = int(min(max(face_lms[index][0] * frame_width, 0), frame_width - 1))
-                        y = int(min(max(face_lms[index][1] * frame_height, 0), frame_height - 1))
+                        point = self._get_pixel_point(
+                            face_lms[index],
+                            face_conf[index],
+                            frame_width,
+                            frame_height,
+                        )
                         landmarks["confidences"][name] = face_conf[index]
-                        return (x, y)
+                        return (point[0], point[1])
                 return None
 
             def _assign_pair_by_x(left_key: str, right_key: str, point_a, point_b):
@@ -518,6 +478,50 @@ class LandmarkExtractor:
             if chin_point is not None:
                 landmarks["chin_points"].append(chin_point)
 
+            # 홍채(Iris) 추출: MediaPipe FaceMesh 468~477 인덱스
+            left_iris_diam_px = None
+            right_iris_diam_px = None
+            try:
+                n_face = len(face_lms)
+                # 유효한 iris 포인트만 픽셀 좌표로 모으기
+                iris_px = []
+                for idx in range(468, min(478, n_face)):
+                    if face_conf[idx] > confidence_threshold:
+                        lm = face_lms[idx]
+                        iris_px.append((
+                            int(lm[0] * frame_width),
+                            int(lm[1] * frame_height),
+                        ))
+
+                if len(iris_px) >= 3:
+                    arr = np.array(iris_px, dtype=np.float32)
+                    # 좌/우 분할 기준 x
+                    mid_x = (landmarks['left_eye'][0] + landmarks['right_eye'][0]) / 2.0 \
+                        if landmarks.get('left_eye') and landmarks.get('right_eye') \
+                        else float(np.median(arr[:, 0]))
+
+                    mask_l = arr[:, 0] <= mid_x
+                    for mask, attr in ((mask_l, "left"), (~mask_l, "right")):
+                        pts = arr[mask]
+                        if len(pts) >= 3:
+                            cen = pts.mean(axis=0)
+                            diam = 2.0 * float(np.mean(np.linalg.norm(pts - cen, axis=1)))
+                            if attr == "left":
+                                left_iris_diam_px = diam
+                            else:
+                                right_iris_diam_px = diam
+            except Exception:
+                pass
+
+            landmarks['left_iris_diameter_px'] = left_iris_diam_px
+            landmarks['right_iris_diameter_px'] = right_iris_diam_px
+
+            # 홍채 중심: 468(왼쪽), 473(오른쪽)
+            left_iris_center = _get_face_point(468, "left_iris_center")
+            right_iris_center = _get_face_point(473, "right_iris_center")
+            landmarks['left_iris_center'] = left_iris_center
+            landmarks['right_iris_center'] = right_iris_center
+
         # 디버그: 필수 face 포인트 신뢰도 로깅(존재하지 않거나 낮으면 원인 파악에 도움됨)
         try:
             if extracted.face is not None:
@@ -533,23 +537,66 @@ class LandmarkExtractor:
         except Exception:
             logger.debug("Face confidences 로깅 중 예외")
 
-        # Pose 랜드마크 (어깨)
+        # Pose 랜드마크 (어깨) - 신뢰도 및 해부학적 가드 강화
         if extracted.pose is not None and extracted.pose.landmarks:
             pose_lms = extracted.pose.landmarks
             pose_conf = extracted.pose.confidences
 
-            # 왼쪽 어깨 (11), 오른쪽 어깨 (12)
-            if len(pose_lms) > 11 and pose_conf[11] > confidence_threshold:
-                x = int(min(max(pose_lms[11][0] * frame_width, 0), frame_width - 1))
-                y = int(min(max(pose_lms[11][1] * frame_height, 0), frame_height - 1))
-                landmarks["left_shoulder"] = (x, y)
-                landmarks["confidences"]["left_shoulder"] = pose_conf[11]
+            # v1.1: 신뢰도 임계값 유지 (0.8)
+            shoulder_confidence_threshold = 0.8
+            
+            l_sh_ok = len(pose_lms) > 11 and pose_conf[11] > shoulder_confidence_threshold
+            r_sh_ok = len(pose_lms) > 12 and pose_conf[12] > shoulder_confidence_threshold
+            
+            if l_sh_ok and r_sh_ok:
+                l_y = pose_lms[11][1]
+                r_y = pose_lms[12][1]
+                
+                # 턱 Y 좌표 추출 (정규화)
+                chin_y = landmarks["chin_points"][0][1] / frame_height if landmarks.get("chin_points") else None
+                
+                # 설정에서 가드 임계값 로드
+                sg_cfg = self.config.get_posture_criteria().get("shoulder_guard", {})
+                sh_bottom_th = sg_cfg.get("shoulder_bottom_threshold", 0.98)
+                chin_low_th = sg_cfg.get("chin_low_threshold", 0.75)
+                sh_top_th = sg_cfg.get("shoulder_top_threshold", 0.01)
+                
+                # 새로운 가드 로직 (사용자 제안): 어깨가 바닥에 붙어있으면서 턱 위치가 낮을 때 (AND 조건)
+                is_invalid = False
+                
+                # 1. 하단 절단 감지: 어깨가 화면 하단 끝에 걸림 AND 턱이 화면 하단부에 위치
+                is_bottom_cut_off = False
+                if chin_y is not None:
+                    shoulder_at_bottom = l_y > sh_bottom_th or r_y > sh_bottom_th
+                    chin_is_low = chin_y > chin_low_th
+                    if shoulder_at_bottom and chin_is_low:
+                        is_bottom_cut_off = True
+                
+                # 2. 상단 튀는 현상 방지 (추측 오류)
+                is_on_top = l_y < sh_top_th or r_y < sh_top_th
+                
+                if is_bottom_cut_off or is_on_top:
+                    is_invalid = True
+                    logger.debug(f"어깨 가드 발동: bottom_cut={is_bottom_cut_off}, top={is_on_top} (sh_y={max(l_y, r_y):.3f}, chin_y={chin_y})")
 
-            if len(pose_lms) > 12 and pose_conf[12] > confidence_threshold:
-                x = int(min(max(pose_lms[12][0] * frame_width, 0), frame_width - 1))
-                y = int(min(max(pose_lms[12][1] * frame_height, 0), frame_height - 1))
-                landmarks["right_shoulder"] = (x, y)
-                landmarks["confidences"]["right_shoulder"] = pose_conf[12]
+                if not is_invalid:
+                    left_shoulder = self._get_pixel_point(
+                        pose_lms[11], pose_conf[11], frame_width, frame_height
+                    )
+                    landmarks["left_shoulder"] = (left_shoulder[0], left_shoulder[1])
+                    landmarks["confidences"]["left_shoulder"] = pose_conf[11]
+
+                    right_shoulder = self._get_pixel_point(
+                        pose_lms[12], pose_conf[12], frame_width, frame_height
+                    )
+                    landmarks["right_shoulder"] = (right_shoulder[0], right_shoulder[1])
+                    landmarks["confidences"]["right_shoulder"] = pose_conf[12]
+                else:
+                    landmarks["left_shoulder"] = None
+                    landmarks["right_shoulder"] = None
+            else:
+                landmarks["left_shoulder"] = None
+                landmarks["right_shoulder"] = None
 
         # 어깨 좌표가 이미지 좌표계상 좌/우가 반전되어 들어오는 경우 교정
         try:
@@ -583,35 +630,20 @@ class LandmarkExtractor:
             logger.debug("Pose confidences 로깅 중 예외")
 
         # Hand 랜드마크 (손가락 팁)
-        if extracted.hands is not None:
-            for hand_idx, hand_data in enumerate(extracted.hands):
-                if hand_data.landmarks:
-                    # 손가락 팁 인덱스: 4, 8, 12, 16, 20
-                    finger_tips = []
-                    for tip_idx in [4, 8, 12, 16, 20]:
-                        if (
-                            len(hand_data.landmarks) > tip_idx
-                            and hand_data.confidences[tip_idx] > confidence_threshold
-                        ):
-                            finger_tips.append(
-                                (
-                                        int(min(max(hand_data.landmarks[tip_idx][0] * frame_width, 0), frame_width - 1)),
-                                        int(min(max(hand_data.landmarks[tip_idx][1] * frame_height, 0), frame_height - 1)),
-                                        hand_data.landmarks[tip_idx][2],  # z 포함
-                                    )
-                            )
-
-                    # Handedness 확인 (Right=0, Left=1)
-                    if hand_idx == 0:
-                        landmarks["right_hand_tips"] = finger_tips
-                    else:
-                        landmarks["left_hand_tips"] = finger_tips
+        self._map_hand_landmarks(
+            extracted, landmarks, frame_width, frame_height, confidence_threshold
+        )
 
         return landmarks
 
     def normalize_landmarks(
-        self, landmarks: Dict[str, any], frame_width: int, frame_height: int, timestamp_ms: Optional[int] = None,
-        low_latency: bool = False
+        self,
+        landmarks: Dict[str, any],
+        frame_width: int,
+        frame_height: int,
+        timestamp_ms: Optional[int] = None,
+        low_latency: bool = False,
+        baseline_mode: bool = False,
     ) -> Dict[str, any]:
         """
         랜드마크를 정규화된 좌표로 변환 (0~1 범위)
@@ -635,7 +667,7 @@ class LandmarkExtractor:
                 normalized[key] = value
             elif isinstance(value, list):
                 # 손가락 팁은 3D 유지, chin_points는 2D로 변환
-                if key in ['left_hand_tips', 'right_hand_tips']:
+                if key in ["left_hand_tips", "right_hand_tips"]:
                     normalized[key] = [
                         (
                             (
@@ -652,11 +684,13 @@ class LandmarkExtractor:
                     # chin_points는 2D 유지 (x, y)만
                     normalized[key] = [
                         (
-                            p[0] / frame_width,
-                            p[1] / frame_height,
+                            (
+                                p[0] / frame_width,
+                                p[1] / frame_height,
+                            )
+                            if len(p) >= 2
+                            else p
                         )
-                        if len(p) >= 2
-                        else p
                         for p in value
                     ]
             elif isinstance(value, tuple):
@@ -665,53 +699,108 @@ class LandmarkExtractor:
             else:
                 normalized[key] = value
 
-        # One Euro Filter 및 EMA Filter 적용 (주요 2D 좌표들)
-        # 사용자의 요청에 따라 뺨(cheek)과 어깨(shoulder)의 안정성에 집중한다.
-        filter_keys = [
+        # Keys we keep ghosted (including lists)
+        _VECTOR_KEYS = (
             "face_center", "left_eye", "right_eye",
-            "left_cheek", "right_cheek",
-            "left_shoulder", "right_shoulder"
-        ]
-        
-        if self.one_euro_filter is None or not hasattr(self, 'ema_filters_x'):
-            # key별로 독립적인 필터 인스턴스를 관리한다.
-            # 1. One Euro Filter: 잔떨림 억제를 위해 min_cutoff를 더 낮춤 (0.01)
-            self.one_euro_filters: Dict[str, OneEuroFilter] = {
-                key: OneEuroFilter(min_cutoff=0.01, beta=0.005) for key in filter_keys
-            }
-            # 2. EMA Filter: 프로토타입과 동일한 alpha=0.15 적용
-            from src.utils.helpers import EMAFilter
-            self.ema_filters_x = {k: EMAFilter(alpha=0.15) for k in filter_keys}
-            self.ema_filters_y = {k: EMAFilter(alpha=0.15) for k in filter_keys}
-            self.one_euro_filter = True # 초기화 완료 플래그
-        
-        # 타임스탬프 처리 (ms -> s)
-        t_sec = (timestamp_ms / 1000.0) if timestamp_ms is not None else time.time()
-        
-        # 필터 계수 조정 (low_latency 모드)
-        current_min_cutoff = 0.5 if low_latency else 0.01
-        current_beta = 0.01 if low_latency else 0.005
-        current_alpha = 0.5 if low_latency else 0.15
+            "left_cheek", "right_cheek", "left_shoulder", "right_shoulder",
+        )
+        _LIST_KEYS = (
+            "chin_points", "left_hand_tips", "right_hand_tips",
+            "left_iris_center", "right_iris_center",
+        )
+        _SCALAR_KEYS = ("left_iris_diameter_px", "right_iris_diameter_px")
+        ghost_keys = _VECTOR_KEYS + _LIST_KEYS + _SCALAR_KEYS
 
-        for key in filter_keys:
-            val = normalized.get(key)
-            if val is not None:
-                # 필터 계수 동적 업데이트
-                filter_obj = self.one_euro_filters[key]
-                filter_obj.min_cutoff = current_min_cutoff
-                filter_obj.beta = current_beta
-                
-                self.ema_filters_x[key].alpha = current_alpha
-                self.ema_filters_y[key].alpha = current_alpha
+        # Lazy init deques for each ghost key
+        if not self._ghost_windows:
+            self._ghost_windows = {k: deque() for k in ghost_keys}
 
-                # 1. One Euro Filter 적용 (좌표 벡터)
-                one_euro_filtered = filter_obj.process(t_sec, np.array(val))
-                
-                # 2. EMA Filter 적용 (X, Y 각각)
-                fx = self.ema_filters_x[key].process(one_euro_filtered[0])
-                fy = self.ema_filters_y[key].process(one_euro_filtered[1])
-                
-                normalized[key] = (float(fx), float(fy))
+        # timestamp for this frame (ms) — compute once
+        ts = int(timestamp_ms) if timestamp_ms is not None else int(time.time() * 1000)
+        cutoff = ts - int(self._ghost_window_ms)
+        t_sec = ts * 0.001
+
+        # --- Ghost window update (avoid deepcopy for simple tuples/scalars) ---
+        for k in ghost_keys:
+            val = normalized.get(k)
+            # determine if present
+            present = val is not None and (not isinstance(val, list) or len(val) > 0)
+            if present:
+                if isinstance(val, tuple):
+                    stored = (float(val[0]), float(val[1]))
+                elif isinstance(val, list):
+                    stored = list(val)          # shallow copy sufficient for tuples inside
+                else:
+                    stored = val                # scalar — immutable
+                dq = self._ghost_windows.setdefault(k, deque())
+                dq.append((ts, stored))
+            else:
+                dq = self._ghost_windows.setdefault(k, deque())
+
+            # prune old entries
+            while dq and dq[0][0] < cutoff:
+                dq.popleft()
+
+        # --- Build representative values (most recent in window) ---
+        rep_values: Dict[str, any] = {}
+        for k in ghost_keys:
+            val = normalized.get(k)
+            present = val is not None and (not isinstance(val, list) or len(val) > 0)
+            if present:
+                rep_values[k] = val             # use current frame value directly
+            else:
+                dq = self._ghost_windows.get(k)
+                rep_values[k] = dq[-1][1] if dq else None
+
+        # --- Shoulder selection: O(n) instead of O(n²) ---
+        # Pick the leftmost candidate for left_shoulder and rightmost for right_shoulder
+        l_dq = self._ghost_windows.get("left_shoulder")
+        r_dq = self._ghost_windows.get("right_shoulder")
+        if l_dq and r_dq:
+            # best left_shoulder = smallest x (leftmost on screen)
+            best_l = min((e[1] for e in l_dq if e[1] is not None), key=lambda p: p[0], default=None)
+            # best right_shoulder = largest x (rightmost on screen)
+            best_r = max((e[1] for e in r_dq if e[1] is not None), key=lambda p: p[0], default=None)
+            if best_l is not None and best_r is not None and best_r[0] > best_l[0]:
+                rep_values["left_shoulder"] = (float(best_l[0]), float(best_l[1]))
+                rep_values["right_shoulder"] = (float(best_r[0]), float(best_r[1]))
+
+        # --- Apply OneEuro / pass-through per key type ---
+        for k in ghost_keys:
+            # store raw per-frame value
+            normalized[f"{k}_raw"] = normalized.get(k)
+
+            rep = rep_values.get(k)
+
+            if baseline_mode:
+                # baseline 모드: 필터 없이 ghost 값만 사용
+                if k in _VECTOR_KEYS:
+                    normalized[k] = (float(rep[0]), float(rep[1])) if rep is not None else None
+                elif k in _SCALAR_KEYS:
+                    normalized[k] = float(rep) if rep is not None else None
+                else:
+                    normalized[k] = rep if rep is not None else []
+                continue
+
+            if k in _VECTOR_KEYS:
+                if rep is None:
+                    normalized[k] = None
+                else:
+                    if k not in self._one_euro_filters:
+                        self._one_euro_filters[k] = OneEuroFilter(
+                            min_cutoff=self._one_euro_min_cutoff,
+                            beta=self._one_euro_beta,
+                            d_cutoff=self._one_euro_d_cutoff,
+                        )
+                    try:
+                        vec = np.array((float(rep[0]), float(rep[1])), dtype=np.float64)
+                        filtered = self._one_euro_filters[k].process(t_sec, vec)
+                        normalized[k] = (float(filtered[0]), float(filtered[1]))
+                    except Exception:
+                        normalized[k] = (float(rep[0]), float(rep[1]))
+            else:
+                # lists and scalars: pass through representative value
+                normalized[k] = rep if rep is not None else ([] if k in _LIST_KEYS else None)
 
         return normalized
 

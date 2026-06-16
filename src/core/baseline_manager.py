@@ -15,7 +15,7 @@ import numpy as np
 
 from src.config import ConfigManager
 from src.core.indicator_calculator import PostureIndicators
-from src.utils.helpers import RansacQuadraticModel
+from src.utils.helpers import RansacLinearModel
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -54,11 +54,24 @@ class BaselineManager:
         # MediaPipe 3개 모델을 동시에 돌리면 실제 처리 FPS가 낮을 수 있으므로,
         # 6단계(총 30초 수집) 데이터를 충분히 확보하기 위해 최소 유효 프레임을 설정에서 가져온다.
         baseline_config = self.config.get_baseline_config()
-        self.minimum_valid_frame_count = baseline_config.get("minimum_valid_frames", 120)
+        self.minimum_valid_frame_count = baseline_config.get(
+            "minimum_valid_frames", 30
+        )
 
-        self.ransac_model = RansacQuadraticModel(min_samples=10, residual_threshold=0.01)
+        # RANSAC 모델 3종 초기화
+        self.shoulder_cheek_model = RansacLinearModel(
+            min_samples=10, residual_threshold=0.01
+        )
+        self.shoulder_height_model = RansacLinearModel(
+            min_samples=10, residual_threshold=0.01
+        )
+        self.eye_height_model = RansacLinearModel(
+            min_samples=10, residual_threshold=0.01
+        )
+
         self.max_inlier_deviation = 0.05
         self.mean_inlier_deviation = 0.02
+        self.max_height_inlier_deviation = 0.05
         logger.info(f"BaselineManager 초기화 완료 (data_dir: {self.data_dir})")
 
     def start_baseline_collection(self):
@@ -107,7 +120,7 @@ class BaselineManager:
         baseline_config = self.config.get_baseline_config()
         capture_config = baseline_config.get("capture", {})
         expected_samples = capture_config.get("expected_samples", 20)
-        
+
         logger.info(
             f"Baseline 수집 완료: {frame_count} 프레임 "
             f"(설정 샘플 단계: {expected_samples}, 최소 필요 {self.minimum_valid_frame_count})"
@@ -121,44 +134,47 @@ class BaselineManager:
             self.baseline_metrics = None
             return False
 
-        # RANSAC 적합을 위한 데이터 준비 및 훈련
-        # 독립 변수 (X): shoulder_width, 종속 변수 (y): cheek_distance
-        x_data = []
-        y_data = []
-        s_data = []
+        # 1. Shoulder-Cheek 모델 피팅
+        sc_x, sc_y, s_indices = [], [], []
         for frame in self.collection_frames:
-            if getattr(frame, 'shoulder_width', 0) > 0 and getattr(frame, 'cheek_distance', 0) > 0:
-                x_data.append(frame.shoulder_width)
-                y_data.append(frame.cheek_distance)
-                s_data.append(getattr(frame, 'step_index', 0))
+            if getattr(frame, "shoulder_width", 0) > 0 and getattr(frame, "cheek_distance", 0) > 0:
+                sc_x.append(frame.shoulder_width)
+                sc_y.append(frame.cheek_distance)
+                s_indices.append(getattr(frame, "step_index", 0))
 
-        if self.ransac_model.fit(x_data, y_data):
-            logger.info(f"자세 맞춤 완료 (샘플 수: {len(x_data)})")
-            
-            # 오차 측정 (최대 편차 계산)
-            y_pred = [self.ransac_model.predict(x) for x in x_data]
-            deviations = [abs(actual - pred) / max(1e-6, pred) for actual, pred in zip(y_data, y_pred)]
-            
-            # RANSAC 인라이어(Inliers)에 대해서만 오차 계산 (이상치 제외한 노이즈 수준 파악)
-            try:
-                ransac = self.ransac_model.model.named_steps['ransacregressor']
-                inlier_mask = ransac.inlier_mask_
-                inlier_deviations = [d for d, is_inlier in zip(deviations, inlier_mask) if is_inlier]
-                
-                if inlier_deviations:
-                    self.max_inlier_deviation = float(np.max(inlier_deviations))
-                    self.mean_inlier_deviation = float(np.mean(inlier_deviations))
-                    logger.info(f"자세 맞춤 노이즈 수준: Max Dev={self.max_inlier_deviation:.4f}, Mean Dev={self.mean_inlier_deviation:.4f}")
-                else:
-                    self.max_inlier_deviation = 0.05 # 기본값
-            except Exception as e:
-                logger.warning(f"오차 분석 실패: {e}")
-                self.max_inlier_deviation = 0.05
-
-            self._save_debug_plot(x_data, y_data, step_indices=s_data)
+        if self.shoulder_cheek_model.fit(sc_x, sc_y):
+            logger.info(f"Shoulder-Cheek 모델 피팅 완료 ({len(sc_x)} 샘플)")
+            self._save_debug_plot(sc_x, sc_y, step_indices=s_indices, subdir="shoulder_cheek", title="Shoulder Width vs Cheek Distance")
         else:
-            logger.warning(f"자세 맞춤 실패 (샘플 수 부족 또는 분산 부족: {len(x_data)})")
-            self.max_inlier_deviation = 0.05
+            logger.warning("Shoulder-Cheek 모델 피팅 실패")
+
+        # 2. Shoulder-Height 모델 피팅
+        sh_x, sh_y = [], []
+        for frame in self.collection_frames:
+            if getattr(frame, "shoulder_width", 0) > 0 and getattr(frame, "head_height", 0) > 0:
+                sh_x.append(frame.shoulder_width)
+                sh_y.append(frame.head_height)
+
+        if self.shoulder_height_model.fit(sh_x, sh_y):
+            logger.info(f"Shoulder-Height 모델 피팅 완료 ({len(sh_x)} 샘플)")
+            self._save_debug_plot(sh_x, sh_y, step_indices=s_indices if len(sh_x)==len(s_indices) else None, 
+                                 subdir="shoulder_height", title="Shoulder Width vs Head Height")
+        else:
+            logger.warning("Shoulder-Height 모델 피팅 실패")
+
+        # 3. Eye-Height 모델 피팅
+        eh_x, eh_y = [], []
+        for frame in self.collection_frames:
+            if getattr(frame, "eye_distance", 0) > 0 and getattr(frame, "head_height", 0) > 0:
+                eh_x.append(frame.eye_distance)
+                eh_y.append(frame.head_height)
+
+        if self.eye_height_model.fit(eh_x, eh_y):
+            logger.info(f"Eye-Height 모델 피팅 완료 ({len(eh_x)} 샘플)")
+            self._save_debug_plot(eh_x, eh_y, step_indices=s_indices if len(eh_x)==len(s_indices) else None, 
+                                 subdir="eye_height", title="Eye Distance vs Head Height")
+        else:
+            logger.warning("Eye-Height 모델 피팅 실패")
 
         try:
             self.baseline_metrics = self._compute_baseline_metrics(
@@ -190,15 +206,16 @@ class BaselineManager:
         Baseline 메트릭 계산
         """
         metrics = {}
-
         indicator_names = [
             "cheek_distance",
             "eye_distance",
+            "face_vertical_length",
             "shoulder_width",
             "shoulder_tilt_deg",
             "neck_offset",
             "eye_line_tilt",
             "chin_occlusion",
+            "head_height",
         ]
 
         for name in indicator_names:
@@ -214,20 +231,35 @@ class BaselineManager:
                 median_value = float(np.median(values))
                 metrics[name] = median_value
                 logger.debug(f"{name}: median={median_value:.4f}, count={len(values)}")
-                
-        # 샘플 데이터 보존 (RANSAC 모델 복원용)
-        x_samples = []
-        y_samples = []
-        s_samples = [] # step indices
+
+        # 1. Shoulder-Cheek 샘플
+        sc_x, sc_y, s_samples = [], [], []
         for frame in self.collection_frames:
-            if getattr(frame, 'shoulder_width', 0) > 0 and getattr(frame, 'cheek_distance', 0) > 0:
-                x_samples.append(frame.shoulder_width)
-                y_samples.append(frame.cheek_distance)
-                s_samples.append(getattr(frame, 'step_index', 0))
-                
-        metrics["ransac_x_samples"] = x_samples
-        metrics["ransac_y_samples"] = y_samples
+            if getattr(frame, "shoulder_width", 0) > 0 and getattr(frame, "cheek_distance", 0) > 0:
+                sc_x.append(frame.shoulder_width)
+                sc_y.append(frame.cheek_distance)
+                s_samples.append(getattr(frame, "step_index", 0))
+        metrics["ransac_x_samples"] = sc_x
+        metrics["ransac_y_samples"] = sc_y
         metrics["ransac_s_samples"] = s_samples
+
+        # 2. Shoulder-Height 샘플
+        sh_x, sh_y = [], []
+        for frame in self.collection_frames:
+            if getattr(frame, "shoulder_width", 0) > 0 and getattr(frame, "head_height", 0) > 0:
+                sh_x.append(frame.shoulder_width)
+                sh_y.append(frame.head_height)
+        metrics["ransac_shx_samples"] = sh_x
+        metrics["ransac_shy_samples"] = sh_y
+
+        # 3. Eye-Height 샘플
+        eh_x, eh_y = [], []
+        for frame in self.collection_frames:
+            if getattr(frame, "eye_distance", 0) > 0 and getattr(frame, "head_height", 0) > 0:
+                eh_x.append(frame.eye_distance)
+                eh_y.append(frame.head_height)
+        metrics["ransac_ehx_samples"] = eh_x
+        metrics["ransac_ehy_samples"] = eh_y
 
         return BaselineMetrics(
             timestamp=datetime.now().isoformat(),
@@ -250,13 +282,21 @@ class BaselineManager:
         try:
             filepath.parent.mkdir(parents=True, exist_ok=True)
 
+            # RANSAC 원시 샘플 리스트 저장 (모델 복원을 위해 필요)
+            _SAMPLE_KEYS = {
+                "ransac_x_samples", "ransac_y_samples", "ransac_s_samples",
+                "ransac_shx_samples", "ransac_shy_samples",
+                "ransac_ehx_samples", "ransac_ehy_samples"
+            }
+            
+            metrics_to_save = self.baseline_metrics.metrics
             data = {
                 "timestamp": self.baseline_metrics.timestamp,
                 "collection_duration_seconds": (
                     self.baseline_metrics.collection_duration_seconds
                 ),
                 "frame_count": self.baseline_metrics.frame_count,
-                "metrics": self.baseline_metrics.metrics,
+                "metrics": metrics_to_save,
             }
 
             with open(filepath, "w", encoding="utf-8") as f:
@@ -286,31 +326,43 @@ class BaselineManager:
 
             self.baseline_metrics = BaselineMetrics(
                 timestamp=data.get("timestamp", ""),
-                collection_duration_seconds=data.get(
-                    "collection_duration_seconds", 0
-                ),
+                collection_duration_seconds=data.get("collection_duration_seconds", 0),
                 frame_count=data.get("frame_count", 0),
                 metrics=data.get("metrics", {}),
             )
 
             logger.info(f"Baseline 로드 완료: {filepath}")
 
-            # RANSAC 모델 복원
-            if 'ransac_x_samples' in self.baseline_metrics.metrics and 'ransac_y_samples' in self.baseline_metrics.metrics:
-                x_data = self.baseline_metrics.metrics['ransac_x_samples']
-                y_data = self.baseline_metrics.metrics['ransac_y_samples']
-                if self.ransac_model.fit(x_data, y_data):
-                    logger.info(f"Baseline 로드: RANSAC 모델 복원 성공 (샘플: {len(x_data)})")
-                else:
-                    logger.warning("Baseline 로드: RANSAC 모델 복원 실패")
-            else:
-                logger.info("Baseline 로드: RANSAC 샘플 데이터 없음 (기본값 사용)")
+            # 1. Shoulder-Cheek 모델 복원
+            if "ransac_x_samples" in self.baseline_metrics.metrics:
+                self.shoulder_cheek_model.fit(
+                    self.baseline_metrics.metrics["ransac_x_samples"],
+                    self.baseline_metrics.metrics["ransac_y_samples"]
+                )
+
+            # 2. Shoulder-Height 모델 복원
+            if "ransac_shx_samples" in self.baseline_metrics.metrics:
+                self.shoulder_height_model.fit(
+                    self.baseline_metrics.metrics["ransac_shx_samples"],
+                    self.baseline_metrics.metrics["ransac_shy_samples"]
+                )
+
+            # 3. Eye-Height 모델 복원
+            if "ransac_ehx_samples" in self.baseline_metrics.metrics:
+                self.eye_height_model.fit(
+                    self.baseline_metrics.metrics["ransac_ehx_samples"],
+                    self.baseline_metrics.metrics["ransac_ehy_samples"]
+                )
 
             return True
 
         except Exception as e:
             logger.error(f"Baseline 로드 실패: {e}")
             return False
+
+    def baseline_file_exists(self) -> bool:
+        """저장된 baseline.json 파일 존재 여부"""
+        return (self.data_dir / "baseline.json").exists()
 
     def get_baseline_metrics(self) -> Optional[BaselineMetrics]:
         """현재 baseline 메트릭 반환"""
@@ -320,13 +372,26 @@ class BaselineManager:
         """
         RANSAC 모델을 통해 현재 어깨 너비에 대한 예상 광대 거리(Cheek Distance) 산출
         """
-        if self.ransac_model.is_fitted:
-            return self.ransac_model.predict(shoulder_width)
+        if self.shoulder_cheek_model.is_fitted:
+            return self.shoulder_cheek_model.predict(shoulder_width)
+
+        if self.baseline_metrics and "cheek_distance" in self.baseline_metrics.metrics:
+            return self.baseline_metrics.metrics["cheek_distance"]
+
+        return 0.0
+
+    def get_expected_height(self, distance_proxy: float, is_shoulder: bool = True) -> float:
+        """
+        RANSAC 모델을 통해 현재 거리(어깨 너비 또는 눈 거리)에 대한 예상 머리 높이 산출
+        """
+        model = self.shoulder_height_model if is_shoulder else self.eye_height_model
         
-        # 모델이 없으면 기본 베이스라인(중앙값) 광대 거리 반환
-        if self.baseline_metrics and 'cheek_distance' in self.baseline_metrics.metrics:
-            return self.baseline_metrics.metrics['cheek_distance']
+        if model.is_fitted:
+            return model.predict(distance_proxy)
             
+        if self.baseline_metrics and "head_height" in self.baseline_metrics.metrics:
+            return self.baseline_metrics.metrics["head_height"]
+        
         return 0.0
 
     def get_expected_ratio(self, shoulder_width: float) -> float:
@@ -348,9 +413,7 @@ class BaselineManager:
             self.baseline_metrics is None
             or metric_name not in self.baseline_metrics.metrics
         ):
-            logger.warning(
-                f"Baseline이 없거나 지표 '{metric_name}'을(를) 찾을 수 없음"
-            )
+            logger.warning(f"Baseline이 없거나 지표 '{metric_name}'을(를) 찾을 수 없음")
             return 0.0
 
         baseline_value = self.baseline_metrics.metrics[metric_name]
@@ -364,20 +427,38 @@ class BaselineManager:
         return float(change_percent)
 
     def is_baseline_valid(self) -> bool:
-        """Baseline이 충분한 데이터로 설정되었는지 확인"""
+        """
+        Baseline이 충분한 데이터로 설정되었는지 검증
+        """
         if self.baseline_metrics is None:
+            logger.warning("Baseline이 로드되지 않음")
             return False
 
-        required_metrics = [
-            "cheek_distance",
-            "shoulder_width",
-        ]
+        metrics = self.baseline_metrics.metrics
 
+        # 필수 키 검증
+        required_metrics = ["cheek_distance", "shoulder_width"]
         for metric_name in required_metrics:
-            if metric_name not in self.baseline_metrics.metrics:
+            if metric_name not in metrics:
                 logger.warning(f"필수 지표 부재: {metric_name}")
                 return False
 
+        # frame_count 최소 기준 검증
+        frame_count = getattr(self.baseline_metrics, "frame_count", 0)
+        if frame_count < self.minimum_valid_frame_count:
+            logger.warning(f"Baseline 프레임 부족: {frame_count} < {self.minimum_valid_frame_count}")
+            return False
+
+        # RANSAC 모델 복원 여부 확인 (최소한 shoulder_cheek은 있어야 함)
+        if not self.shoulder_cheek_model.is_fitted:
+            if "ransac_x_samples" in metrics:
+                self.shoulder_cheek_model.fit(metrics["ransac_x_samples"], metrics["ransac_y_samples"])
+
+        if not self.shoulder_cheek_model.is_fitted:
+            logger.warning("필수 RANSAC 모델(Shoulder-Cheek)이 적합되지 않음")
+            return False
+
+        logger.info("Baseline 유효성 검증 완료")
         return True
 
     def reset(self):
@@ -388,64 +469,61 @@ class BaselineManager:
         self.collection_start_time = 0.0
         logger.info("Baseline 초기화 완료")
 
-    def _save_debug_plot(self, x_data, y_data, step_indices=None):
+    def _save_debug_plot(self, x_data, y_data, step_indices=None, subdir="others", title="RANSAC Plot"):
         """RANSAC 피팅 결과 시각화 및 저장"""
         if not x_data or not y_data:
             return
-            
+
         try:
+            import matplotlib
+            try: matplotlib.use("Agg")
+            except Exception: pass
             import matplotlib.pyplot as plt
-            
-            plot_dir = Path("debug_plots")
-            plot_dir.mkdir(exist_ok=True)
-            
+
+            # 디렉토리 구조 생성: debug_plots/{subdir}/
+            base_plot_dir = Path("debug_plots")
+            target_dir = base_plot_dir / subdir
+            target_dir.mkdir(parents=True, exist_ok=True)
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = plot_dir / f"ransac_fit_{timestamp}.png"
-            
-            plt.figure(figsize=(12, 7))
-            
+            filename = target_dir / f"fit_{timestamp}.png"
+
+            plt.figure(figsize=(10, 6))
+
             if step_indices:
-                # 세션(단계) 수에 따라 무지개색(빨-보) 기준 균일한 색상 할당
                 unique_steps = sorted(list(set(step_indices)))
-                num_steps = len(unique_steps)
-                # 'rainbow' 또는 'hsv' 컬러맵 사용 (0.0=빨강, 1.0=보라에 가까움)
                 import matplotlib.cm as cm
-                
                 for idx, step in enumerate(unique_steps):
                     sx = [x for x, s in zip(x_data, step_indices) if s == step]
                     sy = [y for y, s in zip(y_data, step_indices) if s == step]
                     if sx:
-                        # 0.0(빨강) ~ 0.8(보라/청보라) 범위로 할당하여 가시성 확보
-                        color_val = idx / max(1, num_steps - 1) * 0.8
-                        plt.scatter(sx, sy, color=cm.rainbow(color_val), alpha=0.6, label=f'Step {step}')
+                        color_val = idx / max(1, len(unique_steps) - 1) * 0.8
+                        plt.scatter(sx, sy, color=cm.rainbow(color_val), alpha=0.6, label=f"Step {step}")
             else:
-                plt.scatter(x_data, y_data, color='gray', alpha=0.5, label='Samples')
-            
-            if self.ransac_model.is_fitted:
+                plt.scatter(x_data, y_data, color="gray", alpha=0.5, label="Samples")
+
+            # subdir에 따른 적절한 모델 선택
+            target_model = None
+            if subdir == "shoulder_cheek": target_model = self.shoulder_cheek_model
+            elif subdir == "shoulder_height": target_model = self.shoulder_height_model
+            elif subdir == "eye_height": target_model = self.eye_height_model
+
+            if target_model and target_model.is_fitted:
                 x_min, x_max = min(x_data), max(x_data)
                 x_range = np.linspace(x_min * 0.9, x_max * 1.1, 100)
-                y_pred = [self.ransac_model.predict(x) for x in x_range]
-                plt.plot(x_range, y_pred, color='red', linewidth=3, label='RANSAC Fit (Quadratic)')
-                
-                try:
-                    ransac = self.ransac_model.model.named_steps['ransacregressor']
-                    # y = intercept + c0*1 + c1*x + c2*x^2 (degree=2 기준)
-                    # 실제 PolynomialFeatures + RANSAC 구조에 따라 계수 인덱스가 다를 수 있음
-                    plt.title(f"RANSAC: Shoulder Width vs Cheek Distance")
-                except Exception:
-                    plt.title("RANSAC Calibration")
-            
-            plt.xlabel("Shoulder Width (Normalized)")
-            plt.ylabel("Cheek Distance (Normalized)")
-            plt.legend(ncol=2, fontsize='small')
-            plt.grid(True, linestyle='--', alpha=0.7)
-            
+                y_pred = [target_model.predict(x) for x in x_range]
+                plt.plot(x_range, y_pred, color="red", linewidth=2, label="RANSAC Fit")
+
+            plt.title(title)
+            plt.xlabel("X (Normalized)")
+            plt.ylabel("Y (Normalized)")
+            plt.legend(ncol=2, fontsize="small")
+            plt.grid(True, linestyle="--", alpha=0.5)
+
             plt.savefig(str(filename))
             plt.close()
             logger.info(f"디버그 그래프 저장 완료: {filename}")
-            
-        except ImportError:
-            logger.warning("matplotlib이 설치되지 않아 디버그 그래프를 저장할 수 없습니다.")
+
         except Exception as e:
             logger.error(f"디버그 그래프 저장 실패: {e}")
 

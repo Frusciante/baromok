@@ -55,27 +55,14 @@ class StateMachine:
     
     def update_state(
         self, 
-        confirmed_posture: Optional[str],
+        confirmed_postures: List[str],
         fps: int = 30
     ) -> PostureState:
         """
-        상태 전이 로직
-        
-        전이 규칙:
-        - NORMAL:
-          - confirmed_posture가 None → NORMAL 유지
-          - confirmed_posture가 있음 → WARNING 전이
-        
-        - WARNING:
-          - confirmed_posture가 None → NORMAL 전이
-          - confirmed_posture가 있음 (3초 이상) → BAD_POSTURE 전이
-        
-        - BAD_POSTURE:
-          - confirmed_posture가 None (1초 이상) → WARNING 전이
-          - confirmed_posture가 있음 → BAD_POSTURE 유지
+        상태 전이 로직 (v1.2: 다중 자세 지원)
         
         Args:
-            confirmed_posture: 확정된 자세 (또는 None)
+            confirmed_postures: 확정된 자세 목록 (List[str])
             fps: FPS
             
         Returns:
@@ -84,42 +71,47 @@ class StateMachine:
         previous_state = self.current_state
         time_in_previous_state = self.get_time_in_current_state()
         
+        # 어떤 나쁜 자세라도 하나라도 있으면 나쁜 자세로 간주
+        has_bad_posture = len(confirmed_postures) > 0
+        
         try:
             state_machine_config = self.config.get_state_machine_config()
             temporal_validation = state_machine_config.get("temporal_validation", {})
             min_duration = temporal_validation.get("min_duration_sec", 1.5)
             min_hold = temporal_validation.get("min_state_hold_sec", 1.8)
             
-            # Hysteresis 방어 로직: 상태를 변경한 지 일정 시간이 지나지 않았으면 상태 유지 (깜빡임 방지)
+            # Hysteresis 방어 로직
             if time_in_previous_state < min_hold and self.current_state != PostureState.NORMAL:
                 return self.current_state
             
             if self.current_state == PostureState.NORMAL:
-                if confirmed_posture is not None:
-                    self._transition_to(PostureState.WARNING, confirmed_posture)
-                    logger.info(f"상태 전이: NORMAL → WARNING (자세: {confirmed_posture})")
+                if has_bad_posture:
+                    # 감지된 첫 번째 자세를 대표 자세로 기록 (로깅용)
+                    self._transition_to(PostureState.WARNING, confirmed_postures[0])
+                    logger.info(f"상태 전이: NORMAL → WARNING (자세들: {confirmed_postures})")
             
             elif self.current_state == PostureState.WARNING:
-                if confirmed_posture is None:
+                if not has_bad_posture:
                     self._transition_to(PostureState.NORMAL, None)
                     logger.info("상태 전이: WARNING → NORMAL (자세 정상화)")
                 else:
-                    # 나쁜 자세 지정된 시간(min_duration) 이상 지속 시 BAD_POSTURE로 전이
+                    # v1.1:turned_head 예외 처리 유지 (모든 감지된 자세가 turned_head인 경우만 WARNING 유지)
+                    all_only_turned = all(p == "turned_head" for p in confirmed_postures)
+                    if all_only_turned:
+                        return self.current_state
+
                     if time_in_previous_state >= min_duration:
-                        self._transition_to(PostureState.BAD_POSTURE, confirmed_posture)
-                        logger.warning(
-                            f"상태 전이: WARNING → BAD_POSTURE (자세: {confirmed_posture}, "
-                            f"지속시간: {time_in_previous_state:.1f}초)"
-                        )
+                        self._transition_to(PostureState.BAD_POSTURE, confirmed_postures[0])
+                        logger.warning(f"상태 전이: WARNING → BAD_POSTURE (자세들: {confirmed_postures})")
             
             elif self.current_state == PostureState.BAD_POSTURE:
-                if confirmed_posture is None:
-                    # 나쁜 자세 완화 (min_duration 시간 동안 완전히 정상 유지 시 WARNING으로 강등)
+                if not has_bad_posture:
                     if time_in_previous_state >= min_duration:
                         self._transition_to(PostureState.WARNING, None)
-                        logger.info(f"상태 전이: BAD_POSTURE → WARNING (자세 개선, {time_in_previous_state:.1f}초)")
+                        logger.info(f"상태 전이: BAD_POSTURE → WARNING (자세 개선)")
                 else:
-                    self._transition_to(PostureState.BAD_POSTURE, confirmed_posture)
+                    # 지속 업데이트 (대표 자세 갱신)
+                    self._transition_to(PostureState.BAD_POSTURE, confirmed_postures[0])
         
         except Exception as e:
             logger.error(f"상태 전이 실패: {e}")

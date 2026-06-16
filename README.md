@@ -58,6 +58,43 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### Baseline 설정
+
+**Baseline**은 사용자의 기본 자세를 학습하는 보정 데이터입니다. 감지를 시작하기 전에 반드시 Baseline을 캡처해야 합니다.
+
+#### Baseline 캡처 워크플로우
+1. **앱 시작**: `python main.py` 실행
+2. **"감지 시작" 버튼 클릭**
+3. **Baseline 없음 감지** → 확인 메시지 표시
+4. **"확인" 버튼** → Baseline 캡처 화면으로 자동 이동
+5. **"시작" 클릭** → 3단계 자세 수집 진행:
+   - **1단계**: 몸을 왼쪽으로 기울임 (약 10초)
+   - **2단계**: 정면 자세 유지 (약 10초)
+   - **3단계**: 몸을 오른쪽으로 기울임 (약 10초)
+6. **수집 완료** → `data/baseline.json` 파일에 자동 저장
+7. **감지 재시작** → Baseline 캡처 완료 후 감지 가능
+
+#### Baseline 유효성 검증
+시스템은 다음 5가지 기준으로 Baseline을 검증합니다:
+
+1. **구조 검증**: 파일 존재, JSON 파싱, 필수 키 검사
+2. **프레임 수 검증**: 최소 120 프레임 이상 수집 필요
+3. **RANSAC 모델 검증**: 자세별 거리 관계 학습 여부
+4. **메트릭 값 검증**: 모든 값이 유효 범위(0 < x ≤ 1) 내
+5. **타임스탬프 신선도**: 30일 이내, 좌우 편차 < 0.2
+
+#### Baseline 재캡처
+- 앱 시작 후 Hub 화면에서 **"재설정"** 버튼으로 언제든 재캡처 가능
+- 체형이 크게 변했거나 카메라 위치가 변경된 경우 재캡처 권장
+- 새로운 Baseline은 기존 파일을 자동으로 덮어씁니다
+
+#### 트러블슈팅
+- **"Baseline 프레임 부족"**: 조명 확인, 카메라 렌즈 청소, 천천히 자세 변경
+- **RANSAC 모델 실패**: 새로운 Baseline 캡처 진행
+- **메트릭 범위 초과**: 카메라 팔길이 거리, 어깨 높이에 배치
+
+자세한 내용은 [Baseline 시스템 문서](docs/baseline.md)를 참조하십시오.
+
 ## 프로토타입 통합 정보
 
 이 저장소에는 프로토타입 알고리즘이 통합되어 있습니다.
@@ -95,6 +132,9 @@ python main.py
 - <a href=".github/rules/posture_definition.md">자세 정의서</a>
 - <a href=".github/rules/operation/posture_operation.md">자세 측정 운영 규칙</a>
 - <a href=".github/rules/operation/posture_system_summary.md">기술 설계 요약</a>
+
+## 이미지 출처
+<a href='https://kor.pngtree.com/freepng/correct-sitting-posture_5912965.html'>588ku의 PNG 이미지 kor.pngtree.com/</a>
 
 ## 라이센스
 
