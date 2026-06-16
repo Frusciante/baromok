@@ -2,7 +2,7 @@
   "notification_enabled": true,
   "notification_interval": 38,
   "sound_enabled": true,
-  "sound_volume": 11,
+  "sound_volume": 42,
   "popup_position": "top",
   "popup_auto_close": true,
   "popup_auto_close_time": 8,

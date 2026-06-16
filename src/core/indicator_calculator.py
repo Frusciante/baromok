@@ -35,6 +35,9 @@ class PostureIndicators:
     hand_face_score: float = 0.0
     eye_symmetry_ratio: float = 0.0
     cheek_symmetry_ratio: float = 0.0
+    face_shoulder_ratio: float = 0.0
+    eye_height: float = 0.0
+    shoulder_height: float = 0.0
     chin_alignment_offset: float = 0.0
     timestamp: float = 0.0
     step_index: int = 0
@@ -93,7 +96,7 @@ class IndicatorCalculator:
             filter_keys = [
                 'cheek_distance', 'eye_distance', 'face_vertical_length', 'head_height',
                 'shoulder_width', 'shoulder_tilt_deg', 'neck_offset', 'eye_line_tilt',
-                'chin_occlusion', 'hand_face_score'
+                'chin_occlusion', 'hand_face_score', 'shoulder_height', 'eye_height'
             ]
             for key in filter_keys:
                 if key in self.ema_filters:
@@ -126,6 +129,12 @@ class IndicatorCalculator:
         avg_y = sum(p[1] for p in pts) / len(pts)
         return float(np.clip(1.0 - avg_y, 0.0, 1.0))
 
+    def calculate_eye_height(self, left_eye, right_eye) -> float:
+        """눈 높이 계산 (1.0 - Y좌표 평균)"""
+        if left_eye is None or right_eye is None: return 0.0
+        avg_y = (left_eye[1] + right_eye[1]) / 2.0
+        return float(np.clip(1.0 - avg_y, 0.0, 1.0))
+
     def calculate_face_vertical_length(self, left_eye, right_eye, chin) -> float:
         if left_eye is None or right_eye is None or chin is None: return 0.0
         eye_mid = np.array([(left_eye[0] + right_eye[0]) / 2.0, (left_eye[1] + right_eye[1]) / 2.0])
@@ -135,6 +144,12 @@ class IndicatorCalculator:
         if left_shoulder is None or right_shoulder is None: return 0.0
         return float(np.clip(self.geometry_helper.calculate_distance(np.array(left_shoulder), np.array(right_shoulder)), 0.0, 1.0))
     
+    def calculate_shoulder_height(self, left_shoulder, right_shoulder) -> float:
+        """어깨 높이 계산 (1.0 - Y좌표 평균)"""
+        if left_shoulder is None or right_shoulder is None: return 0.0
+        avg_y = (left_shoulder[1] + right_shoulder[1]) / 2.0
+        return float(np.clip(1.0 - avg_y, 0.0, 1.0))
+
     def calculate_shoulder_tilt_degree(self, left_shoulder, right_shoulder) -> float:
         if left_shoulder is None or right_shoulder is None: return 0.0
         h_diff = right_shoulder[1] - left_shoulder[1]
@@ -221,6 +236,8 @@ class IndicatorCalculator:
                 landmarks.get('left_eye'), landmarks.get('right_eye'),
                 landmarks.get('left_cheek'), landmarks.get('right_cheek')
             )
+            eye_h_raw = self.calculate_eye_height(landmarks.get('left_eye'), landmarks.get('right_eye'))
+            
             chin_pt = landmarks.get('chin_points')[0] if landmarks.get('chin_points') else None
             face_v_len_raw = self.calculate_face_vertical_length(landmarks.get('left_eye'), landmarks.get('right_eye'), chin_pt)
             eye_tilt_raw = self.calculate_eye_line_tilt(landmarks.get('left_eye'), landmarks.get('right_eye'))
@@ -242,22 +259,25 @@ class IndicatorCalculator:
             # 2. 어깨 지표
             has_sh = (landmarks.get('left_shoulder') is not None and landmarks.get('right_shoulder') is not None)
             sh_w_raw = self.calculate_shoulder_width(landmarks['left_shoulder'], landmarks['right_shoulder']) if has_sh else None
+            sh_h_raw = self.calculate_shoulder_height(landmarks['left_shoulder'], landmarks['right_shoulder']) if has_sh else 0.0
             sh_tilt_raw = self.calculate_shoulder_tilt_degree(landmarks['left_shoulder'], landmarks['right_shoulder']) if has_sh else None
             neck_off_raw = self.calculate_neck_offset(face_center, landmarks['left_shoulder'], landmarks['right_shoulder']) if has_sh and face_center else None
 
             # 필터링
             if baseline_mode:
                 cheek_dist = cheek_dist_raw; eye_dist = eye_dist_raw; face_v_len = face_v_len_raw; eye_tilt = eye_tilt_raw
-                head_height = head_height_raw
+                head_height = head_height_raw; eye_h = eye_h_raw; sh_h = sh_h_raw
                 sh_w = sh_w_raw; sh_tilt = sh_tilt_raw; neck_off = neck_off_raw
             else:
                 cheek_dist = self.ema_filters['cheek_distance'].process(cheek_dist_raw)
                 eye_dist = self.ema_filters['eye_distance'].process(eye_dist_raw)
                 head_height = self.ema_filters['head_height'].process(head_height_raw)
+                eye_h = self.ema_filters['eye_height'].process(eye_h_raw)
                 face_v_len = self.ema_filters['face_vertical_length'].process(face_v_len_raw)
                 eye_tilt = self.ema_filters['eye_line_tilt'].process(eye_tilt_raw)
                 if has_sh:
                     sh_w = self.ema_filters['shoulder_width'].process(sh_w_raw)
+                    sh_h = self.ema_filters['shoulder_height'].process(sh_h_raw)
                     sh_tilt = self.ema_filters['shoulder_tilt_deg'].process(sh_tilt_raw)
                     neck_off = self.ema_filters['neck_offset'].process(neck_off_raw)
                     try:
@@ -265,7 +285,7 @@ class IndicatorCalculator:
                         if len(self._shoulder_tilt_history) > 0: sh_tilt = float(np.median(list(self._shoulder_tilt_history)))
                     except Exception: pass
                 else:
-                    sh_w = None; sh_tilt = None; neck_off = None
+                    sh_w = None; sh_h = 0.0; sh_tilt = None; neck_off = None
 
             # 홍채 거리 (비교적 정확한 물리 거리 산출)
             eye_screen_cm = None; eye_warning = False
@@ -299,6 +319,11 @@ class IndicatorCalculator:
                 h_f_score = self.ema_filters['hand_face_score'].process(h_f_score_raw)
                 chin_occ = self.ema_filters['chin_occlusion'].process(chin_occ_raw)
 
+            # face_shoulder_ratio 계산 (cheek_distance / shoulder_width)
+            fs_ratio = 0.0
+            if cheek_dist and sh_w and sh_w > 0:
+                fs_ratio = float(cheek_dist / sh_w)
+
             return PostureIndicators(
                 cheek_distance=cheek_dist, eye_distance=eye_dist, face_vertical_length=face_v_len,
                 head_height=head_height,
@@ -306,6 +331,9 @@ class IndicatorCalculator:
                 eye_line_tilt=eye_tilt, hand_near_face=self.calculate_hand_near_face(landmarks, face_center),
                 chin_occlusion=chin_occ, eye_screen_distance_cm=eye_screen_cm, eye_close_warning=eye_warning,
                 hand_face_score=h_f_score, eye_symmetry_ratio=eye_sym, cheek_symmetry_ratio=cheek_sym,
+                face_shoulder_ratio=fs_ratio,
+                eye_height=eye_h,
+                shoulder_height=sh_h,
                 chin_alignment_offset=chin_offset, timestamp=timestamp
             )
         except Exception as e:
