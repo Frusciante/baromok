@@ -631,8 +631,8 @@ class PostureBreakdownChart(QWidget):
             self.canvas.draw()
             return
 
-        # 표시 순서: 바른 자세 → 나쁜 자세들
-        order = ["normal", "neutral", "forward_head", "forward_head_only",
+        # 표시 순서: 나쁜 자세들만 (바른 자세 normal/neutral은 제외 — 잘못된 자세 간 비율만 표시)
+        order = ["forward_head", "forward_head_only",
                  "forward_head_full", "recline", "chin_rest_estimated",
                  "head_tilt", "side_tilt", "turned_head"]
 

@@ -84,7 +84,10 @@ class DetectionScreen(QWidget):
             border: 1px solid {Colors.GRAY_MEDIUM.value};
             border-radius: 12px;
         """)
-        self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(320))
+        # [수정] 4줄 자세 라벨까지 고정 높이로 잡으면 창(768px 고정)에 넘쳐 라벨이
+        #        카메라 위로 겹쳐 그려졌다. 최소 높이를 낮춰 겹침을 방지한다.
+        #        (프리뷰는 stretch=1로 남는 공간을 채우므로 평소엔 여전히 크게 표시됨)
+        self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(160))
         preview_layout = QVBoxLayout()
         preview_layout.setContentsMargins(0, 0, 0, 0)
 
