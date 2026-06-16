@@ -138,7 +138,3 @@ python main.py
 
 ## 이미지 출처
 <a href='https://kor.pngtree.com/freepng/correct-sitting-posture_5912965.html'>588ku의 PNG 이미지 kor.pngtree.com/</a>
-
-## 라이센스
-
-[라이센스 정보 추가 예정]
