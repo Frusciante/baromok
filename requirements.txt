@@ -20,3 +20,7 @@ matplotlib
 
 # Utilities
 python-dotenv
+
+# Release
+imageio
+nuitka
