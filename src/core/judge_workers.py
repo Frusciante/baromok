@@ -149,6 +149,16 @@ class ReclineWorker(BaseJudgeWorker):
     
     def __init__(self, config, baseline_manager):
         super().__init__(PostureType.RECLINE, config, baseline_manager)
+        self.fh_dist_threshold = 45.0
+
+    def refresh_settings(self):
+        """설정 캐싱 및 거북목 거리 임계값 최신화"""
+        super().refresh_settings()
+        try:
+            cfg = self.config.get_posture_criteria().get("eye_monitoring", {})
+            self.fh_dist_threshold = float(cfg.get("distance_threshold_cm", 45.0))
+        except Exception:
+            self.fh_dist_threshold = 45.0
 
     def handle_indicators(self, indicators: PostureIndicators):
         has_sh = indicators.shoulder_width is not None and indicators.shoulder_width > 0
@@ -170,6 +180,13 @@ class ReclineWorker(BaseJudgeWorker):
 
             # 턱 당김(고개 끄덕임)으로 head_height가 낮아진 경우는 기댐이 아니므로 억제
             if self._is_chin_tuck(indicators):
+                self._emit_result(0.0)
+                return
+
+            # 거북목은 얼굴이 화면에 가까워지면서 head_height도 낮아져 기댐으로 오판정되기 쉽다.
+            # 홍채 기반 거리가 거북목 임계값 이하(=가까움)면 기댐이 아니므로 판정을 억제한다.
+            dist_cm = indicators.eye_screen_distance_cm
+            if dist_cm is not None and dist_cm <= self.fh_dist_threshold:
                 self._emit_result(0.0)
                 return
 
