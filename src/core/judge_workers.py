@@ -168,33 +168,40 @@ class ReclineWorker(BaseJudgeWorker):
                 self._emit_result(0.0)
                 return
 
+            # 턱 당김(고개 끄덕임)으로 head_height가 낮아진 경우는 기댐이 아니므로 억제
+            if self._is_chin_tuck(indicators):
+                self._emit_result(0.0)
+                return
+
             score = (abs(deviation) / max(0.01, self.sensitivity)) * self.warning_anchor
             self._emit_result(float(np.clip(score, 0.0, 1.0)))
         except Exception as e:
             logger.error(f"ReclineWorker 판정 실패: {e}")
             self._emit_result(0.0)
 
+    def _is_chin_tuck(self, indicators) -> bool:
+        """턱 당김(고개 끄덕임) 억제 가드:
+        뒤로 기대면 눈-턱 세로길이(face_vertical_length)는 거의 유지되지만,
+        턱을 당기면 고개가 숙여지며 이 값이 짧아진다. baseline 대비 일정 비율(%) 이상
+        감소하면 기댐이 아니라 끄덕임으로 보고 기댐 판정을 억제한다.
+        """
+        fvl = getattr(indicators, "face_vertical_length", 0.0)
+        if not fvl or fvl <= 0:
+            return False
+        fvl_change_pct = self.baseline_manager.calculate_change_percentage(fvl, "face_vertical_length")
+        return fvl_change_pct < self.guards.get("face_v_len_stable_threshold", -4.0)
+
     def _is_guarded(self, indicators) -> bool:
         side_tilt = abs(indicators.eye_line_tilt) > self.guards.get("max_eye_tilt", 12.0)
         eye_sym = indicators.eye_symmetry_ratio > self.guards.get("max_eye_symmetry_ratio", 0.12)
         cheek_sym = indicators.cheek_symmetry_ratio > self.guards.get("max_cheek_symmetry_ratio", 0.12)
         chin_off = indicators.chin_alignment_offset > self.guards.get("max_chin_alignment_offset", 0.15)
-        
+
         sh_tilt = False
         if indicators.shoulder_tilt_deg is not None:
             sh_tilt = abs(indicators.shoulder_tilt_deg) > self.guards.get("max_shoulder_tilt", 10.0)
 
-        # 턱 당김(고개 끄덕임) 억제 가드:
-        # 뒤로 기대면 눈-턱 세로길이(face_vertical_length)는 거의 유지되지만,
-        # 턱을 당기면 고개가 숙여지며 이 값이 짧아진다. baseline 대비 일정 비율(%) 이상
-        # 감소하면 기댐이 아니라 끄덕임으로 보고 기댐 판정을 억제한다.
-        tuck_guard = False
-        fvl = getattr(indicators, "face_vertical_length", 0.0)
-        if fvl and fvl > 0:
-            fvl_change_pct = self.baseline_manager.calculate_change_percentage(fvl, "face_vertical_length")
-            tuck_guard = fvl_change_pct < self.guards.get("face_v_len_stable_threshold", -4.0)
-
-        return side_tilt or eye_sym or cheek_sym or chin_off or sh_tilt or tuck_guard
+        return side_tilt or eye_sym or cheek_sym or chin_off or sh_tilt or self._is_chin_tuck(indicators)
 
 
 class ChinRestWorker(BaseJudgeWorker):

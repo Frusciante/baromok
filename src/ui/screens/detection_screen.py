@@ -1,6 +1,6 @@
 import logging
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QFontMetrics
 from PyQt6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 )
@@ -115,8 +115,13 @@ class DetectionScreen(QWidget):
         left_panel.addWidget(self.recognition_label)
 
         self.posture_label = QLabel("감지 중")
-        self.posture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # 다중 감지 시 최대 4줄(상위 3개 + "외 N건")까지 표시되므로,
+        # 줄 수에 따라 레이아웃이 흔들리지 않도록 항상 4줄 높이를 고정한다.
         self.posture_label.setFont(app_font(self.theme_manager.scale_pixel(19), QFont.Weight.Bold))
+        self.posture_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        _posture_lines = 4
+        _posture_fm = QFontMetrics(self.posture_label.font())
+        self.posture_label.setFixedHeight(_posture_fm.lineSpacing() * _posture_lines)
         left_panel.addWidget(self.posture_label)
 
         # [추가] 감지 종료/안내 전용 메시지 라벨 (박스 형태)
