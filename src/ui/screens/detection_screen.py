@@ -96,19 +96,21 @@ class DetectionScreen(QWidget):
             border: 1px solid {Colors.GRAY_MEDIUM.value};
             border-radius: 12px;
         """)
-        # 캠 화면 크기를 기존 340에서 300으로 축소
-        self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(300))
-        self.preview_frame.setMaximumHeight(self.theme_manager.scale_pixel(400))
+        # 캠 화면 크기를 고정하여 레이아웃에 의해 커지지 않도록 함
+        fixed_height = self.theme_manager.scale_pixel(320)
+        self.preview_frame.setFixedHeight(fixed_height)
+        
         preview_layout = QVBoxLayout()
         preview_layout.setContentsMargins(0, 0, 0, 0)
 
         self.preview_label = QLabel("[카메라 프리뷰]")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setStyleSheet("color: #FFFFFF; border-radius: 12px;")
+        self.preview_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         preview_layout.addWidget(self.preview_label)
         
         self.preview_frame.setLayout(preview_layout)
-        left_panel.addWidget(self.preview_frame, 1)
+        left_panel.addWidget(self.preview_frame)
 
         self.recognition_label = QLabel("")
         self.recognition_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
