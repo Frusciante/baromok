@@ -13,6 +13,7 @@ from typing import List, Optional, Dict, Any
 import logging
 
 from src.config import ConfigManager
+from src.utils.paths import DATA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +120,7 @@ class SessionManager:
         self.sessions_history: List[SessionData] = []
         self._lock = threading.Lock()
 
-        data_dir = Path(__file__).parent.parent.parent / "data"
+        data_dir = DATA_DIR
         data_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = str(data_dir / "sessions.db")
         self.sessions_dir = data_dir / "sessions"  # 레거시 JSON 경로

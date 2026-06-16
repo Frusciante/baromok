@@ -13,29 +13,32 @@ matplotlib.use("QtAgg")  # PyQt6 환경에서 안정적으로 동작하는 Qt �
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
 from pathlib import Path
-
-_font_dir = Path(__file__).resolve().parents[3] / "assets" / "fonts"
-_bundled_fonts = ["Pretendard-Regular.otf", "Pretendard-Bold.otf"]
-_loaded_any = False
-for _f in _bundled_fonts:
-    _fp = _font_dir / _f
-    if _fp.exists():
-        font_manager.fontManager.addfont(str(_fp))
-        _loaded_any = True
-if _loaded_any:
-    plt.rcParams["font.sans-serif"] = ["Pretendard", "Malgun Gothic", "DejaVu Sans"]
-else:
-    plt.rcParams["font.sans-serif"] = ["Malgun Gothic", "DejaVu Sans"]
-plt.rcParams["axes.unicode_minus"] = False
-
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 import logging
 
 from src.ui.styles.theme import ThemeManager, Colors
+from src.utils.paths import ASSETS_DIR
 
 logger = logging.getLogger(__name__)
+
+# 폰트 설정
+_font_dir = ASSETS_DIR / "fonts"
+_bundled_fonts = ["Pretendard-Regular.otf", "Pretendard-Bold.otf"]
+_loaded_any = False
+
+for _f in _bundled_fonts:
+    _fp = _font_dir / _f
+    if _fp.exists():
+        font_manager.fontManager.addfont(str(_fp))
+        _loaded_any = True
+
+if _loaded_any:
+    plt.rcParams["font.sans-serif"] = ["Pretendard", "Malgun Gothic", "DejaVu Sans"]
+else:
+    plt.rcParams["font.sans-serif"] = ["Malgun Gothic", "DejaVu Sans"]
+plt.rcParams["axes.unicode_minus"] = False
 
 
 class CalibrationScatterChart(QWidget):
@@ -588,14 +591,14 @@ class PostureBreakdownChart(QWidget):
     POSTURE_META = {
         "normal":              ("바른 자세",      "#7C3AED"),
         "neutral":             ("바른 자세",      "#7C3AED"),
-        "forward_head":        ("거북목",         "#D97A7A"),
-        "forward_head_only":   ("거북목 경향",    "#D97A7A"),
-        "forward_head_full":   ("기울어진 거북목", "#D97A7A"),
-        "recline":             ("기댄 자세",      "#7E8AA2"),
-        "chin_rest_estimated": ("턱 괸 자세",     "#B89B72"),
-        "head_tilt":           ("고개 기울임",    "#F59E0B"),
-        "side_tilt":           ("옆으로 기울임",  "#F59E0B"),
-        "eye_close":           ("눈 가까움",      "#059669"),
+        "forward_head":        ("거북목",         "#EF4444"),
+        "forward_head_only":   ("거북목 경향",    "#EF4444"),
+        "forward_head_full":   ("기울어진 거북목", "#EF4444"),
+        "recline":             ("기댄 자세",      "#3B82F6"),
+        "chin_rest_estimated": ("턱 괸 자세",     "#F59E0B"),
+        "head_tilt":           ("고개 기울임",    "#EC4899"),
+        "side_tilt":           ("옆으로 기울임",  "#EC4899"),
+        "turned_head":         ("고개 돌림",      "#14B8A6"),
     }
 
     def __init__(self, theme_manager: ThemeManager):
@@ -631,27 +634,30 @@ class PostureBreakdownChart(QWidget):
             self.canvas.draw()
             return
 
-        # 표시 순서: 바른 자세 → 나쁜 자세들
-        order = ["normal", "neutral", "forward_head", "forward_head_only",
+        # 표시 순서: 나쁜 자세들만 (바른 자세 normal/neutral은 제외 — 잘못된 자세 간 비율만 표시)
+        order = ["forward_head", "forward_head_only",
                  "forward_head_full", "recline", "chin_rest_estimated",
-                 "head_tilt", "side_tilt", "eye_close"]
-        items = []
+                 "head_tilt", "side_tilt", "turned_head"]
+
+        # "기타"(미분류/얼굴 미검출 프레임)는 제외하고 분류된 자세들만 표시한다.
+        # 비율은 분류된 프레임 합계 기준으로 정규화하여 막대가 100%를 채우도록 한다.
+        from src.config import get_config
+        raw_items = []
         for key in order:
             count = posture_distribution.get(key, 0)
             if count > 0:
-                from src.config import get_config
                 _name, color = self.POSTURE_META.get(key, (key, "#9CA3AF"))
                 label = get_config().get_posture_label(key)
                 if label == key:  # config에 없는 통계 전용 키는 기존 이름 유지
                     label = _name
-                pct = count / total_frames * 100
-                items.append((label, pct, color))
+                raw_items.append((label, count, color))
 
-        # 나머지 unknown
-        known = sum(posture_distribution.get(k, 0) for k in order)
-        unknown = total_frames - known
-        if unknown > 0:
-            items.append(("기타", unknown / total_frames * 100, "#9CA3AF"))
+        classified_total = sum(c for _, c, _ in raw_items)
+        items = (
+            [(label, count / classified_total * 100, color)
+             for label, count, color in raw_items]
+            if classified_total > 0 else []
+        )
 
         if not items:
             ax.axis("off")
@@ -674,10 +680,6 @@ class PostureBreakdownChart(QWidget):
         ax.set_ylim(-0.5, 0.5)
         ax.axis("off")
 
-        # figure 레벨 범례 (axes 클리핑 우회)
-        from matplotlib.patches import Patch
-        legend_elements = [Patch(facecolor=c, label=f"{l} {p:.1f}%")
-                           for l, p, c in items]
         # figure 레벨 범례 (axes 클리핑 우회)
         from matplotlib.patches import Patch
         legend_elements = [Patch(facecolor=c, label=f"{l} {p:.1f}%")

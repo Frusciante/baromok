@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from src.utils.logger import get_logger
 from src.config import get_config
+from src.utils.paths import MODELS_DIR
 
 logger = get_logger(__name__)
 
@@ -41,7 +42,7 @@ class ExtractedLandmarks:
 class LandmarkExtractor:
     """MediaPipe 기반 랜드마크 추출기"""
 
-    def __init__(self, model_base_path: str = "assets/models"):
+    def __init__(self, model_base_path: str = str(MODELS_DIR)):
         """
         초기화
 
@@ -806,7 +807,7 @@ class LandmarkExtractor:
 
 
 def create_landmark_extractor(
-    model_base_path: str = "assets/models",
+    model_base_path: str = str(MODELS_DIR),
 ) -> LandmarkExtractor:
     """랜드마크 추출기 생성 (팩토리 함수)"""
     return LandmarkExtractor(model_base_path)

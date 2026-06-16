@@ -15,7 +15,7 @@
 
 - prototype의 CLI 전용 UI(START/RESET 버튼 등)는 직접 복사하지 않았습니다.
 - PyQt 기반의 `BaselineScreen`에서 다단계 캘리브레이션 플로우(이동 대기 + 데이터 수집)를 구현하여 사용자가 이동 및 정지를 안내받도록 구성했습니다.
-- 단계 수와 각 단계별 시간 설정은 <a href="../.github/rules/operation/posture_definition_criteria.json">baseline.capture</a>를 참조하십시오.
+- 단계 수와 각 단계별 시간 설정은 <a href="../data/posture_definition_criteria.json">baseline.capture</a>를 참조하십시오.
 - 캘리브레이션 중 프레임 수집은 `BaselineManager`로 전달되며, 수집 완료 후 RANSAC 모델을 학습합니다.
 
 ## 재사용 가능한 계산 모듈

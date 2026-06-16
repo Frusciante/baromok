@@ -17,6 +17,7 @@ from src.config import ConfigManager
 from src.core.indicator_calculator import PostureIndicators
 from src.utils.helpers import RansacLinearModel
 from src.utils.logger import get_logger
+from src.utils.paths import DATA_DIR
 
 logger = get_logger(__name__)
 
@@ -34,16 +35,16 @@ class BaselineMetrics:
 class BaselineManager:
     """Baseline 관리자"""
 
-    def __init__(self, config: ConfigManager, data_dir: str = "data"):
+    def __init__(self, config: ConfigManager, data_dir: Optional[Path] = None):
         """
         초기화
 
         Args:
             config: 설정 관리자
-            data_dir: 데이터 저장 디렉토리
+            data_dir: 데이터 저장 디렉토리 (None이면 DATA_DIR 사용)
         """
         self.config = config
-        self.data_dir = Path(data_dir)
+        self.data_dir = data_dir if data_dir is not None else DATA_DIR
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
         self.baseline_metrics: Optional[BaselineMetrics] = None
@@ -480,8 +481,8 @@ class BaselineManager:
             except Exception: pass
             import matplotlib.pyplot as plt
 
-            # 디렉토리 구조 생성: debug_plots/{subdir}/
-            base_plot_dir = Path("debug_plots")
+            # 디렉토리 구조 생성: {data_dir}/debug_plots/{subdir}/
+            base_plot_dir = self.data_dir / "debug_plots"
             target_dir = base_plot_dir / subdir
             target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -529,7 +530,7 @@ class BaselineManager:
 
 
 def create_baseline_manager(
-    config: ConfigManager, data_dir: str = "data"
+    config: ConfigManager, data_dir: Optional[Path] = None
 ) -> BaselineManager:
     """Baseline 관리자 생성 (팩토리 함수)"""
     return BaselineManager(config, data_dir)

@@ -12,6 +12,8 @@ from pydantic_settings import BaseSettings
 from pydantic import Field
 import logging
 
+from src.utils.paths import get_data_path, CRITERIA_JSON_PATH
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,14 +33,7 @@ class PostureSettings(BaseSettings):
             json.JSONDecodeError: JSON 파싱 실패
             ValueError: 스키마 검증 실패
         """
-        # src/config.py -> src/ -> baromok/ -> .github/
-        criteria_path = (
-            Path(__file__).parent.parent
-            / ".github"
-            / "rules"
-            / "operation"
-            / "posture_definition_criteria.json"
-        )
+        criteria_path = CRITERIA_JSON_PATH
 
         if not criteria_path.exists():
             raise FileNotFoundError(
@@ -263,6 +258,7 @@ class SettingsConfig:
 
     # 감도 설정 (기본값은 None이며 로드 시 JSON에서 가져옴)
     forward_head_sensitivity: Optional[float] = None
+    forward_head_distance_threshold: float = 45.0  # 거북목 감지 거리 (cm)
     recline_sensitivity: Optional[float] = None
     chin_rest_sensitivity: Optional[float] = None
     eye_close_sensitivity: Optional[float] = None
@@ -280,9 +276,16 @@ class SettingsConfig:
             if config_manager:
                 scoring_config = config_manager.get_frame_scoring_config()
                 sensitivities = scoring_config.get("sensitivities", {})
+                eye_cfg = config_manager.get_posture_criteria().get("eye_monitoring", {})
 
                 if instance.forward_head_sensitivity is None:
                     instance.forward_head_sensitivity = sensitivities.get("forward_head", 0.1)
+                
+                # distance_threshold_cm 로드 (instance에 이미 값이 있으면(JSON 로드됨) 유지)
+                # 만약 JSON에 없었다면 default 45.0이 이미 들어가 있고, 아래에서 config 기준으로 한번 더 확인
+                if "forward_head_distance_threshold" not in instance.__dict__ or instance.forward_head_distance_threshold == 45.0:
+                     instance.forward_head_distance_threshold = float(eye_cfg.get("distance_threshold_cm", 45.0))
+
                 if instance.recline_sensitivity is None:
                     instance.recline_sensitivity = sensitivities.get("recline", 0.04)
                 if instance.chin_rest_sensitivity is None:
@@ -349,4 +352,12 @@ class SettingsConfig:
         if self.recommended_recline is not None:
             self.recline_sensitivity = self.recommended_recline
             
-        logger.info(f"민감도 설정이 권장값으로 초기화되었습니다.")
+        # 거리 임계값은 JSON 기준값으로 복구
+        try:
+            criteria = PostureSettings.load_posture_criteria_json()
+            eye_cfg = criteria.get("eye_monitoring", {})
+            self.forward_head_distance_threshold = float(eye_cfg.get("distance_threshold_cm", 45.0))
+        except Exception:
+            self.forward_head_distance_threshold = 45.0
+            
+        logger.info(f"민감도 및 거리 설정이 기본값으로 초기화되었습니다.")

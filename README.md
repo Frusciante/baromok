@@ -99,8 +99,8 @@ python main.py
 
 이 저장소에는 프로토타입 알고리즘이 통합되어 있습니다.
 
-- **자세 맞춤**: 다단계 거리 분할 수집을 통해 지표 간 관계를 회귀 모델로 보정합니다. 설정은 <a href=".github/rules/operation/posture_definition_criteria.json">baseline.capture</a>를 참조하십시오.
-- **필터링**: 지표 수준의 필터를 사용하여 노이즈를 억제합니다. 설정은 <a href=".github/rules/operation/posture_definition_criteria.json">filters</a>를 참조하십시오.
+- **자세 맞춤**: 다단계 거리 분할 수집을 통해 지표 간 관계를 회귀 모델로 보정합니다. 설정은 <a href="data/posture_definition_criteria.json">baseline.capture</a>를 참조하십시오.
+- **필터링**: 지표 수준의 필터를 사용하여 노이즈를 억제합니다. 설정은 <a href="data/posture_definition_criteria.json">filters</a>를 참조하십시오.
 - **판단 로직**: 스코어링 및 시간 기반 상태 확인 로직이 통합되어 있습니다.
 
 ## 사용 흐름
@@ -124,7 +124,7 @@ python main.py
 ## 설정 파일
 
 자세 판정 기준 및 임계값은 아래 경로에서 관리됩니다.
-- <a href=".github/rules/operation/posture_definition_criteria.json">.github/rules/operation/posture_definition_criteria.json</a>
+- <a href="data/posture_definition_criteria.json">data/posture_definition_criteria.json</a>
 
 ## 개발 및 기여
 
