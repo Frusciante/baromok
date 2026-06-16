@@ -217,6 +217,7 @@ class BaselineManager:
             "eye_line_tilt",
             "chin_occlusion",
             "head_height",
+            "face_pitch_deg",
         ]
 
         for name in indicator_names:

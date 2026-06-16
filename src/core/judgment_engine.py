@@ -26,6 +26,7 @@ class PostureType(Enum):
     EYE_CLOSE = "eye_close"  # 화면과 눈 거리 가까움
     TURNED_HEAD = "turned_head"  # 고개 돌린 자세 (Yaw)
     SIDE_TILT = "side_tilt"  # 고개 기울인 자세 (Roll)
+    HEAD_DOWN = "head_down"  # 고개 숙인 자세 (Pitch)
 
 
 @dataclass
@@ -76,10 +77,11 @@ class JudgmentEngine:
         # 1. 확정된 나쁜 자세 목록 추출 (triggered=True)
         active_list = [res for res in results if res["triggered"]]
 
-        # [강화] 상호 배제: 거북목과 기댄 자세는 공존할 수 없음.
-        # 프레임 단위 결과에서도 거북목이 있으면 기댄 자세는 무조건 제거한다.
+        # [강화] 상호 배제: 거북목이나 고개 숙임이 있으면 기댄 자세는 무시한다.
         is_fwd = any(res["posture_type"] == PostureType.FORWARD_HEAD.value for res in active_list)
-        if is_fwd:
+        is_down = any(res["posture_type"] == PostureType.HEAD_DOWN.value for res in active_list)
+        
+        if is_fwd or is_down:
             active_list = [res for res in active_list if res["posture_type"] != PostureType.RECLINE.value]
 
         dominant_p = None
@@ -91,15 +93,11 @@ class JudgmentEngine:
                 max_likelihood = res["likelihood"]
                 dominant_p = res["posture_type"]
 
-        # 모든 워커 결과에 대해 지속 시간 업데이트 수행 (결과 발산 방지를 위해 원본 results 사용 가능하나, 
-        # 일관성을 위해 active_list에 남은 것들만 시간 누적되도록 유도)
-        # 하지만 _update_posture_duration 내부에서 triggered 여부를 보므로, 
-        # recline의 경우 여기서 triggered를 강제로 False로 만들거나 처리 로직을 수정해야 함.
-        
+        # 모든 워커 결과에 대해 지속 시간 업데이트 수행
         for res in results:
             p_type = res["posture_type"]
-            # 거북목이 있는 경우 recline의 triggered를 강제로 False로 간주하여 시간 누적 방지
-            if is_fwd and p_type == PostureType.RECLINE.value:
+            # 상호 배제 조건: 거북목/고개숙임이 활성화된 경우 recline의 시간 누적 차단
+            if (is_fwd or is_down) and p_type == PostureType.RECLINE.value:
                 res_to_process = res.copy()
                 res_to_process["triggered"] = False
                 self._update_posture_duration(res_to_process, current_timestamp)
@@ -134,11 +132,16 @@ class JudgmentEngine:
             if self.posture_active_durations.get(p_key, 0) >= sustain_seconds:
                 confirmed.append(p_key)
         
-        # [강화] 상호 배제: 거북목과 기댄 자세는 공존할 수 없음.
-        # 동시에 감지될 경우 '거북목'만 남기고 기댄 자세는 완전히 제거한다.
+        # [강화] 상호 배제: 특정 자세들은 물리적으로 동시에 발생하기 어렵거나 오인될 가능성이 높음
+        # 1. 거북목 vs 기댄 자세: 거북목 우선
         if "forward_head" in confirmed and "recline" in confirmed:
             confirmed = [p for p in confirmed if p != "recline"]
             logger.info("상호 배제 적용: 거북목과 기댄 자세 동시 감지됨 -> 거북목만 유지")
+            
+        # 2. 고개 숙임 vs 기댄 자세: 고개 숙임 우선
+        if "head_down" in confirmed and "recline" in confirmed:
+            confirmed = [p for p in confirmed if p != "recline"]
+            logger.info("상호 배제 적용: 고개 숙임과 기댄 자세 동시 감지됨 -> 고개 숙임만 유지")
 
         self.last_confirmed_postures = confirmed
         return confirmed

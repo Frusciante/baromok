@@ -50,20 +50,36 @@ class DetectionScreen(QWidget):
         """UI 구성"""
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
+        layout.setSpacing(15)
 
-        top_layout = QHBoxLayout()
-        self.status_label = QLabel("준비중")
+        # [상단 헤더 정보] 상태, 자세 판정, 각도 정보를 한 줄에 배치
+        header_info_layout = QHBoxLayout()
+        
+        self.status_label = QLabel("바른 자세")
         self.status_label.setFont(app_font(self.theme_manager.scale_pixel(17), QFont.Weight.Bold))
         self.status_label.setObjectName("status_normal")
-        top_layout.addWidget(self.status_label)
-        top_layout.addStretch()
-
+        header_info_layout.addWidget(self.status_label)
+        
+        header_info_layout.addSpacing(20)
+        
+        self.posture_label = QLabel("감지 중")
+        self.posture_label.setFont(app_font(self.theme_manager.scale_pixel(16), QFont.Weight.Bold))
+        self.posture_label.setStyleSheet(f"color: {Colors.PRIMARY.value};")
+        header_info_layout.addWidget(self.posture_label)
+        
+        header_info_layout.addStretch()
+        
+        self.pitch_label = QLabel("고개 각도: -°")
+        self.pitch_label.setFont(app_font(self.theme_manager.scale_pixel(14)))
+        self.pitch_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
+        header_info_layout.addWidget(self.pitch_label)
+        
         settings_btn = QPushButton("⚙ 설정")
-        settings_btn.setFixedHeight(self.theme_manager.scale_pixel(32))
+        settings_btn.setFixedSize(self.theme_manager.scale_pixel(70), self.theme_manager.scale_pixel(32))
         settings_btn.clicked.connect(self.open_settings_signal.emit)
-        top_layout.addWidget(settings_btn)
-        layout.addLayout(top_layout)
+        header_info_layout.addWidget(settings_btn)
+        
+        layout.addLayout(header_info_layout)
 
         # 중앙 메인 레이아웃 (좌: 프리뷰/시간, 우: 가드)
         main_center_layout = QHBoxLayout()
@@ -71,11 +87,11 @@ class DetectionScreen(QWidget):
         
         # [좌측 영역]
         left_panel = QVBoxLayout()
-        left_panel.setSpacing(15)
+        left_panel.setSpacing(10)
 
         self.time_label = QLabel("00:00:00")
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.time_label.setFont(app_font(self.theme_manager.scale_pixel(51), QFont.Weight.Bold))
+        self.time_label.setFont(app_font(self.theme_manager.scale_pixel(42), QFont.Weight.Bold))
         left_panel.addWidget(self.time_label)
 
         self.preview_frame = QFrame()
@@ -84,113 +100,96 @@ class DetectionScreen(QWidget):
             border: 1px solid {Colors.GRAY_MEDIUM.value};
             border-radius: 12px;
         """)
-        self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(320))
+        self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(340))
         preview_layout = QVBoxLayout()
         preview_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 카메라 대기 스피너 / 실제 프리뷰를 QStackedWidget으로 관리
         self._preview_stack = QStackedWidget()
-
-        # Page 0: 스피너 레이블
         self._spinner_label = QLabel("카메라 연결 중...")
         self._spinner_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._spinner_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value}; font-size: 16px;")
-        self._preview_stack.addWidget(self._spinner_label)  # index 0
-
-        # Page 1: 실제 카메라 프리뷰
+        self._preview_stack.addWidget(self._spinner_label)
         self.preview_label = QLabel("[카메라 프리뷰]")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview_stack.addWidget(self.preview_label)  # index 1
-
-        self._preview_stack.setCurrentIndex(1)  # 기본은 프리뷰 표시
+        self._preview_stack.addWidget(self.preview_label)
+        self._preview_stack.setCurrentIndex(1)
         preview_layout.addWidget(self._preview_stack)
         self.preview_frame.setLayout(preview_layout)
         left_panel.addWidget(self.preview_frame, 1)
 
         self.recognition_label = QLabel("")
         self.recognition_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.recognition_label.setFont(app_font(self.theme_manager.scale_pixel(15), QFont.Weight.Bold))
+        self.recognition_label.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
         self.recognition_label.setStyleSheet(f"color: {Colors.RED_DANGER.value};")
         set_recognition_message(self.recognition_label, False)
         left_panel.addWidget(self.recognition_label)
 
-        self.posture_label = QLabel("감지 중")
-        self.posture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.posture_label.setFont(app_font(self.theme_manager.scale_pixel(19), QFont.Weight.Bold))
-        left_panel.addWidget(self.posture_label)
-
-        # [추가] 감지 종료/안내 전용 메시지 라벨 (박스 형태)
+        # [추가] 안내 메시지 라벨
         self.session_msg_label = QLabel("")
         self.session_msg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.session_msg_label.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
+        self.session_msg_label.setFont(app_font(self.theme_manager.scale_pixel(13), QFont.Weight.Bold))
         self.session_msg_label.setWordWrap(True)
-        self.session_msg_label.hide() # 초기 상태 숨김
+        self.session_msg_label.hide()
         left_panel.addWidget(self.session_msg_label)
         
-        main_center_layout.addLayout(left_panel, 3) # 좌측 60%
+        main_center_layout.addLayout(left_panel, 3)
 
-        # [우측 영역] 바른 자세 가이드 패널
+        # [우측 영역] 가이드 패널
         from src.ui.widgets.settings_widgets import CorrectPostureGuideWidget
         self.guide_panel = CorrectPostureGuideWidget(self.theme_manager, vertical=True)
-        self.guide_panel.setStyleSheet(f"""
-            background-color: #F8F9FF;
-            border: 1px solid #E3E0F2;
-            border-radius: 15px;
-        """)
-        main_center_layout.addWidget(self.guide_panel, 2) # 우측 40%
+        self.guide_panel.setStyleSheet(f"background-color: #F8F9FF; border: 1px solid #E3E0F2; border-radius: 15px;")
+        main_center_layout.addWidget(self.guide_panel, 2)
         
         layout.addLayout(main_center_layout)
 
-        self.cheek_detail_label = QLabel("광대 거리: - (예상: -)")
-        self.cheek_detail_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cheek_detail_label.setFont(app_font(self.theme_manager.scale_pixel(15)))
+        # 하단 세부 지표 및 버튼
+        footer_layout = QHBoxLayout()
+        
+        details_layout = QVBoxLayout()
+        self.cheek_detail_label = QLabel("광대 거리: -")
+        self.cheek_detail_label.setFont(app_font(self.theme_manager.scale_pixel(13)))
         self.cheek_detail_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
-        layout.addWidget(self.cheek_detail_label)
+        details_layout.addWidget(self.cheek_detail_label)
 
         self.distance_label = QLabel("화면 거리: - cm")
-        self.distance_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.distance_label.setFont(app_font(self.theme_manager.scale_pixel(16), QFont.Weight.Bold))
+        self.distance_label.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
         self.distance_label.setStyleSheet(f"color: {Colors.GRAY_MEDIUM.value};")
-        layout.addWidget(self.distance_label)
+        details_layout.addWidget(self.distance_label)
+        footer_layout.addLayout(details_layout)
+        
+        footer_layout.addStretch()
 
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
+        for btn_name, callback, is_danger in [
+            ("재측정", self._recalibrate, False),
+            ("일시정지", self._pause_detection, False),
+            ("종료", self._stop_detection, True)
+        ]:
+            btn = QPushButton(btn_name)
+            btn.setFixedSize(self.theme_manager.scale_pixel(90), self.theme_manager.scale_pixel(40))
+            if is_danger: btn.setObjectName("danger")
+            btn.clicked.connect(callback)
+            button_layout.addWidget(btn)
+            if btn_name == "일시정지": self.pause_btn = btn
+            elif btn_name == "재측정": self.recalibrate_btn = btn
+            elif btn_name == "종료": self.stop_btn = btn
+            
+        footer_layout.addLayout(button_layout)
+        layout.addLayout(footer_layout)
 
-        self.recalibrate_btn = QPushButton("재측정")
-        self.recalibrate_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
-        self.recalibrate_btn.clicked.connect(self._recalibrate)
-        button_layout.addWidget(self.recalibrate_btn)
-
-        self.pause_btn = QPushButton("일시정지")
-        self.pause_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
-        self.pause_btn.clicked.connect(self._pause_detection)
-        button_layout.addWidget(self.pause_btn)
-
-        self.stop_btn = QPushButton("종료")
-        self.stop_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
-        self.stop_btn.setObjectName("danger")
-        self.stop_btn.clicked.connect(self._stop_detection)
-        button_layout.addWidget(self.stop_btn)
-
-        layout.addLayout(button_layout)
-
-        # 세션 종료 후 표시되는 액션 버튼들 (기본 숨김)
+        # 세션 종료 후 버튼
         self.post_stop_button_layout = QHBoxLayout()
-        self.post_stop_button_layout.setSpacing(10)
         self.restart_btn = QPushButton("다시 시작")
-        self.restart_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
+        self.restart_btn.setFixedSize(self.theme_manager.scale_pixel(120), self.theme_manager.scale_pixel(40))
         self.restart_btn.clicked.connect(self.detection_restart_signal.emit)
         self.results_btn = QPushButton("결과 보기")
-        self.results_btn.setFixedHeight(self.theme_manager.scale_pixel(40))
+        self.results_btn.setFixedSize(self.theme_manager.scale_pixel(120), self.theme_manager.scale_pixel(40))
         self.results_btn.clicked.connect(self.view_results_signal.emit)
         self.post_stop_button_layout.addStretch()
         self.post_stop_button_layout.addWidget(self.restart_btn)
         self.post_stop_button_layout.addWidget(self.results_btn)
         self.post_stop_button_layout.addStretch()
-        
-        # initially hidden
-        self.restart_btn.hide()
-        self.results_btn.hide()
+        self.restart_btn.hide(); self.results_btn.hide()
         layout.addLayout(self.post_stop_button_layout)
         
         self.setLayout(layout)
@@ -250,6 +249,19 @@ class DetectionScreen(QWidget):
                     self.distance_label.setText(f"화면 거리: {dist_cm:.1f} cm")
                 else:
                     self.distance_label.setText("화면 거리: - cm")
+
+                # 고개 각도 표시
+                current_pitch = indicators.face_pitch_deg
+                if self.baseline_manager:
+                    baseline_metrics = self.baseline_manager.get_baseline_metrics()
+                    if baseline_metrics and "face_pitch_deg" in baseline_metrics.metrics:
+                        base_pitch = baseline_metrics.metrics["face_pitch_deg"]
+                        pitch_diff = current_pitch - base_pitch
+                        self.pitch_label.setText(f"고개 각도: {current_pitch:+.1f}° (편차: {pitch_diff:+.1f}°)")
+                    else:
+                        self.pitch_label.setText(f"고개 각도: {current_pitch:+.1f}° (기준 없음)")
+                else:
+                    self.pitch_label.setText(f"고개 각도: {current_pitch:+.1f}°")
         except Exception as e:
             logger.error(f"프레임 처리 오류: {e}")
 

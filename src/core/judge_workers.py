@@ -161,6 +161,18 @@ class ReclineWorker(BaseJudgeWorker):
         super().__init__(PostureType.RECLINE, config, baseline_manager)
 
     def handle_indicators(self, indicators: PostureIndicators):
+        # [추가] 고개 숙임 감지 시 기댄 자세 판정 억제
+        try:
+            baseline_metrics = self.baseline_manager.get_baseline_metrics()
+            if baseline_metrics and "face_pitch_deg" in baseline_metrics.metrics:
+                base_pitch = baseline_metrics.metrics["face_pitch_deg"]
+                pitch_diff = indicators.face_pitch_deg - base_pitch
+                # 고개를 일정 수준(예: 10도) 이상 숙였다면 기댄 자세 판정을 억제
+                if pitch_diff > 10.0:
+                    self._emit_result(0.0)
+                    return
+        except Exception: pass
+
         has_sh = indicators.shoulder_width is not None and indicators.shoulder_width > 0
         proxy_val = indicators.shoulder_width if has_sh else indicators.eye_distance
         
@@ -270,6 +282,47 @@ class SideTiltWorker(BaseJudgeWorker):
             self._emit_result(0.0)
 
 
+class HeadDownWorker(BaseJudgeWorker):
+    """고개 숙임 판정 워커 (Pitch)"""
+
+    def __init__(self, config, baseline_manager):
+        super().__init__(PostureType.HEAD_DOWN, config, baseline_manager)
+
+    def handle_indicators(self, indicators: PostureIndicators):
+        try:
+            baseline_metrics = self.baseline_manager.get_baseline_metrics()
+            if not baseline_metrics:
+                self._emit_result(0.0)
+                return
+            
+            baseline_pitch = baseline_metrics.metrics.get("face_pitch_deg", 0.0)
+            current_pitch = indicators.face_pitch_deg
+
+            # 고개를 숙이면 pitch가 증가하는 방향으로 계산됨 (dz/dy)
+            # delta_pitch = current - baseline
+            diff = current_pitch - baseline_pitch
+
+            # 설정값 로드
+            threshold = self.criteria.get("threshold", 15.0)
+            
+            # likelihood 계산: 임계값 근처에서 시작하여 선형 증가
+            # 예: threshold=15일 때, 10도부터 시작하여 20도에서 1.0 도달 (sensitivities 반영 가능)
+            sens_factor = 0.1 / max(0.01, self.sensitivity)
+            
+            margin = 5.0
+            likelihood = float(np.clip(((diff - (threshold - margin)) / (2 * margin)) * sens_factor, 0.0, 1.0))
+            
+            # triggered는 필터링된 likelihood가 warning_threshold를 넘었을 때 _emit_result에서 결정됨
+            # 하지만 원시 likelihood 계산 시 threshold를 넘으면 높은 값을 주도록 유도
+            if diff >= threshold:
+                likelihood = max(likelihood, self.warning_anchor + 0.1)
+
+            self._emit_result(likelihood)
+        except Exception as e:
+            logger.error(f"HeadDownWorker 판정 실패: {e}")
+            self._emit_result(0.0)
+
+
 class PostureJudgeManager(QObject):
     """모든 판정 워커를 관리하고 스레드를 할당하는 매니저"""
     
@@ -287,7 +340,10 @@ class PostureJudgeManager(QObject):
         self._initialize_workers()
 
     def _initialize_workers(self):
-        worker_classes = [ForwardHeadWorker, ReclineWorker, ChinRestWorker, TurnedHeadWorker, SideTiltWorker]
+        worker_classes = [
+            ForwardHeadWorker, ReclineWorker, ChinRestWorker, 
+            TurnedHeadWorker, SideTiltWorker, HeadDownWorker
+        ]
         for cls in worker_classes:
             worker = cls(self.config, self.baseline_manager)
             thread = QThread()

@@ -162,6 +162,12 @@ class BaselineScreen(QWidget):
         self.step_label.setStyleSheet("border: none; background-color: transparent;")
         status_vbox.addWidget(self.step_label)
 
+        self.current_pitch_label = QLabel("현재 고개 각도: -°")
+        self.current_pitch_label.setFont(app_font(self.theme_manager.scale_pixel(13)))
+        self.current_pitch_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.current_pitch_label.setStyleSheet("color: #666666; border: none; background-color: transparent;")
+        status_vbox.addWidget(self.current_pitch_label)
+
         self.total_progress_bar = QProgressBar()
         self.total_progress_bar.setMaximum(self.total_steps)
         self.total_progress_bar.setValue(0)
@@ -458,19 +464,22 @@ class BaselineScreen(QWidget):
                 )
                 self.preview_label.setPixmap(scaled_pixmap)
 
+            indicators = frame_data.get("indicators")
+            if indicators is not None:
+                set_recognition_message(self.recognition_label, False)
+                # 실시간 고개 각도 표시
+                self.current_pitch_label.setText(f"현재 고개 각도: {indicators.face_pitch_deg:+.1f}°")
+            else:
+                set_recognition_message(self.recognition_label, True)
+                self.current_pitch_label.setText("현재 고개 각도: -°")
+                return
+
             if (
                 not self.is_capturing_baseline
                 or self.baseline_manager is None
                 or not self.baseline_manager.is_collecting
             ):
                 return
-
-            indicators = frame_data.get("indicators")
-            if indicators is None:
-                set_recognition_message(self.recognition_label, True)
-                return
-
-            set_recognition_message(self.recognition_label, False)
 
             if self.step_state == "WAIT":
                 return

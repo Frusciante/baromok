@@ -477,7 +477,16 @@ class LandmarkExtractor:
             # 152는 턱 아래쪽 대표 포인트
             chin_point = _get_face_point(152, "chin")
             if chin_point is not None:
-                landmarks["chin_points"].append(chin_point)
+                # 3D 좌표 보존을 위해 z값 추가
+                z = face_lms[152][2] if len(face_lms) > 152 else 0.0
+                landmarks["chin_points"].append((chin_point[0], chin_point[1], z))
+
+            # 이마 포인트 (Pitch 각도 계산용)
+            # 10번은 이마 상단 중앙 포인트
+            forehead_point = _get_face_point(10, "forehead")
+            if forehead_point is not None:
+                z = face_lms[10][2] if len(face_lms) > 10 else 0.0
+                landmarks["forehead"] = (forehead_point[0], forehead_point[1], z)
 
             # 홍채(Iris) 추출: MediaPipe FaceMesh 468~477 인덱스
             left_iris_diam_px = None
@@ -667,14 +676,14 @@ class LandmarkExtractor:
             elif key == "confidences":
                 normalized[key] = value
             elif isinstance(value, list):
-                # 손가락 팁은 3D 유지, chin_points는 2D로 변환
+                # 손가락 팁은 3D 유지, chin_points 등 리스트 내 포인트 3D 대응
                 if key in ["left_hand_tips", "right_hand_tips"]:
                     normalized[key] = [
                         (
                             (
                                 p[0] / frame_width,
                                 p[1] / frame_height,
-                                p[2] if len(p) > 2 else 0,
+                                p[2] if len(p) > 2 else 0.0,
                             )
                             if len(p) >= 2
                             else p
@@ -682,21 +691,26 @@ class LandmarkExtractor:
                         for p in value
                     ]
                 else:
-                    # chin_points는 2D 유지 (x, y)만
+                    # chin_points 등 다른 리스트 포인트들도 z값이 있으면 보존
                     normalized[key] = [
                         (
                             (
                                 p[0] / frame_width,
                                 p[1] / frame_height,
+                                p[2] if len(p) > 2 else 0.0,
                             )
-                            if len(p) >= 2
-                            else p
+                            if len(p) >= 3 else
+                            (p[0] / frame_width, p[1] / frame_height)
+                            if len(p) >= 2 else p
                         )
                         for p in value
                     ]
             elif isinstance(value, tuple):
-                # 일반 포인트
-                normalized[key] = (value[0] / frame_width, value[1] / frame_height)
+                # 일반 포인트 (z값이 있으면 3D 튜플로 반환)
+                if len(value) >= 3:
+                    normalized[key] = (value[0] / frame_width, value[1] / frame_height, value[2])
+                else:
+                    normalized[key] = (value[0] / frame_width, value[1] / frame_height)
             else:
                 normalized[key] = value
 
@@ -704,6 +718,7 @@ class LandmarkExtractor:
         _VECTOR_KEYS = (
             "face_center", "left_eye", "right_eye",
             "left_cheek", "right_cheek", "left_shoulder", "right_shoulder",
+            "forehead",
         )
         _LIST_KEYS = (
             "chin_points", "left_hand_tips", "right_hand_tips",
@@ -728,7 +743,7 @@ class LandmarkExtractor:
             present = val is not None and (not isinstance(val, list) or len(val) > 0)
             if present:
                 if isinstance(val, tuple):
-                    stored = (float(val[0]), float(val[1]))
+                    stored = tuple(float(x) for x in val)
                 elif isinstance(val, list):
                     stored = list(val)          # shallow copy sufficient for tuples inside
                 else:
@@ -776,7 +791,7 @@ class LandmarkExtractor:
             if baseline_mode:
                 # baseline 모드: 필터 없이 ghost 값만 사용
                 if k in _VECTOR_KEYS:
-                    normalized[k] = (float(rep[0]), float(rep[1])) if rep is not None else None
+                    normalized[k] = tuple(rep) if rep is not None else None
                 elif k in _SCALAR_KEYS:
                     normalized[k] = float(rep) if rep is not None else None
                 else:
@@ -794,11 +809,12 @@ class LandmarkExtractor:
                             d_cutoff=self._one_euro_d_cutoff,
                         )
                     try:
-                        vec = np.array((float(rep[0]), float(rep[1])), dtype=np.float64)
+                        # rep는 (x, y) 또는 (x, y, z)일 수 있음
+                        vec = np.array(rep, dtype=np.float64)
                         filtered = self._one_euro_filters[k].process(t_sec, vec)
-                        normalized[k] = (float(filtered[0]), float(filtered[1]))
+                        normalized[k] = tuple(filtered.tolist())
                     except Exception:
-                        normalized[k] = (float(rep[0]), float(rep[1]))
+                        normalized[k] = tuple(rep)
             else:
                 # lists and scalars: pass through representative value
                 normalized[k] = rep if rep is not None else ([] if k in _LIST_KEYS else None)

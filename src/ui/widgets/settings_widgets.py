@@ -792,6 +792,7 @@ class SensitivitySettingsWidget(QWidget):
         self.posture_keys = [
             ("forward_head", "거북목 감도"),
             ("forward_head_distance_threshold", "거북목 감지 거리"),
+            ("head_down", "고개 숙임 감도"),
             ("recline", "기댄 자세"),
             ("chin_rest_sensitivity", "턱 괸 자세"),
             ("turned_head_sensitivity", "고개 돌림"),

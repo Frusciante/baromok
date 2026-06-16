@@ -39,6 +39,7 @@ class PostureIndicators:
     eye_height: float = 0.0
     shoulder_height: float = 0.0
     chin_alignment_offset: float = 0.0
+    face_pitch_deg: float = 0.0
     timestamp: float = 0.0
     step_index: int = 0
 
@@ -96,7 +97,8 @@ class IndicatorCalculator:
             filter_keys = [
                 'cheek_distance', 'eye_distance', 'face_vertical_length', 'head_height',
                 'shoulder_width', 'shoulder_tilt_deg', 'neck_offset', 'eye_line_tilt',
-                'chin_occlusion', 'hand_face_score', 'shoulder_height', 'eye_height'
+                'chin_occlusion', 'hand_face_score', 'shoulder_height', 'eye_height',
+                'face_pitch_deg'
             ]
             for key in filter_keys:
                 if key in self.ema_filters:
@@ -138,7 +140,9 @@ class IndicatorCalculator:
     def calculate_face_vertical_length(self, left_eye, right_eye, chin) -> float:
         if left_eye is None or right_eye is None or chin is None: return 0.0
         eye_mid = np.array([(left_eye[0] + right_eye[0]) / 2.0, (left_eye[1] + right_eye[1]) / 2.0])
-        return float(np.clip(self.geometry_helper.calculate_distance(eye_mid, np.array(chin)), 0.0, 1.0))
+        # chin_points는 3D (x, y, z)일 수 있으므로 2D로 변환하여 계산
+        chin_2d = np.array(chin)[:2]
+        return float(np.clip(self.geometry_helper.calculate_distance(eye_mid, chin_2d), 0.0, 1.0))
     
     def calculate_shoulder_width(self, left_shoulder, right_shoulder) -> float:
         if left_shoulder is None or right_shoulder is None: return 0.0
@@ -179,7 +183,9 @@ class IndicatorCalculator:
                 hand = np.array(hand_pt[:2])
                 for chin_pt in chin_points:
                     if chin_pt is None: continue
-                    dist = self.geometry_helper.calculate_distance(np.array(chin_pt), hand)
+                    # chin_pt는 3D (x, y, z)일 수 있으므로 2D로 변환하여 계산
+                    chin_2d = np.array(chin_pt)[:2]
+                    dist = self.geometry_helper.calculate_distance(chin_2d, hand)
                     if dist < threshold: score += (1.0 - dist / threshold) * 0.1
         return float(np.clip(score, 0.0, 1.0))
     
@@ -263,11 +269,28 @@ class IndicatorCalculator:
             sh_tilt_raw = self.calculate_shoulder_tilt_degree(landmarks['left_shoulder'], landmarks['right_shoulder']) if has_sh else None
             neck_off_raw = self.calculate_neck_offset(face_center, landmarks['left_shoulder'], landmarks['right_shoulder']) if has_sh and face_center else None
 
+            # 3. 얼굴 각도 (Pitch)
+            pitch_deg_raw = 0.0
+            forehead = landmarks.get('forehead')
+            # chin_points는 리스트이며, LandmarkExtractor에서 (x, y, z) 튜플로 변환해줌
+            chin = landmarks.get('chin_points')[0] if landmarks.get('chin_points') else None
+            
+            if forehead and chin:
+                # Mediapipe Z는 깊이(카메라에 가까울수록 작음), Y는 상하(내려갈수록 큼)
+                # delta_z = chin.z - forehead.z (고개를 숙이면 턱이 멀어지고 이마가 가까워지므로 양수 증가)
+                # delta_y = chin.y - forehead.y (상하 거리)
+                dz = chin[2] - forehead[2]
+                dy = chin[1] - forehead[1]
+                if abs(dy) > 1e-6:
+                    # arctan2(dz, dy)를 통해 수직 평면에서의 기울기 계산
+                    pitch_deg_raw = float(np.degrees(np.arctan2(dz, dy)))
+
             # 필터링
             if baseline_mode:
                 cheek_dist = cheek_dist_raw; eye_dist = eye_dist_raw; face_v_len = face_v_len_raw; eye_tilt = eye_tilt_raw
                 head_height = head_height_raw; eye_h = eye_h_raw; sh_h = sh_h_raw
                 sh_w = sh_w_raw; sh_tilt = sh_tilt_raw; neck_off = neck_off_raw
+                face_pitch = pitch_deg_raw
             else:
                 cheek_dist = self.ema_filters['cheek_distance'].process(cheek_dist_raw)
                 eye_dist = self.ema_filters['eye_distance'].process(eye_dist_raw)
@@ -275,6 +298,7 @@ class IndicatorCalculator:
                 eye_h = self.ema_filters['eye_height'].process(eye_h_raw)
                 face_v_len = self.ema_filters['face_vertical_length'].process(face_v_len_raw)
                 eye_tilt = self.ema_filters['eye_line_tilt'].process(eye_tilt_raw)
+                face_pitch = self.ema_filters['face_pitch_deg'].process(pitch_deg_raw)
                 if has_sh:
                     sh_w = self.ema_filters['shoulder_width'].process(sh_w_raw)
                     sh_h = self.ema_filters['shoulder_height'].process(sh_h_raw)
@@ -334,7 +358,9 @@ class IndicatorCalculator:
                 face_shoulder_ratio=fs_ratio,
                 eye_height=eye_h,
                 shoulder_height=sh_h,
-                chin_alignment_offset=chin_offset, timestamp=timestamp
+                chin_alignment_offset=chin_offset,
+                face_pitch_deg=face_pitch,
+                timestamp=timestamp
             )
         except Exception as e:
             logger.error(f"지표 계산 최종 단계 실패: {e}", exc_info=True)

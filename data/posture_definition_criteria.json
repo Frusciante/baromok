@@ -51,7 +51,8 @@
       "shoulder_width",
       "cheek_distance",
       "eye_distance",
-      "head_height"
+      "head_height",
+      "face_pitch_deg"
     ]
   },
   "global_rules": {
@@ -184,6 +185,12 @@
         }
       },
       "sustain_seconds": 2.0
+    },
+    "head_down": {
+      "display_label": "고개 숙임",
+      "alert_message": "고개를 너무 숙이고 있어요. 정면을 바라봐 주세요.",
+      "threshold": 5.0,
+      "sustain_seconds": 2.0
     }
   },
   "frame_scoring": {
@@ -203,6 +210,9 @@
         "shoulder": 0.2,
         "neck": 0.15,
         "hand": 0.3
+      },
+      "head_down": {
+        "pitch": 1.0
       }
     },
     "ratio_scale_k": 1.5,
@@ -215,7 +225,8 @@
     "sensitivities": {
       "forward_head": 0.10,
       "recline": 0.04,
-      "neck_offset": 10.0
+      "neck_offset": 10.0,
+      "head_down": 0.1
     }
   },
   "eye_monitoring": {
