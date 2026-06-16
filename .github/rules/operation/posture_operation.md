@@ -11,23 +11,23 @@
 </p>
 
 - 판정 기준의 실제 수치 및 임계값은 JSON에서 통합 관리합니다.
-- 기준 파일: <a href="./posture_definition_criteria.json">./posture_definition_criteria.json</a>
+- 기준 파일: <a href="../../../data/posture_definition_criteria.json">../../../data/posture_definition_criteria.json</a>
 - 기준 문서: <a href="./posture_definition_criteria_documentation.md">./posture_definition_criteria_documentation.md</a>
 
 ## 프레임 점수
 
 - 프레임 점수 범위와 자세별 가능도 계산식은 아래 설정을 따릅니다.
-- 참조: <a href="./posture_definition_criteria.json">frame_scoring</a>
+- 참조: <a href="../../../data/posture_definition_criteria.json">frame_scoring</a>
 
 ## 이벤트 판정
 
 - 즉시 판정 및 확정 판정(지속 시간 조건 등) 기준은 아래 설정을 따릅니다.
-- 참조: <a href="./posture_definition_criteria.json">event_judgment</a> 및 <a href="./posture_definition_criteria.json">posture_types</a>
+- 참조: <a href="../../../data/posture_definition_criteria.json">event_judgment</a> 및 <a href="../../../data/posture_definition_criteria.json">posture_types</a>
 
 ## 상태 머신
 
 - 상태 머신의 상태 정의 및 전이 규칙은 아래 설정을 따릅니다.
-- 참조: <a href="./posture_definition_criteria.json">global_rules.state_machine</a>
+- 참조: <a href="../../../data/posture_definition_criteria.json">global_rules.state_machine</a>
 
 ## 구현 체크포인트
 

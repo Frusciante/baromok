@@ -31,12 +31,10 @@ class PostureSettings(BaseSettings):
             json.JSONDecodeError: JSON 파싱 실패
             ValueError: 스키마 검증 실패
         """
-        # src/config.py -> src/ -> baromok/ -> .github/
+        # src/config.py -> src/ -> baromok/ -> data/
         criteria_path = (
             Path(__file__).parent.parent
-            / ".github"
-            / "rules"
-            / "operation"
+            / "data"
             / "posture_definition_criteria.json"
         )
 

@@ -16,7 +16,7 @@
 
 나쁜 자세를 규칙 기반으로 정의하고, 프레임 단위 및 시간 누적으로 판정하기 위한 기준을 정리합니다.
 판정 기준의 실제 수치 및 임계값은 JSON에서 단일 소스로 관리합니다.
-참조: <a href="./operation/posture_definition_criteria.json">./operation/posture_definition_criteria.json</a>
+참조: <a href="../../data/posture_definition_criteria.json">../../data/posture_definition_criteria.json</a>
 
 ## 공통 전제
 
@@ -30,7 +30,7 @@
 - **공통 Baseline (자세 맞춤)**
   - 거리별 다단계 데이터를 수집하여 신체 지표 간의 관계를 학습합니다.
   - 상세 기술 사양: <a href="./operation/posture_system_summary.md">./operation/posture_system_summary.md</a>
-  - 설정 참조: <a href="./operation/posture_definition_criteria.json">baseline.capture</a>
+  - 설정 참조: <a href="../../data/posture_definition_criteria.json">baseline.capture</a>
 - **자세별 지표 활용**
   - 거북목/기댄 자세: 얼굴-어깨 비율 및 거리 변화 추적
   - 비대칭 자세: 목-어깨 정렬 및 기울기 지표 활용
@@ -43,17 +43,17 @@
 ### 의자에 누운 자세 (기댄 자세)
 - **의미**: 상체가 뒤로 과하게 기대진 상태
 - **관찰**: 얼굴이 기준점보다 멀어지거나 얼굴-어깨 비율이 감소함
-- **판정**: 임계값 및 지속 시간은 <a href="./operation/posture_definition_criteria.json">posture_types.recline</a>을 참조하십시오.
+- **판정**: 임계값 및 지속 시간은 <a href="../../data/posture_definition_criteria.json">posture_types.recline</a>을 참조하십시오.
 
 ### 거북목 자세
 - **의미**: 머리가 전방으로 편위된 상태
 - **관찰**: 얼굴이 기준점보다 가까워지거나 얼굴-어깨 비율이 상승함
-- **판정**: 임계값 및 지속 시간은 <a href="./operation/posture_definition_criteria.json">posture_types.forward_head</a>를 참조하십시오.
+- **판정**: 임계값 및 지속 시간은 <a href="../../data/posture_definition_criteria.json">posture_types.forward_head</a>를 참조하십시오.
 
 ### 턱 괸 자세
 - **의미**: 손이나 팔로 턱을 받친 상태
 - **관찰**: 머리 기울기 증가, 얼굴 영역 가림, 손-얼굴 근접 신호 검출
-- **판정**: 임계값 및 보조 신호 기준은 <a href="./operation/posture_definition_criteria.json">posture_types.chin_rest_estimated</a>를 참조하십시오.
+- **판정**: 임계값 및 보조 신호 기준은 <a href="../../data/posture_definition_criteria.json">posture_types.chin_rest_estimated</a>를 참조하십시오.
 
 ## 운영 규칙 문서 분리
 
@@ -68,5 +68,5 @@
 | **거북목** | 비율 증가, 거리 변화 | JSON 참조 | JSON 참조 |
 | **턱 괸 자세** | 손-얼굴 근접, 가림, 기울기 | JSON 참조 | JSON 참조 |
 
-� |
+� |
 
