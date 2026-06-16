@@ -96,11 +96,21 @@ class ForwardHeadWorker(BaseJudgeWorker):
     def refresh_settings(self):
         """설정 캐싱 및 거리 임계값 최신화"""
         super().refresh_settings()
-        try:
-            cfg = self.config.get_posture_criteria().get("eye_monitoring", {})
-            self.dist_threshold = float(cfg.get("distance_threshold_cm", 45.0))
-        except Exception:
-            self.dist_threshold = 45.0
+        # dist_threshold가 외부에서 명시적으로 설정되지 않았을 때만 config에서 로드
+        if not hasattr(self, "_dist_threshold_override"):
+            try:
+                cfg = self.config.get_posture_criteria().get("eye_monitoring", {})
+                self.dist_threshold = float(cfg.get("distance_threshold_cm", 45.0))
+            except Exception:
+                self.dist_threshold = 45.0
+        else:
+            self.dist_threshold = self._dist_threshold_override
+
+    def set_distance_threshold(self, val: float):
+        """외부(UI/Settings)에서 거리 임계값 동적 설정"""
+        self._dist_threshold_override = float(val)
+        self.dist_threshold = float(val)
+        logger.debug(f"ForwardHeadWorker: 거리 임계값 변경 -> {val}cm")
 
     def handle_indicators(self, indicators: PostureIndicators):
         # 1. 즉시 경고 플래그 확인 (2초간 근접 유지 시)
@@ -295,8 +305,18 @@ class PostureJudgeManager(QObject):
         self.current_frame_results = {}
         self.indicators_updated.emit(indicators)
 
-    def update_sensitivities(self, sensitivity_dict: Dict[str, float]):
-        for p_type, val in sensitivity_dict.items():
+    def update_sensitivities(self, settings_dict: Dict[str, float]):
+        """감도 및 각종 임계값 통합 갱신"""
+        for key, val in settings_dict.items():
+            # 1. 거리 임계값 처리 (거북목 전용)
+            if key == "forward_head_distance_threshold":
+                worker = self.workers.get(PostureType.FORWARD_HEAD.value)
+                if worker and hasattr(worker, "set_distance_threshold"):
+                    worker.set_distance_threshold(val)
+                continue
+            
+            # 2. 일반 감도 처리
+            p_type = key.replace("_sensitivity", "") # xxx_sensitivity -> xxx
             if p_type in self.workers:
                 self.workers[p_type].sensitivity = val
                 self.workers[p_type].refresh_settings()

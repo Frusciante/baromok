@@ -9,15 +9,21 @@ import sys
 import os
 from pathlib import Path
 
-# 프로젝트 루트 추가
-PROJECT_ROOT = Path(__file__).resolve().parent
-VENV_PYTHON = PROJECT_ROOT / "venv" / "Scripts" / "python.exe"
+# 프로젝트 루트 설정
+if getattr(sys, 'frozen', False):
+    # Nuitka 등으로 빌드된 경우 실행 파일 위치 기준
+    PROJECT_ROOT = Path(sys.executable).parent.absolute()
+else:
+    # 개발 환경에서는 소스 코드 위치 기준
+    PROJECT_ROOT = Path(__file__).resolve().parent
+    VENV_PYTHON = PROJECT_ROOT / "venv" / "Scripts" / "python.exe"
 
-if sys.prefix == sys.base_prefix and VENV_PYTHON.exists():
-    os.execv(
-        str(VENV_PYTHON),
-        [str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]],
-    )
+    # 가상환경 자동 진입 (개발 환경용)
+    if sys.prefix == sys.base_prefix and VENV_PYTHON.exists():
+        os.execv(
+            str(VENV_PYTHON),
+            [str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]],
+        )
 
 sys.path.insert(0, str(PROJECT_ROOT))
 

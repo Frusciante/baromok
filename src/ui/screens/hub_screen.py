@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
 from src.ui.styles.theme import ThemeManager, Colors
 from src.ui.styles.font_loader import app_font
 from src.core.session_manager import SessionManager
+from src.utils.paths import UI_ASSETS_DIR
 import matplotlib
 matplotlib.use("QtAgg")
 from matplotlib.figure import Figure
@@ -98,8 +99,8 @@ class HubScreen(QWidget):
 
         # 홈 일러스트 로드
         image_path_candidates = [
-            Path("assets/ui/바로목로고.png"),
-            Path("assets/ui/home_illustration.svg"),
+            UI_ASSETS_DIR / "바로목로고.png",
+            UI_ASSETS_DIR / "home_illustration.svg",
         ]
         for image_path in image_path_candidates:
             if not image_path.exists():
@@ -280,7 +281,7 @@ class HubScreen(QWidget):
 
         # 이미지 에셋 로드 및 예외 백업 로직 결합
         icon_label = QLabel()
-        icon_path = Path("assets/ui/icon_statsvalue.png")
+        icon_path = UI_ASSETS_DIR / "icon_statsvalue.png"
         
         if icon_path.exists():
             try:
