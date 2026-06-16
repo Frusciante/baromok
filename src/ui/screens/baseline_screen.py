@@ -556,7 +556,6 @@ class BaselineScreen(QWidget):
         self.total_progress_bar.setValue(0)
         self.step_progress_bar.setValue(0)
         self.step_label.setText(f"전체 진행: 0 / {self.total_steps}")
-        self.main_status_label.setText("준비")
         self.main_status_label.setStyleSheet(f"color: {Colors.PRIMARY.value}; border: none; background-color: transparent;")
         self.sub_status_label.setText("시작하면 3초 거리 이동 → 1초 촬영을 5번 반복합니다.")
         set_recognition_message(self.recognition_label, False)

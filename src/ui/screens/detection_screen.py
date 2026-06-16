@@ -2,7 +2,7 @@ import logging
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QPushButton, QStackedWidget, QVBoxLayout, QWidget
+    QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget, QSizePolicy
 )
 from src.ui.styles.theme import Colors, ThemeManager
 from src.ui.styles.font_loader import app_font
@@ -36,7 +36,6 @@ class DetectionScreen(QWidget):
         self.elapsed_time = 0
         self.is_detection_paused = False
         self.is_session_stopped = False
-        self._waiting_for_first_frame = False
         self.setup_ui()
 
         if self.camera_worker:
@@ -69,13 +68,10 @@ class DetectionScreen(QWidget):
         
         header_info_layout.addStretch()
         
-        self.pitch_label = QLabel("고개 각도: -°")
-        self.pitch_label.setFont(app_font(self.theme_manager.scale_pixel(14)))
-        self.pitch_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
-        header_info_layout.addWidget(self.pitch_label)
-        
-        settings_btn = QPushButton("⚙ 설정")
-        settings_btn.setFixedSize(self.theme_manager.scale_pixel(70), self.theme_manager.scale_pixel(32))
+        settings_btn = QPushButton("⚙ 환경 설정")
+        settings_btn.setFixedSize(self.theme_manager.scale_pixel(140), self.theme_manager.scale_pixel(42))
+        settings_btn.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
+        settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         settings_btn.clicked.connect(self.open_settings_signal.emit)
         header_info_layout.addWidget(settings_btn)
         
@@ -91,28 +87,26 @@ class DetectionScreen(QWidget):
 
         self.time_label = QLabel("00:00:00")
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.time_label.setFont(app_font(self.theme_manager.scale_pixel(42), QFont.Weight.Bold))
+        self.time_label.setFont(app_font(self.theme_manager.scale_pixel(36), QFont.Weight.Bold))
         left_panel.addWidget(self.time_label)
 
         self.preview_frame = QFrame()
         self.preview_frame.setStyleSheet(f"""
-            background-color: {Colors.WHITE.value};
+            background-color: #000000;
             border: 1px solid {Colors.GRAY_MEDIUM.value};
             border-radius: 12px;
         """)
-        self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(340))
+        # 캠 화면 크기를 기존 340에서 300으로 축소
+        self.preview_frame.setMinimumHeight(self.theme_manager.scale_pixel(300))
+        self.preview_frame.setMaximumHeight(self.theme_manager.scale_pixel(400))
         preview_layout = QVBoxLayout()
         preview_layout.setContentsMargins(0, 0, 0, 0)
 
-        self._preview_stack = QStackedWidget()
-        self._spinner_label = QLabel("카메라 연결 중...")
-        self._spinner_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview_stack.addWidget(self._spinner_label)
         self.preview_label = QLabel("[카메라 프리뷰]")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview_stack.addWidget(self.preview_label)
-        self._preview_stack.setCurrentIndex(1)
-        preview_layout.addWidget(self._preview_stack)
+        self.preview_label.setStyleSheet("color: #FFFFFF; border-radius: 12px;")
+        preview_layout.addWidget(self.preview_label)
+        
         self.preview_frame.setLayout(preview_layout)
         left_panel.addWidget(self.preview_frame, 1)
 
@@ -142,39 +136,65 @@ class DetectionScreen(QWidget):
         layout.addLayout(main_center_layout)
 
         # 하단 세부 지표 및 버튼
-        footer_layout = QHBoxLayout()
+        footer_layout = QVBoxLayout()
+        footer_layout.setSpacing(10)
         
-        details_layout = QVBoxLayout()
-        self.cheek_detail_label = QLabel("광대 거리: -")
-        self.cheek_detail_label.setFont(app_font(self.theme_manager.scale_pixel(13)))
-        self.cheek_detail_label.setStyleSheet(f"color: {Colors.GRAY_DARK.value};")
-        details_layout.addWidget(self.cheek_detail_label)
-
+        # [지표 모음 박스]
+        indicators_box = QFrame()
+        indicators_box.setStyleSheet(f"""
+            background-color: #F0F2F5;
+            border: 1px solid {Colors.GRAY_MEDIUM.value};
+            border-radius: 10px;
+        """)
+        indicators_layout = QHBoxLayout(indicators_box)
+        indicators_layout.setContentsMargins(15, 8, 15, 8)
+        
         self.distance_label = QLabel("화면 거리: - cm")
         self.distance_label.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
-        self.distance_label.setStyleSheet(f"color: {Colors.GRAY_MEDIUM.value};")
-        details_layout.addWidget(self.distance_label)
-        footer_layout.addLayout(details_layout)
+        self.distance_label.setStyleSheet("color: #333333; border: none;")
         
-        footer_layout.addStretch()
+        self.pitch_label = QLabel("고개 각도: -°")
+        self.pitch_label.setFont(app_font(self.theme_manager.scale_pixel(14), QFont.Weight.Bold))
+        self.pitch_label.setStyleSheet("color: #333333; border: none;")
+        
+        self.cheek_detail_label = QLabel("광대 거리: -")
+        self.cheek_detail_label.setFont(app_font(self.theme_manager.scale_pixel(13)))
+        self.cheek_detail_label.setStyleSheet("color: #666666; border: none;")
 
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
+        indicators_layout.addWidget(self.distance_label)
+        indicators_layout.addStretch()
+        indicators_layout.addWidget(self.pitch_label)
+        indicators_layout.addStretch()
+        indicators_layout.addWidget(self.cheek_detail_label)
+        
+        footer_layout.addWidget(indicators_box)
+
+        # 버튼 레이아웃
+        button_row = QHBoxLayout()
+        button_row.setContentsMargins(0, 5, 0, 0)
+        button_row.setSpacing(12)
+        
         for btn_name, callback, is_danger in [
             ("재측정", self._recalibrate, False),
             ("일시정지", self._pause_detection, False),
             ("종료", self._stop_detection, True)
         ]:
             btn = QPushButton(btn_name)
-            btn.setFixedSize(self.theme_manager.scale_pixel(90), self.theme_manager.scale_pixel(40))
-            if is_danger: btn.setObjectName("danger")
+            btn.setMinimumHeight(self.theme_manager.scale_pixel(46))
+            btn.setFont(app_font(self.theme_manager.scale_pixel(15), QFont.Weight.Bold))
+            if is_danger: 
+                btn.setObjectName("danger")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(callback)
-            button_layout.addWidget(btn)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            
+            button_row.addWidget(btn)
+            
             if btn_name == "일시정지": self.pause_btn = btn
             elif btn_name == "재측정": self.recalibrate_btn = btn
             elif btn_name == "종료": self.stop_btn = btn
             
-        footer_layout.addLayout(button_layout)
+        footer_layout.addLayout(button_row)
         layout.addLayout(footer_layout)
 
         # 세션 종료 후 버튼
@@ -200,7 +220,6 @@ class DetectionScreen(QWidget):
         if frame_data.get("posture_type") == "baseline":
             return
 
-        # 세션 기록은 UI 렌더링과 독립적으로 먼저 수행
         try:
             if self.session_manager and getattr(self.session_manager, "current_session", None) is not None:
                 self.session_manager.add_frame_data(frame_data)
@@ -209,15 +228,14 @@ class DetectionScreen(QWidget):
 
         # UI 업데이트
         try:
-            if self._waiting_for_first_frame:
-                self._waiting_for_first_frame = False
-                self._preview_stack.setCurrentIndex(1)
             annotated_frame = frame_data.get("frame")
             if annotated_frame is not None:
                 pixmap = cv2_to_qpixmap(annotated_frame)
+                # 프레임 크기가 유효할 때만 스케일링
+                w = max(self.preview_frame.width(), 100)
+                h = max(self.preview_frame.height(), 100)
                 scaled_pixmap = pixmap.scaled(
-                    self.preview_frame.width(),
-                    self.preview_frame.height(),
+                    w, h,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.FastTransformation,
                 )
@@ -250,7 +268,6 @@ class DetectionScreen(QWidget):
                 else:
                     self.distance_label.setText("화면 거리: - cm")
 
-                # 고개 각도 표시
                 current_pitch = indicators.face_pitch_deg
                 if self.baseline_manager:
                     baseline_metrics = self.baseline_manager.get_baseline_metrics()
@@ -313,18 +330,13 @@ class DetectionScreen(QWidget):
     def on_detection_started(self):
         self.is_session_stopped = False
         self.is_detection_paused = False
-        self._waiting_for_first_frame = True
-        self._preview_stack.setCurrentIndex(0)
         
         self.status_label.setText("바른 자세")
         self.status_label.setObjectName("status_normal")
         self.status_label.style().polish(self.status_label)
         
-        # 자세 라벨 초기화
         self.posture_label.setText("감지 중")
         self.posture_label.setStyleSheet("")
-        
-        # 안내 박스 숨김
         self.session_msg_label.hide()
         
         self.cheek_detail_label.setText("광대 거리: - (예상: -)")
@@ -343,7 +355,7 @@ class DetectionScreen(QWidget):
         self.time_timer.start(1000)
 
     def on_detection_stopped(self):
-        """감지 중단 시 UI 처리 (마지막 자세 유지 + 강조 안내 박스)"""
+        """감지 중단 시 UI 처리"""
         self.is_session_stopped = True
         self.time_timer.stop()
         self.is_detection_paused = False
@@ -356,10 +368,8 @@ class DetectionScreen(QWidget):
         self.status_label.setObjectName("status_warning")
         self.status_label.style().polish(self.status_label)
         
-        # 1. 마지막 자세 텍스트 유지 (글자색만 변경)
         self.posture_label.setStyleSheet("color: #888888;")
         
-        # 2. 강조 안내 박스 활성화 (보라색 테마 적용)
         self.session_msg_label.setText("감지가 종료되었습니다.\n아래 버튼으로 다시 시작하거나 결과를 확인하세요.")
         self.session_msg_label.setStyleSheet(f"""
             QLabel {{
@@ -373,7 +383,6 @@ class DetectionScreen(QWidget):
         """)
         self.session_msg_label.show()
         
-        # 버튼 보이기
         try:
             self.restart_btn.show()
             self.results_btn.show()

@@ -592,6 +592,7 @@ class PostureBreakdownChart(QWidget):
         "normal":              ("바른 자세",      "#7C3AED"),
         "neutral":             ("바른 자세",      "#7C3AED"),
         "forward_head":        ("거북목",         "#EF4444"),
+        "head_down":           ("고개 숙임",      "#F87171"),
         "forward_head_only":   ("거북목 경향",    "#EF4444"),
         "forward_head_full":   ("기울어진 거북목", "#EF4444"),
         "recline":             ("기댄 자세",      "#3B82F6"),
@@ -635,7 +636,7 @@ class PostureBreakdownChart(QWidget):
             return
 
         # 표시 순서: 나쁜 자세들만 (바른 자세 normal/neutral은 제외 — 잘못된 자세 간 비율만 표시)
-        order = ["forward_head", "forward_head_only",
+        order = ["forward_head", "head_down", "forward_head_only",
                  "forward_head_full", "recline", "chin_rest_estimated",
                  "head_tilt", "side_tilt", "turned_head"]
 
@@ -685,10 +686,10 @@ class PostureBreakdownChart(QWidget):
         legend_elements = [Patch(facecolor=c, label=f"{l} {p:.1f}%")
                            for l, p, c in items]
         self.figure.legend(handles=legend_elements,
-                           loc="lower center",
-                           ncol=min(len(items), 5),
-                           fontsize=9, frameon=False,
-                           bbox_to_anchor=(0.5, 0.02))
+                           loc="upper center",
+                           ncol=len(items),
+                           fontsize=8.5, frameon=False,
+                           bbox_to_anchor=(0.5, 0.98))
 
-        self.figure.subplots_adjust(left=0.01, right=0.99, top=0.98, bottom=0.35)
+        self.figure.subplots_adjust(left=0.01, right=0.99, top=0.65, bottom=0.05)
         self.canvas.draw()

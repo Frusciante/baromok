@@ -863,6 +863,7 @@ class baromokApp:
             settings_map = {
                 "forward_head": self.settings_config.forward_head_sensitivity,
                 "forward_head_distance_threshold": self.settings_config.forward_head_distance_threshold,
+                "head_down_threshold": self.settings_config.head_down_threshold,
                 "recline": self.settings_config.recline_sensitivity,
                 "chin_rest_estimated": self.settings_config.chin_rest_sensitivity,
                 "eye_close": self.settings_config.eye_close_sensitivity,
@@ -951,6 +952,38 @@ class baromokApp:
             self.alert_bridge.alert_requested.emit("info", msg)
             if self.settings_config.sound_enabled:
                 self.alert_bridge.sound_requested.emit(self.settings_config.sound_volume)
+
+    def run(self):
+        """애플리케이션 실행"""
+        logger.info("애플리케이션 실행")
+        self.main_window.show()
+
+        # 앱 실행 중에는 주기적으로 저장하거나 종료 시 저장
+        # PyQt 종료 시점 처리를 위해 exec_ 호출 후 저장
+        exit_code = self.qt_app.exec()
+
+        # 종료 시 카메라/판정 스레드 완전 정지 (판정 워커 QThread 포함)
+        try:
+            self.camera_worker.cleanup()
+        except Exception:
+            logger.debug("종료 시 카메라/판정 스레드 정지 실패")
+
+        # 종료 시 진행 중인 세션을 정상 종료 처리 (end_time/통계 저장)
+        try:
+            if self.session_manager.current_session is not None:
+                self.session_manager.end_session()
+        except Exception:
+            logger.debug("종료 시 세션 종료 실패")
+
+        # 종료 전 설정 최종 저장 (dirty일 때만)
+        self._persist_settings_if_dirty(reason="app_exit")
+
+        # DB 연결 종료
+        try:
+            self.session_manager.close()
+        except Exception:
+            logger.debug("종료 시 DB 연결 닫기 실패")
+    
 
     def run(self):
         """애플리케이션 실행"""

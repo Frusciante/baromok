@@ -11,6 +11,7 @@
   "stretching_reminder_interval": 30,
   "forward_head_sensitivity": 0.15000000000000002,
   "forward_head_distance_threshold": 50.707070707070706,
+  "head_down_threshold": 5.404040404040404,
   "recline_sensitivity": 0.07500000000000001,
   "chin_rest_sensitivity": 0.10404040404040404,
   "eye_close_sensitivity": 0.10404040404040404,

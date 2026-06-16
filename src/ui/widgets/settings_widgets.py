@@ -792,7 +792,7 @@ class SensitivitySettingsWidget(QWidget):
         self.posture_keys = [
             ("forward_head", "거북목 감도"),
             ("forward_head_distance_threshold", "거북목 감지 거리"),
-            ("head_down", "고개 숙임 감도"),
+            ("head_down_threshold", "고개 숙임 각도"),
             ("recline", "기댄 자세"),
             ("chin_rest_sensitivity", "턱 괸 자세"),
             ("turned_head_sensitivity", "고개 돌림"),
@@ -806,10 +806,13 @@ class SensitivitySettingsWidget(QWidget):
             if val is None:
                 if key == "recline": val = 0.04
                 elif key == "forward_head_distance_threshold": val = 45.0
+                elif key == "head_down_threshold": val = 15.0
                 else: val = 0.10
             
             if key == "forward_head_distance_threshold":
                 self.values[key] = max(30.0, min(80.0, float(val)))
+            elif key == "head_down_threshold":
+                self.values[key] = max(3.0, min(20.0, float(val)))
             else:
                 self.values[key] = self._clamp(float(val), *self.RANGE)
 
@@ -876,6 +879,13 @@ class SensitivitySettingsWidget(QWidget):
                     lambda pos, k=key: self._on_distance_slider_changed(k, pos),
                     unit="cm"
                 )
+            elif key == "head_down_threshold":
+                # 고개 숙임 각도는 3.0~20.0도 범위 사용 (직접 표시)
+                slider, label = self._create_slider_row(
+                    name, self.values[key], 3.0, 20.0,
+                    lambda pos, k=key: self._on_head_down_slider_changed(k, pos),
+                    unit="°"
+                )
             else:
                 slider, label = self._create_slider_row(
                     name, self.values[key], *self.RANGE,
@@ -886,7 +896,7 @@ class SensitivitySettingsWidget(QWidget):
             layout.addLayout(self._last_row_layout)
 
         # 하단 힌트
-        description = QLabel("감도: 낮음(민감) ~ 높음(둔감) | 거리: 낮을수록 가까울 때 알림")
+        description = QLabel("감도: 낮음(민감) ~ 높음(둔감) | 거리: 낮을수록 가까울 때 알림 | 각도: 숙임 기준")
         description.setFont(app_font(self.theme_manager.scale_pixel(11)))
         description.setStyleSheet(f"color: {Colors.GRAY_DARK.value}; {FLAT_LABEL_STYLE}")
         description.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -941,10 +951,16 @@ class SensitivitySettingsWidget(QWidget):
         self.labels[key].setText(f"{int(val)}cm")
         self._emit_value_changed()
 
+    def _on_head_down_slider_changed(self, key: str, pos: int):
+        val = self._from_slider(pos, 3.0, 20.0)
+        self.values[key] = val
+        self.labels[key].setText(f"{int(val)}°")
+        self._emit_value_changed()
+
     def _emit_value_changed(self):
         res = {}
         for k, v in self.values.items():
-            if k == "forward_head_distance_threshold":
+            if k in ("forward_head_distance_threshold", "head_down_threshold"):
                 res[k] = v
             else:
                 key_name = k if "sensitivity" in k else f"{k}_sensitivity"
@@ -954,7 +970,7 @@ class SensitivitySettingsWidget(QWidget):
     def get_value(self) -> dict:
         res = {}
         for k, v in self.values.items():
-            if k == "forward_head_distance_threshold":
+            if k in ("forward_head_distance_threshold", "head_down_threshold"):
                 res[k] = v
             else:
                 key_name = k if "sensitivity" in k else f"{k}_sensitivity"
@@ -971,6 +987,11 @@ class SensitivitySettingsWidget(QWidget):
                     self.values[key] = val
                     display_val = self._to_slider(val, 30.0, 80.0)
                     self.labels[key].setText(f"{int(val)}cm")
+                elif key == "head_down_threshold":
+                    val = max(3.0, min(20.0, float(val)))
+                    self.values[key] = val
+                    display_val = self._to_slider(val, 3.0, 20.0)
+                    self.labels[key].setText(f"{int(val)}°")
                 else:
                     val = self._clamp(float(val), *self.RANGE)
                     self.values[key] = val
@@ -1024,7 +1045,8 @@ class CorrectPostureGuideWidget(QWidget):
         text_container = QWidget()
         text_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         text_layout = QVBoxLayout(text_container)
-        text_layout.setContentsMargins(0, 0, 0, 0)
+        # 왼쪽 마진을 20으로 추가하여 텍스트가 박스 경계에 붙지 않도록 함
+        text_layout.setContentsMargins(20, 0, 0, 0)
         text_layout.setSpacing(15)
         text_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
@@ -1048,6 +1070,9 @@ class CorrectPostureGuideWidget(QWidget):
             label.setWordWrap(False) # 가급적 줄바꿈 방지
             label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             text_layout.addWidget(label)
+            
+        layout.addWidget(text_container, 2) # 텍스트 영역에 2배의 가중치 부여
+        self.setLayout(layout)
             
         layout.addWidget(text_container, 2) # 텍스트 영역에 2배의 가중치 부여
         self.setLayout(layout)

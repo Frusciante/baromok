@@ -207,6 +207,27 @@ class ConfigManager:
             logger.error(f"애플리케이션 설정 저장 실패: {e}")
             raise
 
+    def update_posture_criteria(self, key_path: str, value: Any):
+        """판정 기준 내부 값 업데이트 (메모리)"""
+        keys = key_path.split(".")
+        target = self.posture_criteria
+        for k in keys[:-1]:
+            if k not in target:
+                target[k] = {}
+            target = target[k]
+        target[keys[-1]] = value
+        logger.info(f"판정 기준 업데이트: {key_path} = {value}")
+
+    def save_posture_criteria_to_json(self):
+        """현재 메모리의 판정 기준을 JSON 파일로 영구 저장"""
+        try:
+            with open(CRITERIA_JSON_PATH, "w", encoding="utf-8") as f:
+                json.dump(self.posture_criteria, f, indent=2, ensure_ascii=False)
+            logger.info(f"판정 기준 파일 저장 완료: {CRITERIA_JSON_PATH}")
+        except Exception as e:
+            logger.error(f"판정 기준 파일 저장 실패: {e}")
+            raise
+
 
 # 글로벌 설정 관리자 인스턴스 (지연 초기화)
 _config_manager: Optional["ConfigManager"] = None
@@ -259,6 +280,7 @@ class SettingsConfig:
     # 감도 설정 (기본값은 None이며 로드 시 JSON에서 가져옴)
     forward_head_sensitivity: Optional[float] = None
     forward_head_distance_threshold: float = 45.0  # 거북목 감지 거리 (cm)
+    head_down_threshold: Optional[float] = None # 고개 숙임 각도 (3~20)
     recline_sensitivity: Optional[float] = None
     chin_rest_sensitivity: Optional[float] = None
     eye_close_sensitivity: Optional[float] = None
@@ -277,6 +299,8 @@ class SettingsConfig:
                 scoring_config = config_manager.get_frame_scoring_config()
                 sensitivities = scoring_config.get("sensitivities", {})
                 eye_cfg = config_manager.get_posture_criteria().get("eye_monitoring", {})
+                posture_types = config_manager.get_posture_criteria().get("posture_types", {})
+                head_down_cfg = posture_types.get("head_down", {})
 
                 if instance.forward_head_sensitivity is None:
                     instance.forward_head_sensitivity = sensitivities.get("forward_head", 0.1)
@@ -285,6 +309,9 @@ class SettingsConfig:
                 # 만약 JSON에 없었다면 default 45.0이 이미 들어가 있고, 아래에서 config 기준으로 한번 더 확인
                 if "forward_head_distance_threshold" not in instance.__dict__ or instance.forward_head_distance_threshold == 45.0:
                      instance.forward_head_distance_threshold = float(eye_cfg.get("distance_threshold_cm", 45.0))
+
+                if instance.head_down_threshold is None:
+                    instance.head_down_threshold = float(head_down_cfg.get("threshold", 15.0))
 
                 if instance.recline_sensitivity is None:
                     instance.recline_sensitivity = sensitivities.get("recline", 0.04)
@@ -304,6 +331,7 @@ class SettingsConfig:
             else:
                 # Fallback defaults
                 instance.forward_head_sensitivity = instance.forward_head_sensitivity or 0.1
+                instance.head_down_threshold = instance.head_down_threshold or 15.0
                 instance.recline_sensitivity = instance.recline_sensitivity or 0.04
                 instance.chin_rest_sensitivity = instance.chin_rest_sensitivity or 0.1
                 instance.eye_close_sensitivity = instance.eye_close_sensitivity or 0.1
@@ -352,12 +380,17 @@ class SettingsConfig:
         if self.recommended_recline is not None:
             self.recline_sensitivity = self.recommended_recline
             
-        # 거리 임계값은 JSON 기준값으로 복구
+        # 거리 임계값 및 고개 숙임 임계값은 JSON 기준값으로 복구
         try:
             criteria = PostureSettings.load_posture_criteria_json()
             eye_cfg = criteria.get("eye_monitoring", {})
             self.forward_head_distance_threshold = float(eye_cfg.get("distance_threshold_cm", 45.0))
+            
+            posture_types = criteria.get("posture_types", {})
+            head_down_cfg = posture_types.get("head_down", {})
+            self.head_down_threshold = float(head_down_cfg.get("threshold", 15.0))
         except Exception:
             self.forward_head_distance_threshold = 45.0
+            self.head_down_threshold = 15.0
             
         logger.info(f"민감도 및 거리 설정이 기본값으로 초기화되었습니다.")

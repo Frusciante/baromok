@@ -371,7 +371,15 @@ class PostureJudgeManager(QObject):
                     worker.set_distance_threshold(val)
                 continue
             
-            # 2. 일반 감도 처리
+            # 2. 고개 숙임 임계값 처리
+            if key == "head_down_threshold":
+                worker = self.workers.get(PostureType.HEAD_DOWN.value)
+                if worker:
+                    # criteria 내부의 threshold 값을 직접 업데이트
+                    worker.criteria["threshold"] = val
+                continue
+            
+            # 3. 일반 감도 처리
             p_type = key.replace("_sensitivity", "") # xxx_sensitivity -> xxx
             if p_type in self.workers:
                 self.workers[p_type].sensitivity = val

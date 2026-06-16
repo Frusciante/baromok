@@ -310,6 +310,7 @@ class SessionManager:
                     """SELECT
                            COUNT(*) AS total,
                            SUM(CASE WHEN posture_type='forward_head'        THEN 1 ELSE 0 END) AS fh,
+                           SUM(CASE WHEN posture_type='head_down'           THEN 1 ELSE 0 END) AS hd,
                            SUM(CASE WHEN posture_type='recline'             THEN 1 ELSE 0 END) AS rc,
                            SUM(CASE WHEN posture_type='chin_rest_estimated' THEN 1 ELSE 0 END) AS cr,
                            SUM(CASE WHEN posture_type='normal'              THEN 1 ELSE 0 END) AS nm,
@@ -385,6 +386,7 @@ class SessionManager:
                 "fps":                        round(total / dur, 1) if dur > 0 else 0,
                 "posture_distribution": {
                     "forward_head":        row["fh"] or 0,
+                    "head_down":           row["hd"] or 0,
                     "recline":             row["rc"] or 0,
                     "chin_rest_estimated": row["cr"] or 0,
                     "normal":              row["nm"] or 0,
@@ -411,7 +413,7 @@ class SessionManager:
         if not session.frame_records:
             return {}
         try:
-            posture_counts = {"forward_head": 0, "recline": 0, "chin_rest_estimated": 0, "normal": 0, "side_tilt": 0, "turned_head": 0}
+            posture_counts = {"forward_head": 0, "head_down": 0, "recline": 0, "chin_rest_estimated": 0, "normal": 0, "side_tilt": 0, "turned_head": 0}
             state_counts   = {"NORMAL": 0, "WARNING": 0, "BAD_POSTURE": 0}
             probs = []
             prev = None

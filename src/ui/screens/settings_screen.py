@@ -74,7 +74,7 @@ class SettingsScreen(QWidget):
             row_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
             category_label = QLabel(cat)
-            category_label.setFixedWidth(self.theme_manager.scale_pixel(97))
+            category_label.setFixedWidth(self.theme_manager.scale_pixel(110))
             category_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             category_label.setFont(app_font(self.theme_manager.scale_pixel(13), QFont.Weight.Bold))
             category_label.setStyleSheet(
