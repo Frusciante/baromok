@@ -16,9 +16,6 @@ OutputBaseFilename=Baromok_Setup_v1.0
 ; 1. [추가] main.dist 하위의 모든 파일 및 폴더를 사용자의 설치 경로({app})에 그대로 배포
 Source: "D:\2026-1\CD\baromok\dist\main.dist\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
-; 2. [확인] 파이썬 설치 파일 (이전 코드에서 ExtractTemporaryFile로 쓰이기 때문에 dontcopy 플래그가 필요합니다)
-; 실제 파이썬 인스톨러 파일이 있는 정확한 로컬 경로로 수정해서 사용하세요.
-Source: "D:\2026-1\CD\baromok\python-3.14.3-amd64.exe"; DestDir: "{tmp}"; Flags: dontcopy
 
 [Registry]
 ; 설치된 main.exe 파일이 실행될 때 윈도우가 항상 관리자 권한(RUNASADMIN)을 요구하도록 설정합니다.
