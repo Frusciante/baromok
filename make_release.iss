@@ -4,7 +4,7 @@
 
 ; (기존 Setup 섹션 내용들...)
 AppName={#MyAppName}
-AppVersion=1.0
+AppVersion=1.0.2
 DefaultDirName={autopf}\{#MyAppName}
 
 OutputDir="C:\Users\hsbin\OneDrive\문서"

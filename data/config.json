@@ -1,6 +1,6 @@
 {
   "notification_enabled": true,
-  "notification_interval": 38,
+  "notification_interval": 5,
   "sound_enabled": true,
   "sound_volume": 42,
   "popup_position": "top",
