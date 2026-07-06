@@ -44,7 +44,7 @@ class BaselineManager:
             data_dir: 데이터 저장 디렉토리 (None이면 DATA_DIR 사용)
         """
         self.config = config
-        self.data_dir = data_dir if data_dir is not None else DATA_DIR
+        self.data_dir = Path(data_dir) if data_dir is not None else DATA_DIR
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
         self.baseline_metrics: Optional[BaselineMetrics] = None
@@ -138,9 +138,11 @@ class BaselineManager:
         # 1. Shoulder-Cheek 모델 피팅
         sc_x, sc_y, s_indices = [], [], []
         for frame in self.collection_frames:
-            if getattr(frame, "shoulder_width", 0) > 0 and getattr(frame, "cheek_distance", 0) > 0:
-                sc_x.append(frame.shoulder_width)
-                sc_y.append(frame.cheek_distance)
+            sw = getattr(frame, "shoulder_width", None)
+            cd = getattr(frame, "cheek_distance", None)
+            if sw is not None and sw > 0 and cd is not None and cd > 0:
+                sc_x.append(sw)
+                sc_y.append(cd)
                 s_indices.append(getattr(frame, "step_index", 0))
 
         if self.shoulder_cheek_model.fit(sc_x, sc_y):
@@ -152,9 +154,11 @@ class BaselineManager:
         # 2. Shoulder-Height 모델 피팅
         sh_x, sh_y = [], []
         for frame in self.collection_frames:
-            if getattr(frame, "shoulder_width", 0) > 0 and getattr(frame, "head_height", 0) > 0:
-                sh_x.append(frame.shoulder_width)
-                sh_y.append(frame.head_height)
+            sw = getattr(frame, "shoulder_width", None)
+            hh = getattr(frame, "head_height", None)
+            if sw is not None and sw > 0 and hh is not None and hh > 0:
+                sh_x.append(sw)
+                sh_y.append(hh)
 
         if self.shoulder_height_model.fit(sh_x, sh_y):
             logger.info(f"Shoulder-Height 모델 피팅 완료 ({len(sh_x)} 샘플)")
@@ -166,9 +170,11 @@ class BaselineManager:
         # 3. Eye-Height 모델 피팅
         eh_x, eh_y = [], []
         for frame in self.collection_frames:
-            if getattr(frame, "eye_distance", 0) > 0 and getattr(frame, "head_height", 0) > 0:
-                eh_x.append(frame.eye_distance)
-                eh_y.append(frame.head_height)
+            ed = getattr(frame, "eye_distance", None)
+            hh = getattr(frame, "head_height", None)
+            if ed is not None and ed > 0 and hh is not None and hh > 0:
+                eh_x.append(ed)
+                eh_y.append(hh)
 
         if self.eye_height_model.fit(eh_x, eh_y):
             logger.info(f"Eye-Height 모델 피팅 완료 ({len(eh_x)} 샘플)")
@@ -237,9 +243,11 @@ class BaselineManager:
         # 1. Shoulder-Cheek 샘플
         sc_x, sc_y, s_samples = [], [], []
         for frame in self.collection_frames:
-            if getattr(frame, "shoulder_width", 0) > 0 and getattr(frame, "cheek_distance", 0) > 0:
-                sc_x.append(frame.shoulder_width)
-                sc_y.append(frame.cheek_distance)
+            sw = getattr(frame, "shoulder_width", None)
+            cd = getattr(frame, "cheek_distance", None)
+            if sw is not None and sw > 0 and cd is not None and cd > 0:
+                sc_x.append(sw)
+                sc_y.append(cd)
                 s_samples.append(getattr(frame, "step_index", 0))
         metrics["ransac_x_samples"] = sc_x
         metrics["ransac_y_samples"] = sc_y
@@ -248,18 +256,22 @@ class BaselineManager:
         # 2. Shoulder-Height 샘플
         sh_x, sh_y = [], []
         for frame in self.collection_frames:
-            if getattr(frame, "shoulder_width", 0) > 0 and getattr(frame, "head_height", 0) > 0:
-                sh_x.append(frame.shoulder_width)
-                sh_y.append(frame.head_height)
+            sw = getattr(frame, "shoulder_width", None)
+            hh = getattr(frame, "head_height", None)
+            if sw is not None and sw > 0 and hh is not None and hh > 0:
+                sh_x.append(sw)
+                sh_y.append(hh)
         metrics["ransac_shx_samples"] = sh_x
         metrics["ransac_shy_samples"] = sh_y
 
         # 3. Eye-Height 샘플
         eh_x, eh_y = [], []
         for frame in self.collection_frames:
-            if getattr(frame, "eye_distance", 0) > 0 and getattr(frame, "head_height", 0) > 0:
-                eh_x.append(frame.eye_distance)
-                eh_y.append(frame.head_height)
+            ed = getattr(frame, "eye_distance", None)
+            hh = getattr(frame, "head_height", None)
+            if ed is not None and ed > 0 and hh is not None and hh > 0:
+                eh_x.append(ed)
+                eh_y.append(hh)
         metrics["ransac_ehx_samples"] = eh_x
         metrics["ransac_ehy_samples"] = eh_y
 
