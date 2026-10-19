@@ -22,7 +22,10 @@ QApplication.setHighDpiScaleFactorRoundingPolicy(
       Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
   )
 
+import shutil
 import sys
+import tempfile
+from pathlib import Path
 
 from src.utils.logger import get_logger
 from src.config import ConfigManager, SettingsConfig
@@ -102,7 +105,19 @@ class baromokApp:
 
         # 엔진 컴포넌트 초기화 (Phase 2)
         logger.info("엔진 컴포넌트 초기화...")
-        self.landmark_extractor = LandmarkExtractor(str(MODELS_DIR))
+        # MediaPipe는 비ASCII 경로(한글 등)의 .task 파일을 열지 못하므로
+        # 경로에 비ASCII 문자가 있으면 ASCII 임시 경로로 복사하여 우회한다.
+        _model_path = str(MODELS_DIR)
+        if not _model_path.isascii():
+            _ascii_model_dir = Path(tempfile.gettempdir()) / "baromok_models"
+            _ascii_model_dir.mkdir(parents=True, exist_ok=True)
+            for _task_file in Path(MODELS_DIR).glob("*.task"):
+                _target = _ascii_model_dir / _task_file.name
+                if not _target.exists() or _target.stat().st_size != _task_file.stat().st_size:
+                    shutil.copy2(_task_file, _target)
+            _model_path = str(_ascii_model_dir)
+            logger.info(f"모델 파일을 ASCII 임시 경로로 복사: {_model_path}")
+        self.landmark_extractor = LandmarkExtractor(_model_path)
         self.indicator_calculator = IndicatorCalculator(self.config)
         self.baseline_manager = BaselineManager(self.config)
         # ⬇ [추가] 앱 시작 시 기존 베이스라인 로드 시도

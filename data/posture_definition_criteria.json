@@ -233,7 +233,8 @@
     "iris_diameter_mm": 11.7,
     "camera_horizontal_fov_deg": 60.0,
     "distance_threshold_cm": 45.0,
-    "sustain_seconds": 2.0
+    "sustain_seconds": 2.0,
+    "distance_correction_scale": 0.896
   },
   "event_judgment": {
     "immediate": "frame_threshold_exceeded",

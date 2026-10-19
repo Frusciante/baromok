@@ -60,6 +60,7 @@ class IndicatorCalculator:
         self._eye_distance_threshold_cm = 45.0
         self._eye_sustain_seconds = 2.0
         self._camera_frame_width = 1280
+        self._distance_correction_scale = 1.0  # 홍채 기반 거리 곡셈형 보정 계수 (JSON eye_monitoring.distance_correction_scale)
         
         self.ema_filters = {}
         self.refresh_settings()
@@ -81,6 +82,7 @@ class IndicatorCalculator:
             eye_cfg = criteria.get("eye_monitoring", {})
             self._iris_diameter_mm = float(eye_cfg.get("iris_diameter_mm", 11.5))
             self._camera_hfov_deg = float(eye_cfg.get("camera_horizontal_fov_deg", 60.0))
+            self._distance_correction_scale = float(eye_cfg.get("distance_correction_scale", 1.0))
             
             # dist_threshold가 외부에서 명시적으로 설정되지 않았을 때만 config에서 로드
             if not hasattr(self, "_eye_distance_threshold_override"):
@@ -311,7 +313,8 @@ class IndicatorCalculator:
                 else:
                     sh_w = None; sh_h = 0.0; sh_tilt = None; neck_off = None
 
-            # 홍채 거리 (비교적 정확한 물리 거리 산출)
+            # 홍채 기반 눈-화면 거리 산출
+            # 지름: 가로 평균(horizontal_mean), 양안 평균(mean), 곱셈 보정 계수(distance_correction_scale) 적용
             eye_screen_cm = None; eye_warning = False
             try:
                 l_px = landmarks.get('left_iris_diameter_px_raw') or landmarks.get('left_iris_diameter_px')
@@ -322,14 +325,15 @@ class IndicatorCalculator:
                     px_vals = [px for px in (l_px, r_px) if px and px > 0]
                     if px_vals:
                         z_cm_vals = [((self._iris_diameter_mm * f_px) / float(px)) / 10.0 for px in px_vals]
-                        # [복구] 사용자 요청에 따라 20cm 오프셋 재적용
-                        eye_screen_cm = max(0.0, float(min(z_cm_vals)) - 20.0)
+                        mean_z = float(sum(z_cm_vals) / len(z_cm_vals))
+                        eye_screen_cm = max(0.0, mean_z * self._distance_correction_scale)
                         now = timestamp if timestamp > 0 else time.time()
                         if eye_screen_cm <= self._eye_distance_threshold_cm:
                             if self._eye_close_start_time is None: self._eye_close_start_time = now
                             if now - self._eye_close_start_time >= self._eye_sustain_seconds: eye_warning = True
                         else: self._eye_close_start_time = None
-            except Exception: pass
+            except Exception as distance_error:
+                logger.debug(f"홍채 거리 계산 실패: {distance_error}")
 
             # 손 상호작용
             chin_occ_raw = self.calculate_chin_occlusion(landmarks.get('chin_points', []), landmarks)

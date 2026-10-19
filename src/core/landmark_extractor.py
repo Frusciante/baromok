@@ -488,40 +488,37 @@ class LandmarkExtractor:
                 z = face_lms[10][2] if len(face_lms) > 10 else 0.0
                 landmarks["forehead"] = (forehead_point[0], forehead_point[1], z)
 
-            # 홍채(Iris) 추출: MediaPipe FaceMesh 468~477 인덱스
+            # 홍채(Iris) 추출 — 개선된 방식
+            # 중심점(468, 473) 제외, 인덱스 기반 좌/우 분리, 실수 px(int 절사 없음), 가로 지름 사용
             left_iris_diam_px = None
             right_iris_diam_px = None
             try:
                 n_face = len(face_lms)
-                # 유효한 iris 포인트만 픽셀 좌표로 모으기
-                iris_px = []
-                for idx in range(468, min(478, n_face)):
-                    if face_conf[idx] > confidence_threshold:
-                        lm = face_lms[idx]
-                        iris_px.append((
-                            int(lm[0] * frame_width),
-                            int(lm[1] * frame_height),
-                        ))
-
-                if len(iris_px) >= 3:
-                    arr = np.array(iris_px, dtype=np.float32)
-                    # 좌/우 분할 기준 x
-                    mid_x = (landmarks['left_eye'][0] + landmarks['right_eye'][0]) / 2.0 \
-                        if landmarks.get('left_eye') and landmarks.get('right_eye') \
-                        else float(np.median(arr[:, 0]))
-
-                    mask_l = arr[:, 0] <= mid_x
-                    for mask, attr in ((mask_l, "left"), (~mask_l, "right")):
-                        pts = arr[mask]
-                        if len(pts) >= 3:
-                            cen = pts.mean(axis=0)
-                            diam = 2.0 * float(np.mean(np.linalg.norm(pts - cen, axis=1)))
-                            if attr == "left":
-                                left_iris_diam_px = diam
-                            else:
-                                right_iris_diam_px = diam
-            except Exception:
-                pass
+                _LEFT_CONTOUR  = (469, 470, 471, 472)  # 왼쪽 홍채 외곽 4점 (중심 468 제외)
+                _RIGHT_CONTOUR = (474, 475, 476, 477)  # 오른쪽 홍채 외곽 4점 (중심 473 제외)
+                for contour_indices, side in ((_LEFT_CONTOUR, "left"), (_RIGHT_CONTOUR, "right")):
+                    if max(contour_indices) >= n_face:
+                        continue
+                    # 홍채 외곽 포인트(469-472, 474-477)는 MediaPipe가 presence/visibility를 0으로
+                    # 반환하므로 신뢰도 필터 없이 좌표만 사용한다.
+                    pts = [
+                        (face_lms[i][0] * frame_width, face_lms[i][1] * frame_height)
+                        for i in contour_indices
+                        if len(face_lms) > i
+                    ]
+                    if len(pts) < 4:
+                        continue
+                    arr = np.array(pts, dtype=np.float64)
+                    # 가로 지름: 두 대각 쌍 중 더 긴 것을 선택
+                    pair_a = float(np.linalg.norm(arr[0] - arr[2]))
+                    pair_b = float(np.linalg.norm(arr[1] - arr[3]))
+                    diam = max(pair_a, pair_b)
+                    if side == "left":
+                        left_iris_diam_px = diam
+                    else:
+                        right_iris_diam_px = diam
+            except Exception as iris_error:
+                logger.debug(f"홍채 지름 계산 실패: {iris_error}")
 
             landmarks['left_iris_diameter_px'] = left_iris_diam_px
             landmarks['right_iris_diameter_px'] = right_iris_diam_px
