@@ -33,10 +33,10 @@
       "d_cutoff": 5.0
     },
     "ema": {
-      "alpha": 0.15
+      "alpha": 1
     },
     "indicator_ema": {
-      "alpha": 0.15
+      "alpha": 1
     }
   },
   "baseline": {
