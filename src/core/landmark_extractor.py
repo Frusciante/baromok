@@ -812,8 +812,24 @@ class LandmarkExtractor:
                         normalized[k] = tuple(filtered.tolist())
                     except Exception:
                         normalized[k] = tuple(rep)
+            elif k in _SCALAR_KEYS:
+                if rep is None:
+                    normalized[k] = None
+                else:
+                    if k not in self._one_euro_filters:
+                        self._one_euro_filters[k] = OneEuroFilter(
+                            min_cutoff=self._one_euro_min_cutoff,
+                            beta=self._one_euro_beta,
+                            d_cutoff=self._one_euro_d_cutoff,
+                        )
+                    try:
+                        val_arr = np.array([float(rep)], dtype=np.float64)
+                        filtered = self._one_euro_filters[k].process(t_sec, val_arr)
+                        normalized[k] = float(filtered[0])
+                    except Exception:
+                        normalized[k] = float(rep)
             else:
-                # lists and scalars: pass through representative value
+                # lists: pass through representative value
                 normalized[k] = rep if rep is not None else ([] if k in _LIST_KEYS else None)
 
         return normalized

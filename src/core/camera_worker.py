@@ -351,12 +351,21 @@ class CameraWorker(QThread):
 
         # [삭제] 왼쪽 상단 정보 텍스트 (사용자 요청)
         
-        # 랜드마크 시각화
+        # 랜드마크 시각화 (One Euro 필터링된 normalized_landmarks 우선 사용)
         try:
-            rel_lms = self.landmark_extractor.get_relevant_landmarks(landmarks, frame_width, frame_height)
-            for key in ["face_center", "left_eye", "right_eye", "left_shoulder", "right_shoulder"]:
-                pt = rel_lms.get(key)
-                if pt: cv2.circle(annotated, pt, 4, (0, 255, 0), -1)
+            targets = ["face_center", "left_eye", "right_eye", "left_shoulder", "right_shoulder"]
+            if normalized_landmarks:
+                for key in targets:
+                    norm_pt = normalized_landmarks.get(key)
+                    if norm_pt is not None:
+                        px = int(round(norm_pt[0] * frame_width))
+                        py = int(round(norm_pt[1] * frame_height))
+                        cv2.circle(annotated, (px, py), 4, (0, 255, 0), -1)
+            else:
+                rel_lms = self.landmark_extractor.get_relevant_landmarks(landmarks, frame_width, frame_height)
+                for key in targets:
+                    pt = rel_lms.get(key)
+                    if pt: cv2.circle(annotated, pt, 4, (0, 255, 0), -1)
         except: pass
 
         return annotated

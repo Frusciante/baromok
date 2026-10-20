@@ -100,7 +100,7 @@ class IndicatorCalculator:
                 'cheek_distance', 'eye_distance', 'face_vertical_length', 'head_height',
                 'shoulder_width', 'shoulder_tilt_deg', 'neck_offset', 'eye_line_tilt',
                 'chin_occlusion', 'hand_face_score', 'shoulder_height', 'eye_height',
-                'face_pitch_deg'
+                'face_pitch_deg', 'eye_screen_distance_cm'
             ]
             for key in filter_keys:
                 if key in self.ema_filters:
@@ -317,8 +317,8 @@ class IndicatorCalculator:
             # 지름: 가로 평균(horizontal_mean), 양안 평균(mean), 곱셈 보정 계수(distance_correction_scale) 적용
             eye_screen_cm = None; eye_warning = False
             try:
-                l_px = landmarks.get('left_iris_diameter_px_raw') or landmarks.get('left_iris_diameter_px')
-                r_px = landmarks.get('right_iris_diameter_px_raw') or landmarks.get('right_iris_diameter_px')
+                l_px = landmarks.get('left_iris_diameter_px') or landmarks.get('left_iris_diameter_px_raw')
+                r_px = landmarks.get('right_iris_diameter_px') or landmarks.get('right_iris_diameter_px_raw')
                 if l_px or r_px:
                     hfov_rad = math.radians(self._camera_hfov_deg)
                     f_px = float(self._camera_frame_width) / (2.0 * math.tan(hfov_rad / 2.0))
@@ -326,7 +326,11 @@ class IndicatorCalculator:
                     if px_vals:
                         z_cm_vals = [((self._iris_diameter_mm * f_px) / float(px)) / 10.0 for px in px_vals]
                         mean_z = float(sum(z_cm_vals) / len(z_cm_vals))
-                        eye_screen_cm = max(0.0, mean_z * self._distance_correction_scale)
+                        raw_eye_screen_cm = max(0.0, mean_z * self._distance_correction_scale)
+                        if baseline_mode:
+                            eye_screen_cm = raw_eye_screen_cm
+                        else:
+                            eye_screen_cm = self.ema_filters['eye_screen_distance_cm'].process(raw_eye_screen_cm)
                         now = timestamp if timestamp > 0 else time.time()
                         if eye_screen_cm <= self._eye_distance_threshold_cm:
                             if self._eye_close_start_time is None: self._eye_close_start_time = now
