@@ -151,13 +151,12 @@ class ForwardHeadWorker(BaseJudgeWorker):
 
     def _is_guarded(self, indicators) -> bool:
         side_tilt = abs(indicators.eye_line_tilt) > self.guards.get("max_eye_tilt", 12.0)
-        sh_tilt = abs(indicators.shoulder_tilt_deg or 0) > self.guards.get("max_shoulder_tilt", 10.0)
         eye_sym = indicators.eye_symmetry_ratio > self.guards.get("max_eye_symmetry_ratio", 0.12)
         
         sw_change = self.baseline_manager.calculate_change_percentage(indicators.shoulder_width, "shoulder_width")
         recline_guard = sw_change < self.guards.get("max_shoulder_decrease_pct", -15.0)
         
-        return side_tilt or sh_tilt or eye_sym or recline_guard
+        return side_tilt or eye_sym or recline_guard
 
 
 class ReclineWorker(BaseJudgeWorker):
@@ -179,13 +178,12 @@ class ReclineWorker(BaseJudgeWorker):
                     return
         except Exception: pass
 
-        # 2. 턱 괸 자세(손이 얼굴/턱 근처에 위치)일 때 기댄 자세 판정 억제
-        if indicators.hand_near_face or (indicators.chin_occlusion is not None and indicators.chin_occlusion > 0.25):
-            self._emit_result(0.0)
-            return
-
-        # 3. 어깨 선 각도가 일정 수준 이상 기울어진 경우(한쪽 팔로 턱을 괴거나 한쪽으로 쏠린 자세) 기댄 자세 판정 억제
-        if indicators.shoulder_tilt_deg is not None:
+        # 2. 턱 괸 자세 방어 로직: 얼굴 주변에 손이 있을 때만 어깨 기울기를 확인하여 기댄 자세 판정 억제
+        hand_triggered = bool(
+            indicators.hand_near_face
+            or (indicators.chin_occlusion is not None and indicators.chin_occlusion > 0.25)
+        )
+        if hand_triggered and indicators.shoulder_tilt_deg is not None:
             max_sh_tilt = float(self.guards.get("max_shoulder_tilt", 6.0))
             sh_tilt_abs = abs(indicators.shoulder_tilt_deg)
             sh_tilt_diff = sh_tilt_abs
@@ -235,11 +233,7 @@ class ReclineWorker(BaseJudgeWorker):
         cheek_sym = indicators.cheek_symmetry_ratio > self.guards.get("max_cheek_symmetry_ratio", 0.12)
         chin_off = indicators.chin_alignment_offset > self.guards.get("max_chin_alignment_offset", 0.15)
         
-        sh_tilt = False
-        if indicators.shoulder_tilt_deg is not None:
-            sh_tilt = abs(indicators.shoulder_tilt_deg) > self.guards.get("max_shoulder_tilt", 10.0)
-        
-        return side_tilt or eye_sym or cheek_sym or chin_off or sh_tilt
+        return side_tilt or eye_sym or cheek_sym or chin_off
 
 
 class ChinRestWorker(BaseJudgeWorker):
@@ -251,7 +245,10 @@ class ChinRestWorker(BaseJudgeWorker):
     def handle_indicators(self, indicators: PostureIndicators):
         try:
             eye_th = self.criteria["primary_conditions"]["eye_line_tilt_deg"]["threshold"]
-            hand_triggered = (indicators.hand_near_face or indicators.chin_occlusion > 0.25)
+            hand_triggered = bool(
+                indicators.hand_near_face
+                or (indicators.chin_occlusion is not None and indicators.chin_occlusion > 0.25)
+            )
             if not hand_triggered:
                 self._emit_result(0.0)
                 return
@@ -267,7 +264,14 @@ class ChinRestWorker(BaseJudgeWorker):
             sh_score = 0.0
             if has_sh_tilt:
                 sh_th = self.criteria.get("primary_conditions", {}).get("shoulder_tilt_deg", {}).get("threshold", 6.0)
-                sh_score = self._normalize(abs(indicators.shoulder_tilt_deg) / max(1e-6, sh_th), 0, 2.0) * sens_factor
+                sh_tilt_val = abs(indicators.shoulder_tilt_deg)
+                baseline_metrics = self.baseline_manager.get_baseline_metrics() if self.baseline_manager else None
+                if baseline_metrics and "shoulder_tilt_deg" in baseline_metrics.metrics:
+                    sh_tilt_val = max(
+                        sh_tilt_val,
+                        abs(indicators.shoulder_tilt_deg - baseline_metrics.metrics["shoulder_tilt_deg"])
+                    )
+                sh_score = self._normalize(sh_tilt_val / max(1e-6, sh_th), 0, 2.0) * sens_factor
             
             total_w = w_eye + w_hand + w_sh
             likelihood = (

@@ -43,7 +43,7 @@
 ### 의자에 누운 자세 (기댄 자세)
 - **의미**: 상체가 뒤로 과하게 기대진 상태
 - **관찰**: 어깨 너비(어깨 미감지 시 양안 거리) 대비 기대 머리 높이보다 현재 머리 높이가 낮아짐
-- **방어 조건**: 고개 숙임, 턱 괸 자세(손-얼굴 근접/턱 가림), 또는 어깨 선 각도 기울기(<a href="../../data/posture_definition_criteria.json">posture_types.recline.guards.max_shoulder_tilt</a>)가 감지되면 기댄 자세 판정을 억제하며, 거북목·고개 숙임·턱 괸 자세와 동시 발생 시 상호 배제됨
+- **방어 조건**: 고개 숙임이 감지되거나, **얼굴 주변에 손이 감지(`hand_near_face` 또는 `chin_occlusion`)되면서 동시에 어깨 선 각도 기울기(<a href="../../data/posture_definition_criteria.json">posture_types.recline.guards.max_shoulder_tilt</a>)가 발생한 경우** 기댄 자세 판정을 억제하며, 거북목·고개 숙임·턱 괸 자세와 동시 발생 시 상호 배제됨 (어깨 기울기 단독으로는 억제하지 않음)
 - **판정**: 임계값 및 지속 시간은 <a href="../../data/posture_definition_criteria.json">posture_types.recline</a>을 참조하십시오.
 
 ### 거북목 자세
@@ -53,7 +53,7 @@
 
 ### 턱 괸 자세
 - **의미**: 손이나 팔로 턱을 받친 상태
-- **관찰**: 머리 기울기 증가, 얼굴 영역 가림, 손-얼굴 근접 신호 검출
+- **관찰**: 얼굴 영역 가림 또는 손-얼굴 근접 신호 검출 시 머리 기울기 및 어깨 기울기 증가를 함께 평가
 - **판정**: 임계값 및 보조 신호 기준은 <a href="../../data/posture_definition_criteria.json">posture_types.chin_rest_estimated</a>를 참조하십시오.
 
 ## 운영 규칙 문서 분리
@@ -68,6 +68,3 @@
 | **기댄 자세** | 머리 높이 감소, 거리 변화 | JSON 참조 | JSON 참조 |
 | **거북목** | 비율 증가, 거리 변화 | JSON 참조 | JSON 참조 |
 | **턱 괸 자세** | 손-얼굴 근접, 가림, 기울기 | JSON 참조 | JSON 참조 |
-
-� |
-
