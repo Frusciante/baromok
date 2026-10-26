@@ -213,6 +213,8 @@ class SessionManager:
         if self.current_session is None:
             logger.warning("진행 중인 세션이 없습니다.")
             return
+        if frame_data.get("posture_type", "normal") in ("baseline", "warmup"):
+            return
         try:
             indicators = frame_data.get("indicators")
             ind = {}
@@ -279,6 +281,8 @@ class SessionManager:
                 
             # 2. 통계 계산 (가중 평균 포함)
             stats = self._calculate_stats_from_db(self.current_session.session_id, duration)
+            if stats.get("duration_seconds"):
+                duration = int(stats["duration_seconds"])
             
             with self._lock:
                 with self._get_conn() as conn:
@@ -305,7 +309,7 @@ class SessionManager:
     def _calculate_stats_from_db(self, session_id: str, duration_seconds: int = 0) -> dict:
         try:
             with self._lock, self._get_conn() as conn:
-                # 1. 기본 카운트 및 배분 정보 (프레임 기반)
+                # 1. 기본 카운트 및 배분 정보 (프레임 기반, baseline/warmup 제외)
                 row = conn.execute(
                     """SELECT
                            COUNT(*) AS total,
@@ -315,8 +319,13 @@ class SessionManager:
                            SUM(CASE WHEN posture_type='chin_rest_estimated' THEN 1 ELSE 0 END) AS cr,
                            SUM(CASE WHEN posture_type='normal'              THEN 1 ELSE 0 END) AS nm,
                            SUM(CASE WHEN posture_type='side_tilt'           THEN 1 ELSE 0 END) AS stl,
-                           SUM(CASE WHEN posture_type='turned_head'         THEN 1 ELSE 0 END) AS th
-                       FROM frame_records WHERE session_id=?""",
+                           SUM(CASE WHEN posture_type='turned_head'         THEN 1 ELSE 0 END) AS th,
+                           SUM(CASE WHEN UPPER(state)='NORMAL'              THEN 1 ELSE 0 END) AS st_normal,
+                           SUM(CASE WHEN UPPER(state)='WARNING'             THEN 1 ELSE 0 END) AS st_warn,
+                           SUM(CASE WHEN UPPER(state)='BAD_POSTURE'         THEN 1 ELSE 0 END) AS st_bad
+                       FROM frame_records
+                       WHERE session_id=?
+                         AND posture_type NOT IN ('baseline', 'warmup')""",
                     (session_id,),
                 ).fetchone()
 
@@ -326,7 +335,11 @@ class SessionManager:
 
                 # 2. 시간 가중 평균 및 실제 지속 시간 계산
                 records = conn.execute(
-                    "SELECT timestamp, probability, state, posture_type FROM frame_records WHERE session_id=? ORDER BY id",
+                    """SELECT timestamp, probability, state, posture_type
+                       FROM frame_records
+                       WHERE session_id=?
+                         AND posture_type NOT IN ('baseline', 'warmup')
+                       ORDER BY id""",
                     (session_id,),
                 ).fetchall()
 
@@ -377,8 +390,32 @@ class SessionManager:
                 # 가중 평균 계산
                 avg_prob = total_weighted_prob / total_time_delta if total_time_delta > 0 else 0.0
                 
-                # 전체 시간 (실제 기록된 시간의 합)
-                dur = duration_seconds if duration_seconds > 0 else int(total_time_delta)
+                # 전체 시간 결정: 외부 전달 duration_seconds가 프레임 누적 시간보다 비정상적으로 작으면
+                # 실제 프레임 누적 시간(total_time_delta)을 사용하여 분자/분모 괴리를 방지한다.
+                if duration_seconds > 0 and total_time_delta <= duration_seconds + 2.0:
+                    dur = duration_seconds
+                else:
+                    dur = max(duration_seconds, int(round(total_time_delta)))
+
+                # 상태별 비율 산출 (시간 가중 기준, 단일 프레임 등으로 total_time_delta==0이면 프레임 수 기준)
+                if total_time_delta > 0:
+                    normal_ratio = state_durations["NORMAL"] / total_time_delta
+                    warning_ratio = state_durations["WARNING"] / total_time_delta
+                    bad_ratio = state_durations["BAD_POSTURE"] / total_time_delta
+                else:
+                    normal_ratio = float(row["st_normal"] or 0) / total
+                    warning_ratio = float(row["st_warn"] or 0) / total
+                    bad_ratio = float(row["st_bad"] or 0) / total
+
+                normal_ratio = min(1.0, max(0.0, normal_ratio))
+                warning_ratio = min(1.0, max(0.0, warning_ratio))
+                bad_ratio = min(1.0, max(0.0, bad_ratio))
+
+                # 상태별 시간(초)을 세션 총 시간(dur)에 맞춰 정규화하여
+                # 통계 집계(DateAggregator) 시 good_posture_seconds / duration_seconds가 100%를 초과하지 않도록 통일
+                good_sec = round(dur * normal_ratio, 2)
+                warn_sec = round(dur * warning_ratio, 2)
+                bad_sec = round(dur * bad_ratio, 2)
 
             return {
                 "duration_seconds":           dur,
@@ -393,15 +430,19 @@ class SessionManager:
                     "side_tilt":           row["stl"] or 0,
                     "turned_head":         row["th"] or 0,
                 },
-                "state_counts": state_durations, # 프레임 수 대신 시간(초) 저장
-                "good_posture_seconds":       round(state_durations["NORMAL"], 2),
-                "warning_posture_seconds":    round(state_durations["WARNING"], 2),
-                "bad_posture_seconds":        round(state_durations["BAD_POSTURE"], 2),
-                "good_posture_percentage":    round(state_durations["NORMAL"] / max(0.1, total_time_delta) * 100, 1),
-                "warning_posture_percentage": round(state_durations["WARNING"] / max(0.1, total_time_delta) * 100, 1),
-                "bad_posture_percentage":     round(state_durations["BAD_POSTURE"] / max(0.1, total_time_delta) * 100, 1),
+                "state_counts": {
+                    "NORMAL": good_sec,
+                    "WARNING": warn_sec,
+                    "BAD_POSTURE": bad_sec,
+                },
+                "good_posture_seconds":       good_sec,
+                "warning_posture_seconds":    warn_sec,
+                "bad_posture_seconds":        bad_sec,
+                "good_posture_percentage":    round(normal_ratio * 100, 1),
+                "warning_posture_percentage": round(warning_ratio * 100, 1),
+                "bad_posture_percentage":     round(bad_ratio * 100, 1),
                 "posture_changes":            posture_changes,
-                "max_bad_duration_seconds":   round(max_bad_streak, 2),
+                "max_bad_duration_seconds":   round(min(max_bad_streak, float(dur)), 2),
                 "average_probability":        round(avg_prob, 3),
             }
         except Exception as e:

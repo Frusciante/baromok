@@ -42,12 +42,13 @@
 
 ### 의자에 누운 자세 (기댄 자세)
 - **의미**: 상체가 뒤로 과하게 기대진 상태
-- **관찰**: 얼굴이 기준점보다 멀어지거나 얼굴-어깨 비율이 감소함
+- **관찰**: 어깨 너비(어깨 미감지 시 양안 거리) 대비 기대 머리 높이보다 현재 머리 높이가 낮아짐
+- **방어 조건**: 고개 숙임, 턱 괸 자세(손-얼굴 근접/턱 가림), 또는 어깨 선 각도 기울기(<a href="../../data/posture_definition_criteria.json">posture_types.recline.guards.max_shoulder_tilt</a>)가 감지되면 기댄 자세 판정을 억제하며, 거북목·고개 숙임·턱 괸 자세와 동시 발생 시 상호 배제됨
 - **판정**: 임계값 및 지속 시간은 <a href="../../data/posture_definition_criteria.json">posture_types.recline</a>을 참조하십시오.
 
 ### 거북목 자세
-- **의미**: 머리가 전방으로 편위된 상태
-- **관찰**: 얼굴이 기준점보다 가까워지거나 얼굴-어깨 비율이 상승함
+- **의미**: 머리가 전방으로 편위되거나 화면에 과도하게 가까워진 상태
+- **관찰**: 기대 광대 거리 대비 현재 광대 거리가 커지거나, 홍채 기반 눈-화면 거리가 임계값(<a href="../../data/posture_definition_criteria.json">eye_monitoring.distance_threshold_cm</a>) 이하로 가까워짐 (어깨 미감지 시 홍채 기반 화면 거리 모델만 사용)
 - **판정**: 임계값 및 지속 시간은 <a href="../../data/posture_definition_criteria.json">posture_types.forward_head</a>를 참조하십시오.
 
 ### 턱 괸 자세

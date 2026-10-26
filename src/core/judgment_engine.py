@@ -77,11 +77,12 @@ class JudgmentEngine:
         # 1. 확정된 나쁜 자세 목록 추출 (triggered=True)
         active_list = [res for res in results if res["triggered"]]
 
-        # [강화] 상호 배제: 거북목이나 고개 숙임이 있으면 기댄 자세는 무시한다.
+        # [강화] 상호 배제: 거북목, 고개 숙임, 또는 턱 괸 자세가 있으면 기댄 자세는 무시한다.
         is_fwd = any(res["posture_type"] == PostureType.FORWARD_HEAD.value for res in active_list)
         is_down = any(res["posture_type"] == PostureType.HEAD_DOWN.value for res in active_list)
+        is_chin_rest = any(res["posture_type"] == PostureType.CHIN_REST.value for res in active_list)
         
-        if is_fwd or is_down:
+        if is_fwd or is_down or is_chin_rest:
             active_list = [res for res in active_list if res["posture_type"] != PostureType.RECLINE.value]
 
         dominant_p = None
@@ -96,8 +97,8 @@ class JudgmentEngine:
         # 모든 워커 결과에 대해 지속 시간 업데이트 수행
         for res in results:
             p_type = res["posture_type"]
-            # 상호 배제 조건: 거북목/고개숙임이 활성화된 경우 recline의 시간 누적 차단
-            if (is_fwd or is_down) and p_type == PostureType.RECLINE.value:
+            # 상호 배제 조건: 거북목/고개숙임/턱괴기가 활성화된 경우 recline의 시간 누적 차단
+            if (is_fwd or is_down or is_chin_rest) and p_type == PostureType.RECLINE.value:
                 res_to_process = res.copy()
                 res_to_process["triggered"] = False
                 self._update_posture_duration(res_to_process, current_timestamp)
@@ -142,6 +143,11 @@ class JudgmentEngine:
         if "head_down" in confirmed and "recline" in confirmed:
             confirmed = [p for p in confirmed if p != "recline"]
             logger.info("상호 배제 적용: 고개 숙임과 기댄 자세 동시 감지됨 -> 고개 숙임만 유지")
+
+        # 3. 턱 괸 자세 vs 기댄 자세: 턱 괸 자세 우선
+        if "chin_rest_estimated" in confirmed and "recline" in confirmed:
+            confirmed = [p for p in confirmed if p != "recline"]
+            logger.info("상호 배제 적용: 턱 괸 자세와 기댄 자세 동시 감지됨 -> 턱 괸 자세만 유지")
 
         self.last_confirmed_postures = confirmed
         return confirmed

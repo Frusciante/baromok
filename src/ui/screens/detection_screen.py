@@ -219,7 +219,9 @@ class DetectionScreen(QWidget):
     def _on_frame_processed(self, frame_data: dict):
         if self.is_session_stopped:
             return
-        if frame_data.get("posture_type") == "baseline":
+        if frame_data.get("posture_type") in ("baseline", "warmup"):
+            return
+        if self.camera_worker and not self.camera_worker.is_detecting:
             return
 
         try:
@@ -257,7 +259,12 @@ class DetectionScreen(QWidget):
                 )
 
                 current_cheek = indicators.cheek_distance
-                if self.baseline_manager and indicators.shoulder_width is not None:
+                has_shoulder_model = bool(
+                    self.baseline_manager
+                    and getattr(self.baseline_manager, "shoulder_cheek_model", None) is not None
+                    and self.baseline_manager.shoulder_cheek_model.is_fitted
+                )
+                if has_shoulder_model and indicators.shoulder_width is not None and indicators.shoulder_width > 0:
                     expected_cheek = self.baseline_manager.get_expected_cheek(indicators.shoulder_width)
                     deviation = (current_cheek - expected_cheek) / expected_cheek if expected_cheek > 0 else 0
                     self.cheek_detail_label.setText(f"광대 거리: {current_cheek:.3f} (예상: {expected_cheek:.3f}, 편차: {deviation*100:+.1f}%)")

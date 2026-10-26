@@ -418,6 +418,11 @@ class baromokApp:
             if screen_index == 0 and hasattr(self, "baseline_screen"):
                 try:
                     # [강화] 재측정 진입 시 탐지 세션 및 타이머 완전 중단
+                    if self.session_manager and self.session_manager.current_session is not None:
+                        active_duration = self.camera_worker.get_elapsed_time() if self.camera_worker else 0
+                        self.session_manager.end_session(active_duration=active_duration)
+                        self._stretching_timer.stop()
+                        self._hide_alert_popup()
                     if self.camera_worker:
                         self.camera_worker.is_detecting = False
                         self.camera_worker.set_baseline_mode(True)
@@ -476,6 +481,9 @@ class baromokApp:
         
         # 3. 감지 화면(4)으로 복귀하는 경우에만 특별 처리 (이미 실행 중이었던 경우)
         if target_index == 4 and hasattr(self, "camera_worker"):
+            if self.session_manager and self.session_manager.current_session is None:
+                self._start_detection()
+                return
             try:
                 self.camera_worker.set_baseline_mode(False)
                 # 감지 상태인 경우에만 재개 (단순 일시정지 상태였다면 유지)

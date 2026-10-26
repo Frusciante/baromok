@@ -135,7 +135,12 @@ class BaselineManager:
             self.baseline_metrics = None
             return False
 
-        # 1. Shoulder-Cheek 모델 피팅
+        # 이전 수집 모델 상태가 남지 않도록 초기화
+        self.shoulder_cheek_model.reset()
+        self.shoulder_height_model.reset()
+        self.eye_height_model.reset()
+
+        # 1. Shoulder-Cheek 모델 피팅 (어깨 감지 프레임이 충분할 때만 활성화)
         sc_x, sc_y, s_indices = [], [], []
         for frame in self.collection_frames:
             sw = getattr(frame, "shoulder_width", None)
@@ -149,9 +154,9 @@ class BaselineManager:
             logger.info(f"Shoulder-Cheek 모델 피팅 완료 ({len(sc_x)} 샘플)")
             self._save_debug_plot(sc_x, sc_y, step_indices=s_indices, subdir="shoulder_cheek", title="Shoulder Width vs Cheek Distance")
         else:
-            logger.warning("Shoulder-Cheek 모델 피팅 실패")
+            logger.info(f"Shoulder-Cheek 모델 비활성 (어깨 유효 샘플: {len(sc_x)}개) — 어깨 미사용 모델로 동작합니다.")
 
-        # 2. Shoulder-Height 모델 피팅
+        # 2. Shoulder-Height 모델 피팅 (어깨 감지 프레임이 충분할 때만 활성화)
         sh_x, sh_y = [], []
         for frame in self.collection_frames:
             sw = getattr(frame, "shoulder_width", None)
@@ -165,7 +170,7 @@ class BaselineManager:
             self._save_debug_plot(sh_x, sh_y, step_indices=s_indices if len(sh_x)==len(s_indices) else None, 
                                  subdir="shoulder_height", title="Shoulder Width vs Head Height")
         else:
-            logger.warning("Shoulder-Height 모델 피팅 실패")
+            logger.info(f"Shoulder-Height 모델 비활성 (어깨 유효 샘플: {len(sh_x)}개) — Eye-Height 모델을 사용합니다.")
 
         # 3. Eye-Height 모델 피팅
         eh_x, eh_y = [], []
@@ -347,14 +352,18 @@ class BaselineManager:
 
             logger.info(f"Baseline 로드 완료: {filepath}")
 
-            # 1. Shoulder-Cheek 모델 복원
+            self.shoulder_cheek_model.reset()
+            self.shoulder_height_model.reset()
+            self.eye_height_model.reset()
+
+            # 1. Shoulder-Cheek 모델 복원 (어깨 샘플이 충분할 때만 적합됨)
             if "ransac_x_samples" in self.baseline_metrics.metrics:
                 self.shoulder_cheek_model.fit(
                     self.baseline_metrics.metrics["ransac_x_samples"],
                     self.baseline_metrics.metrics["ransac_y_samples"]
                 )
 
-            # 2. Shoulder-Height 모델 복원
+            # 2. Shoulder-Height 모델 복원 (어깨 샘플이 충분할 때만 적합됨)
             if "ransac_shx_samples" in self.baseline_metrics.metrics:
                 self.shoulder_height_model.fit(
                     self.baseline_metrics.metrics["ransac_shx_samples"],
@@ -443,6 +452,7 @@ class BaselineManager:
     def is_baseline_valid(self) -> bool:
         """
         Baseline이 충분한 데이터로 설정되었는지 검증
+        (어깨가 미감지되었거나 샘플이 부족하더라도 얼굴 지표가 유효하면 성공으로 인정하고 어깨 미사용 모델로 동작)
         """
         if self.baseline_metrics is None:
             logger.warning("Baseline이 로드되지 않음")
@@ -450,8 +460,8 @@ class BaselineManager:
 
         metrics = self.baseline_metrics.metrics
 
-        # 필수 키 검증
-        required_metrics = ["cheek_distance", "shoulder_width"]
+        # 필수 키 검증 (어깨 지표는 필수가 아님)
+        required_metrics = ["cheek_distance"]
         for metric_name in required_metrics:
             if metric_name not in metrics:
                 logger.warning(f"필수 지표 부재: {metric_name}")
@@ -463,16 +473,20 @@ class BaselineManager:
             logger.warning(f"Baseline 프레임 부족: {frame_count} < {self.minimum_valid_frame_count}")
             return False
 
-        # RANSAC 모델 복원 여부 확인 (최소한 shoulder_cheek은 있어야 함)
-        if not self.shoulder_cheek_model.is_fitted:
-            if "ransac_x_samples" in metrics:
-                self.shoulder_cheek_model.fit(metrics["ransac_x_samples"], metrics["ransac_y_samples"])
+        # RANSAC 모델 복원 시도 (어깨 샘플이 부족해 피팅되지 않아도 유효성 검증은 통과)
+        if not self.shoulder_cheek_model.is_fitted and "ransac_x_samples" in metrics:
+            self.shoulder_cheek_model.fit(metrics["ransac_x_samples"], metrics.get("ransac_y_samples", []))
+
+        if not self.shoulder_height_model.is_fitted and "ransac_shx_samples" in metrics:
+            self.shoulder_height_model.fit(metrics["ransac_shx_samples"], metrics.get("ransac_shy_samples", []))
+
+        if not self.eye_height_model.is_fitted and "ransac_ehx_samples" in metrics:
+            self.eye_height_model.fit(metrics["ransac_ehx_samples"], metrics.get("ransac_ehy_samples", []))
 
         if not self.shoulder_cheek_model.is_fitted:
-            logger.warning("필수 RANSAC 모델(Shoulder-Cheek)이 적합되지 않음")
-            return False
-
-        logger.info("Baseline 유효성 검증 완료")
+            logger.info("Baseline 검증 완료 (어깨 모델 미사용 모드: 어깨 미감지 또는 샘플 부족)")
+        else:
+            logger.info("Baseline 유효성 검증 완료 (어깨 모델 활성)")
         return True
 
     def reset(self):
@@ -481,6 +495,9 @@ class BaselineManager:
         self.collection_frames = []
         self.is_collecting = False
         self.collection_start_time = 0.0
+        self.shoulder_cheek_model.reset()
+        self.shoulder_height_model.reset()
+        self.eye_height_model.reset()
         logger.info("Baseline 초기화 완료")
 
     def _save_debug_plot(self, x_data, y_data, step_indices=None, subdir="others", title="RANSAC Plot"):

@@ -35,8 +35,18 @@ class DateAggregator:
                 order.append(label)
 
             g = grouped[label]
-            g["good_posture_seconds"] += float(session.get("good_posture_seconds", 0) or 0)
-            g["total_detection_seconds"] += float(session.get("total_detection_seconds", 0) or 0)
+            good_sec = float(session.get("good_posture_seconds", 0) or 0)
+            warn_sec = float(session.get("warning_posture_seconds", 0) or 0)
+            bad_sec = float(session.get("bad_posture_seconds", 0) or 0)
+            state_sum_sec = good_sec + warn_sec + bad_sec
+            raw_total_sec = float(session.get("total_detection_seconds", 0) or 0)
+
+            # 기존 DB 레코드에서 상태별 시간 합(state_sum_sec)과 duration_seconds가 불일치하는 경우
+            # 분자(good_posture_seconds)와 동일한 시간 기준인 state_sum_sec을 우선 사용하여 100% 초과를 방지한다.
+            effective_total_sec = state_sum_sec if state_sum_sec > 0 else max(raw_total_sec, good_sec)
+
+            g["good_posture_seconds"] += good_sec
+            g["total_detection_seconds"] += effective_total_sec
             g["duration_seconds"] += float(session.get("duration_seconds", 0) or 0)
             g["session_count"] += 1
             g["total_frames"] += int(session.get("total_frames", 0) or 0)
@@ -48,9 +58,8 @@ class DateAggregator:
         for label in order:
             g = grouped[label]
             total = g["total_detection_seconds"]
-            g["good_posture_percentage"] = (
-                g["good_posture_seconds"] / total * 100 if total > 0 else 0.0
-            )
+            pct = (g["good_posture_seconds"] / total * 100) if total > 0 else 0.0
+            g["good_posture_percentage"] = min(100.0, max(0.0, pct))
             result.append(g)
 
         return result
@@ -198,6 +207,8 @@ class StatisticsScreen(QWidget):
                 sessions_data.append({
                     "good_posture_percentage": s.statistics.get("good_posture_percentage", 0),
                     "good_posture_seconds":    s.statistics.get("good_posture_seconds", 0),
+                    "warning_posture_seconds": s.statistics.get("warning_posture_seconds", 0),
+                    "bad_posture_seconds":     s.statistics.get("bad_posture_seconds", 0),
                     "total_detection_seconds": s.statistics.get("duration_seconds", s.duration_seconds),
                     "session_label":           self._format_date_label(s.start_time),
                     "start_time":              s.start_time,

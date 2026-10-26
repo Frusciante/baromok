@@ -129,7 +129,13 @@ class ForwardHeadWorker(BaseJudgeWorker):
                 score_list.append(float(np.clip(dist_score, 0.0, 1.0)))
 
         # B. 비율 편차 기준 (상대 기준 - 감도 슬라이더 적용)
-        if indicators.shoulder_width is not None and indicators.shoulder_width > 0:
+        # 기준 자세에 어깨 모델(Shoulder-Cheek)이 학습되어 있고 현재 프레임에서 어깨가 감지된 경우에만 사용
+        has_shoulder_model = bool(
+            self.baseline_manager
+            and getattr(self.baseline_manager, "shoulder_cheek_model", None) is not None
+            and self.baseline_manager.shoulder_cheek_model.is_fitted
+        )
+        if has_shoulder_model and indicators.shoulder_width is not None and indicators.shoulder_width > 0:
             try:
                 primary_th = self.criteria["primary_conditions"]["deviation"]["threshold"]
                 expected_cheek = max(1e-6, self.baseline_manager.get_expected_cheek(indicators.shoulder_width))
@@ -161,9 +167,9 @@ class ReclineWorker(BaseJudgeWorker):
         super().__init__(PostureType.RECLINE, config, baseline_manager)
 
     def handle_indicators(self, indicators: PostureIndicators):
-        # [추가] 고개 숙임 감지 시 기댄 자세 판정 억제
+        # 1. 고개 숙임 감지 시 기댄 자세 판정 억제
+        baseline_metrics = self.baseline_manager.get_baseline_metrics() if self.baseline_manager else None
         try:
-            baseline_metrics = self.baseline_manager.get_baseline_metrics()
             if baseline_metrics and "face_pitch_deg" in baseline_metrics.metrics:
                 base_pitch = baseline_metrics.metrics["face_pitch_deg"]
                 pitch_diff = indicators.face_pitch_deg - base_pitch
@@ -173,8 +179,35 @@ class ReclineWorker(BaseJudgeWorker):
                     return
         except Exception: pass
 
-        has_sh = indicators.shoulder_width is not None and indicators.shoulder_width > 0
-        proxy_val = indicators.shoulder_width if has_sh else indicators.eye_distance
+        # 2. 턱 괸 자세(손이 얼굴/턱 근처에 위치)일 때 기댄 자세 판정 억제
+        if indicators.hand_near_face or (indicators.chin_occlusion is not None and indicators.chin_occlusion > 0.25):
+            self._emit_result(0.0)
+            return
+
+        # 3. 어깨 선 각도가 일정 수준 이상 기울어진 경우(한쪽 팔로 턱을 괴거나 한쪽으로 쏠린 자세) 기댄 자세 판정 억제
+        if indicators.shoulder_tilt_deg is not None:
+            max_sh_tilt = float(self.guards.get("max_shoulder_tilt", 6.0))
+            sh_tilt_abs = abs(indicators.shoulder_tilt_deg)
+            sh_tilt_diff = sh_tilt_abs
+            if baseline_metrics and "shoulder_tilt_deg" in baseline_metrics.metrics:
+                sh_tilt_diff = abs(indicators.shoulder_tilt_deg - baseline_metrics.metrics["shoulder_tilt_deg"])
+            if sh_tilt_abs >= max_sh_tilt or sh_tilt_diff >= max_sh_tilt:
+                self._emit_result(0.0)
+                return
+
+        # 기준 자세에 어깨-높이 모델이 학습되어 있고 현재 프레임에서 어깨가 감지된 경우에만 어깨 모델 사용,
+        # 그렇지 않으면 어깨를 사용하지 않는 눈 거리-머리 높이 모델(Eye-Height)을 사용
+        has_shoulder_model = bool(
+            self.baseline_manager
+            and getattr(self.baseline_manager, "shoulder_height_model", None) is not None
+            and self.baseline_manager.shoulder_height_model.is_fitted
+        )
+        use_shoulder = (
+            has_shoulder_model
+            and indicators.shoulder_width is not None
+            and indicators.shoulder_width > 0
+        )
+        proxy_val = indicators.shoulder_width if use_shoulder else indicators.eye_distance
         
         if not proxy_val or proxy_val <= 0:
             self._emit_result(0.0)
@@ -182,7 +215,7 @@ class ReclineWorker(BaseJudgeWorker):
 
         try:
             primary_th = self.criteria["primary_conditions"]["deviation"]["threshold"]
-            expected_height = max(1e-6, self.baseline_manager.get_expected_height(proxy_val, is_shoulder=has_sh))
+            expected_height = max(1e-6, self.baseline_manager.get_expected_height(proxy_val, is_shoulder=use_shoulder))
             deviation = (indicators.head_height - expected_height) / expected_height
 
             # [수정] Y축 높이 기반 알고리즘은 고개 돌림/기울임에 독립적이므로 가드 체크 제거
@@ -229,10 +262,19 @@ class ChinRestWorker(BaseJudgeWorker):
             w = self.config.get_frame_scoring_config().get("likelihood_weights", {}).get("chin_rest", {})
             w_eye = w.get("eye", 0.35)
             w_hand = w.get("hand", 0.3)
-            w_sh = w.get("shoulder", 0.2) if indicators.shoulder_width is not None else 0.0
+            has_sh_tilt = indicators.shoulder_tilt_deg is not None
+            w_sh = w.get("shoulder", 0.2) if has_sh_tilt else 0.0
+            sh_score = 0.0
+            if has_sh_tilt:
+                sh_th = self.criteria.get("primary_conditions", {}).get("shoulder_tilt_deg", {}).get("threshold", 6.0)
+                sh_score = self._normalize(abs(indicators.shoulder_tilt_deg) / max(1e-6, sh_th), 0, 2.0) * sens_factor
             
             total_w = w_eye + w_hand + w_sh
-            likelihood = (w_eye * eye_score + w_hand * indicators.hand_face_score * sens_factor) / total_w if total_w > 0 else 0.0
+            likelihood = (
+                w_eye * eye_score
+                + w_hand * indicators.hand_face_score * sens_factor
+                + w_sh * sh_score
+            ) / total_w if total_w > 0 else 0.0
             
             self._emit_result(likelihood)
         except Exception as e:
