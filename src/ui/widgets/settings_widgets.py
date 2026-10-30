@@ -791,7 +791,7 @@ class SensitivitySettingsWidget(QWidget):
         # 자세 키 리스트 (거북목 통합 완료)
         self.posture_keys = [
             ("forward_head", "거북목 감도"),
-            ("forward_head_distance_threshold", "거북목 감지 거리"),
+            ("forward_head_distance_threshold", "화면 얼굴 가까움 거리"),
             ("head_down_threshold", "고개 숙임 각도"),
             ("recline", "기댄 자세"),
             ("chin_rest_sensitivity", "턱 괸 자세"),

@@ -155,8 +155,8 @@
     }
     ,
     "eye_close": {
-      "display_label": "화면 가까움",
-      "alert_message": "화면과 너무 가까워요. 잠시 뒤로 물러나 주세요.",
+      "display_label": "화면 얼굴 가까움",
+      "alert_message": "얼굴과 화면 사이 거리가 가깝습니다. 뒤로 물러나시거나 노트북 거리를 조정해주세요.",
       "primary_conditions": {
         "distance_threshold_cm": {
           "operator": "<=",

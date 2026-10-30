@@ -39,7 +39,7 @@
 - **종속 변수 ($y_1$)**: `cheek_distance` (랜드마크 234, 454번 사이의 유클리드 거리) - **기대 얼굴 크기 (`Shoulder-Cheek` 모델)**
 - **종속 변수 ($y_2$)**: `head_height` (얼굴 높이 지표) - **기대 머리 높이 (`Shoulder-Height` 및 `Eye-Height` 모델)**
 
-> **어깨 미감지 폴백(Fallback)**: 초기 자세 수집 시 어깨가 감지되지 않거나 유효 샘플이 부족하더라도 수집 실패로 처리하지 않으며, 어깨를 사용하지 않는 모델(`Eye-Height` 모델 및 홍채 기반 화면 거리 모델)만 활성화하여 정상 동작합니다.
+> **어깨 미감지 폴백(Fallback)**: 초기 자세 수집 시 어깨가 감지되지 않거나 유효 샘플이 부족하더라도 수집 실패로 처리하지 않으며, 어깨를 사용하지 않는 모델(`Eye-Height` 모델 및 홍채 기반 화면 얼굴 가까움 감지 모델)만 활성화하여 정상 동작합니다.
 
 ---
 
@@ -76,7 +76,8 @@ model.fit(X, y)
 | 자세 유형 | 핵심 로직 | 허용 오차 (`scale`) | 확정 임계값 | 비고 |
 | :--- | :--- | :--- | :--- | :--- |
 | **기댄 자세 (Recline)** | 머리 높이 `deviation` < 0 (`Shoulder-Height` 또는 어깨 미감지 시 `Eye-Height` 모델) | <a href="../../../data/posture_definition_criteria.json">frame_scoring.sensitivities.recline</a> | <a href="../../../data/posture_definition_criteria.json">posture_types.recline.sustain_seconds</a> | 고개 숙임, 또는 얼굴 주변에 손이 감지(`hand_near_face`/`chin_occlusion`)되면서 어깨 선 기울기(<a href="../../../data/posture_definition_criteria.json">posture_types.recline.guards.max_shoulder_tilt</a>)가 함께 발생할 때만 판정 억제 (어깨 기울기 단독으로는 억제하지 않음) |
-| **거북목 (Forward Head)** | 광대 거리 `deviation` > 0 (`Shoulder-Cheek` 모델) 또는 홍채 기반 화면 거리 근접 | <a href="../../../data/posture_definition_criteria.json">frame_scoring.sensitivities.forward_head</a> | <a href="../../../data/posture_definition_criteria.json">posture_types.forward_head.sustain_seconds</a> | 어깨 미감지(또는 어깨 모델 미적합) 시 홍채 화면 거리 기준으로만 판정 |
+| **거북목 (Forward Head)** | 광대 거리 `deviation` > 0 (`Shoulder-Cheek` 모델) | <a href="../../../data/posture_definition_criteria.json">frame_scoring.sensitivities.forward_head</a> | <a href="../../../data/posture_definition_criteria.json">posture_types.forward_head.sustain_seconds</a> | 어깨-광대 비율 편차 기준으로 판정 |
+| **화면 얼굴 가까움 (Eye Close)** | 홍채 기반 눈-화면 거리(`eye_screen_distance_cm`) ≤ 임계값 | <a href="../../../data/posture_definition_criteria.json">eye_monitoring.distance_threshold_cm</a> | <a href="../../../data/posture_definition_criteria.json">posture_types.eye_close.sustain_seconds</a> | 홍채 거리 알고리즘으로 단독 판정하며 피드백 메시지(<a href="../../../data/posture_definition_criteria.json">posture_types.eye_close.alert_message</a>) 제공 |
 | **턱 괸 자세 (Chin Rest)** | 얼굴 주변 손 감지(`hand_near_face`/`chin_occlusion`) 시 복합 신호(눈 기울기 + 어깨 기울기 + 손-얼굴 점수) 평가 | - | <a href="../../../data/posture_definition_criteria.json">posture_types.chin_rest_estimated.sustain_seconds</a> | 어깨 기울기는 얼굴 주변에 손이 있을 때만 평가하며, 활성화 시 기댄 자세(`recline`)를 상호 배제 |
 
 ### 4.3. 홍채 기반 눈-화면 거리 산출 (Iris Screen Distance)

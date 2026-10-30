@@ -592,6 +592,7 @@ class PostureBreakdownChart(QWidget):
         "normal":              ("바른 자세",      "#7C3AED"),
         "neutral":             ("바른 자세",      "#7C3AED"),
         "forward_head":        ("거북목",         "#EF4444"),
+        "eye_close":           ("화면 얼굴 가까움", "#F97316"),
         "head_down":           ("고개 숙임",      "#F87171"),
         "forward_head_only":   ("거북목 경향",    "#EF4444"),
         "forward_head_full":   ("기울어진 거북목", "#EF4444"),
@@ -636,7 +637,7 @@ class PostureBreakdownChart(QWidget):
             return
 
         # 표시 순서: 나쁜 자세들만 (바른 자세 normal/neutral은 제외 — 잘못된 자세 간 비율만 표시)
-        order = ["forward_head", "head_down", "forward_head_only",
+        order = ["forward_head", "eye_close", "head_down", "forward_head_only",
                  "forward_head_full", "recline", "chin_rest_estimated",
                  "head_tilt", "side_tilt", "turned_head"]
 

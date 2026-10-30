@@ -68,10 +68,10 @@ class StateMachine:
         Returns:
             현재 상태
         """
-        # 우선순위 처리: 거북목(forward_head)이 있으면 기댄 자세(recline)를 무시하여 알림 중복 방지
-        if "forward_head" in confirmed_postures and "recline" in confirmed_postures:
+        # 우선순위 처리: 거북목(forward_head) 또는 화면 얼굴 가까움(eye_close)이 있으면 기댄 자세(recline)를 무시하여 알림 중복 방지
+        if ("forward_head" in confirmed_postures or "eye_close" in confirmed_postures) and "recline" in confirmed_postures:
             confirmed_postures = [p for p in confirmed_postures if p != "recline"]
-            logger.debug("거북목(forward_head) 감지로 인해 기댄 자세(recline) 알림 제외 (우선순위 적용)")
+            logger.debug("거북목/화면가까움 감지로 인해 기댄 자세(recline) 알림 제외 (우선순위 적용)")
 
         previous_state = self.current_state
         time_in_previous_state = self.get_time_in_current_state()

@@ -87,16 +87,56 @@ class BaseJudgeWorker(QObject):
 
 
 class ForwardHeadWorker(BaseJudgeWorker):
-    """거북목 판정 워커 (비율 편차[감도] 또는 화면 거리[절대기준] 통합)"""
+    """거북목 판정 워커 (어깨-광대 비율 편차 기준)"""
     
     def __init__(self, config, baseline_manager):
         super().__init__(PostureType.FORWARD_HEAD, config, baseline_manager)
+
+    def handle_indicators(self, indicators: PostureIndicators):
+        # 기준 자세에 어깨 모델(Shoulder-Cheek)이 학습되어 있고 현재 프레임에서 어깨가 감지된 경우에만 판정
+        has_shoulder_model = bool(
+            self.baseline_manager
+            and getattr(self.baseline_manager, "shoulder_cheek_model", None) is not None
+            and self.baseline_manager.shoulder_cheek_model.is_fitted
+        )
+        if not (has_shoulder_model and indicators.shoulder_width is not None and indicators.shoulder_width > 0):
+            self._emit_result(0.0)
+            return
+
+        try:
+            primary_th = self.criteria["primary_conditions"]["deviation"]["threshold"]
+            expected_cheek = max(1e-6, self.baseline_manager.get_expected_cheek(indicators.shoulder_width))
+            deviation = (indicators.cheek_distance - expected_cheek) / expected_cheek
+
+            if deviation > primary_th and not self._is_guarded(indicators):
+                ratio_score = (deviation / max(0.01, self.sensitivity)) * self.warning_anchor
+                self._emit_result(float(np.clip(ratio_score, 0.0, 1.0)))
+                return
+        except Exception as e:
+            logger.debug(f"ForwardHeadWorker 판정 실패: {e}")
+
+        self._emit_result(0.0)
+
+    def _is_guarded(self, indicators) -> bool:
+        side_tilt = abs(indicators.eye_line_tilt) > self.guards.get("max_eye_tilt", 12.0)
+        eye_sym = indicators.eye_symmetry_ratio > self.guards.get("max_eye_symmetry_ratio", 0.12)
+        
+        sw_change = self.baseline_manager.calculate_change_percentage(indicators.shoulder_width, "shoulder_width")
+        recline_guard = sw_change < self.guards.get("max_shoulder_decrease_pct", -15.0)
+        
+        return side_tilt or eye_sym or recline_guard
+
+
+class EyeCloseWorker(BaseJudgeWorker):
+    """화면 얼굴 가까움 판정 워커 (홍채 기반 눈-화면 거리 기준)"""
+
+    def __init__(self, config, baseline_manager):
+        super().__init__(PostureType.EYE_CLOSE, config, baseline_manager)
         self.dist_threshold = 45.0
 
     def refresh_settings(self):
         """설정 캐싱 및 거리 임계값 최신화"""
         super().refresh_settings()
-        # dist_threshold가 외부에서 명시적으로 설정되지 않았을 때만 config에서 로드
         if not hasattr(self, "_dist_threshold_override"):
             try:
                 cfg = self.config.get_posture_criteria().get("eye_monitoring", {})
@@ -110,53 +150,23 @@ class ForwardHeadWorker(BaseJudgeWorker):
         """외부(UI/Settings)에서 거리 임계값 동적 설정"""
         self._dist_threshold_override = float(val)
         self.dist_threshold = float(val)
-        logger.debug(f"ForwardHeadWorker: 거리 임계값 변경 -> {val}cm")
+        logger.debug(f"EyeCloseWorker: 거리 임계값 변경 -> {val}cm")
 
     def handle_indicators(self, indicators: PostureIndicators):
-        # 1. 즉시 경고 플래그 확인 (2초간 근접 유지 시)
+        # 1. 즉시 경고 플래그 확인 (지속 시간 근접 유지 시)
         if indicators.eye_close_warning:
             self._emit_result(0.9)
             return
 
-        score_list = []
-
-        # A. 화면 거리 기준 (절대 기준 - 점진적 상승)
+        # 2. 화면 거리 기준 (점진적 상승)
         dist_cm = indicators.eye_screen_distance_cm
-        if dist_cm is not None:
-            if dist_cm <= self.dist_threshold:
-                # 45cm(경고시작) -> 0.4, 20cm(위험) -> 1.0 식의 선형 매핑
-                dist_score = 0.4 + (self.dist_threshold - dist_cm) / max(1e-6, self.dist_threshold - 20.0) * 0.6
-                score_list.append(float(np.clip(dist_score, 0.0, 1.0)))
+        if dist_cm is not None and dist_cm <= self.dist_threshold:
+            # dist_threshold(경고 시작) -> 0.45, 20cm(위험) -> 1.0 식의 선형 매핑
+            dist_score = 0.45 + (self.dist_threshold - dist_cm) / max(1e-6, self.dist_threshold - 20.0) * 0.55
+            self._emit_result(float(np.clip(dist_score, 0.0, 1.0)))
+            return
 
-        # B. 비율 편차 기준 (상대 기준 - 감도 슬라이더 적용)
-        # 기준 자세에 어깨 모델(Shoulder-Cheek)이 학습되어 있고 현재 프레임에서 어깨가 감지된 경우에만 사용
-        has_shoulder_model = bool(
-            self.baseline_manager
-            and getattr(self.baseline_manager, "shoulder_cheek_model", None) is not None
-            and self.baseline_manager.shoulder_cheek_model.is_fitted
-        )
-        if has_shoulder_model and indicators.shoulder_width is not None and indicators.shoulder_width > 0:
-            try:
-                primary_th = self.criteria["primary_conditions"]["deviation"]["threshold"]
-                expected_cheek = max(1e-6, self.baseline_manager.get_expected_cheek(indicators.shoulder_width))
-                deviation = (indicators.cheek_distance - expected_cheek) / expected_cheek
-
-                if deviation > primary_th and not self._is_guarded(indicators):
-                    ratio_score = (deviation / max(0.01, self.sensitivity)) * self.warning_anchor
-                    score_list.append(float(np.clip(ratio_score, 0.0, 1.0)))
-            except Exception: pass
-
-        final_score = max(score_list) if score_list else 0.0
-        self._emit_result(final_score)
-
-    def _is_guarded(self, indicators) -> bool:
-        side_tilt = abs(indicators.eye_line_tilt) > self.guards.get("max_eye_tilt", 12.0)
-        eye_sym = indicators.eye_symmetry_ratio > self.guards.get("max_eye_symmetry_ratio", 0.12)
-        
-        sw_change = self.baseline_manager.calculate_change_percentage(indicators.shoulder_width, "shoulder_width")
-        recline_guard = sw_change < self.guards.get("max_shoulder_decrease_pct", -15.0)
-        
-        return side_tilt or eye_sym or recline_guard
+        self._emit_result(0.0)
 
 
 class ReclineWorker(BaseJudgeWorker):
@@ -387,7 +397,7 @@ class PostureJudgeManager(QObject):
 
     def _initialize_workers(self):
         worker_classes = [
-            ForwardHeadWorker, ReclineWorker, ChinRestWorker, 
+            ForwardHeadWorker, EyeCloseWorker, ReclineWorker, ChinRestWorker, 
             TurnedHeadWorker, SideTiltWorker, HeadDownWorker
         ]
         for cls in worker_classes:
@@ -410,9 +420,9 @@ class PostureJudgeManager(QObject):
     def update_sensitivities(self, settings_dict: Dict[str, float]):
         """감도 및 각종 임계값 통합 갱신"""
         for key, val in settings_dict.items():
-            # 1. 거리 임계값 처리 (거북목 전용)
-            if key == "forward_head_distance_threshold":
-                worker = self.workers.get(PostureType.FORWARD_HEAD.value)
+            # 1. 거리 임계값 처리 (화면 얼굴 가까움 전용, 기존 설정 키 호환)
+            if key in ("forward_head_distance_threshold", "eye_close_distance_threshold"):
+                worker = self.workers.get(PostureType.EYE_CLOSE.value)
                 if worker and hasattr(worker, "set_distance_threshold"):
                     worker.set_distance_threshold(val)
                 continue

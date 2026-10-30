@@ -23,7 +23,7 @@ class PostureType(Enum):
     FORWARD_HEAD = "forward_head"  # 거북목
     RECLINE = "recline"  # 기댄 자세
     CHIN_REST = "chin_rest_estimated"  # 턱 괸 자세
-    EYE_CLOSE = "eye_close"  # 화면과 눈 거리 가까움
+    EYE_CLOSE = "eye_close"  # 화면 얼굴 가까움
     TURNED_HEAD = "turned_head"  # 고개 돌린 자세 (Yaw)
     SIDE_TILT = "side_tilt"  # 고개 기울인 자세 (Roll)
     HEAD_DOWN = "head_down"  # 고개 숙인 자세 (Pitch)
@@ -77,12 +77,13 @@ class JudgmentEngine:
         # 1. 확정된 나쁜 자세 목록 추출 (triggered=True)
         active_list = [res for res in results if res["triggered"]]
 
-        # [강화] 상호 배제: 거북목, 고개 숙임, 또는 턱 괸 자세가 있으면 기댄 자세는 무시한다.
+        # [강화] 상호 배제: 거북목, 화면 얼굴 가까움, 고개 숙임, 또는 턱 괸 자세가 있으면 기댄 자세는 무시한다.
         is_fwd = any(res["posture_type"] == PostureType.FORWARD_HEAD.value for res in active_list)
+        is_close = any(res["posture_type"] == PostureType.EYE_CLOSE.value for res in active_list)
         is_down = any(res["posture_type"] == PostureType.HEAD_DOWN.value for res in active_list)
         is_chin_rest = any(res["posture_type"] == PostureType.CHIN_REST.value for res in active_list)
         
-        if is_fwd or is_down or is_chin_rest:
+        if is_fwd or is_close or is_down or is_chin_rest:
             active_list = [res for res in active_list if res["posture_type"] != PostureType.RECLINE.value]
 
         dominant_p = None
@@ -97,8 +98,8 @@ class JudgmentEngine:
         # 모든 워커 결과에 대해 지속 시간 업데이트 수행
         for res in results:
             p_type = res["posture_type"]
-            # 상호 배제 조건: 거북목/고개숙임/턱괴기가 활성화된 경우 recline의 시간 누적 차단
-            if (is_fwd or is_down or is_chin_rest) and p_type == PostureType.RECLINE.value:
+            # 상호 배제 조건: 거북목/화면가까움/고개숙임/턱괴기가 활성화된 경우 recline의 시간 누적 차단
+            if (is_fwd or is_close or is_down or is_chin_rest) and p_type == PostureType.RECLINE.value:
                 res_to_process = res.copy()
                 res_to_process["triggered"] = False
                 self._update_posture_duration(res_to_process, current_timestamp)
@@ -134,10 +135,10 @@ class JudgmentEngine:
                 confirmed.append(p_key)
         
         # [강화] 상호 배제: 특정 자세들은 물리적으로 동시에 발생하기 어렵거나 오인될 가능성이 높음
-        # 1. 거북목 vs 기댄 자세: 거북목 우선
-        if "forward_head" in confirmed and "recline" in confirmed:
+        # 1. 거북목/화면 가까움 vs 기댄 자세: 거북목/화면 가까움 우선
+        if ("forward_head" in confirmed or "eye_close" in confirmed) and "recline" in confirmed:
             confirmed = [p for p in confirmed if p != "recline"]
-            logger.info("상호 배제 적용: 거북목과 기댄 자세 동시 감지됨 -> 거북목만 유지")
+            logger.info("상호 배제 적용: 거북목/화면 가까움과 기댄 자세 동시 감지됨 -> 기댄 자세 제외")
             
         # 2. 고개 숙임 vs 기댄 자세: 고개 숙임 우선
         if "head_down" in confirmed and "recline" in confirmed:
@@ -159,9 +160,8 @@ class JudgmentEngine:
             self.posture_start_times[p_key] = None
             self.posture_active_durations[p_key] = 0.0
         self.last_confirmed_postures = []
-        logger.debug("JudgmentEngine 히스토리 초기화 완료")
+        logger.debug("조정자 이력 초기화됨")
 
 
 def create_judgment_engine(config: ConfigManager, baseline_manager: BaselineManager) -> JudgmentEngine:
-    """판정 엔진 생성"""
     return JudgmentEngine(config, baseline_manager)
